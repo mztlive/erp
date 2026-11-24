@@ -1,4 +1,5 @@
 "use client"
+import { salesChangeUnitName } from "../lib/sales-change-draft"
 
 import { RequiredMark } from "@/components/ui/required-mark"
 import * as React from "react"
@@ -53,6 +54,7 @@ export function SalesChangeLineItems({
     form,
     id,
     draft,
+    unitNames,
     changeOrderId,
     disabled,
     onError,
@@ -60,6 +62,7 @@ export function SalesChangeLineItems({
     form: SalesChangeDraftFormApi
     id: string
     draft: SalesChangeDraft
+    unitNames: ReadonlyMap<string, string>
     changeOrderId: string
     disabled: boolean
     onError: (message: string) => void
@@ -170,6 +173,7 @@ export function SalesChangeLineItems({
                                         diff={diffs[index]}
                                         values={values}
                                         draft={draft}
+                                        unitNames={unitNames}
                                         disabled={disabled}
                                         hideLabels={
                                             voucher === !value.source.goods
@@ -263,6 +267,7 @@ function SalesChangeLineRow({
     diff,
     values,
     draft,
+    unitNames,
     disabled,
     hideLabels,
     onReplace,
@@ -274,6 +279,7 @@ function SalesChangeLineRow({
     diff: SalesChangeLineDiff
     values: LineValues[]
     draft: SalesChangeDraft
+    unitNames: ReadonlyMap<string, string>
     disabled: boolean
     hideLabels: boolean
     onReplace: () => void
@@ -368,7 +374,7 @@ function SalesChangeLineRow({
                 </div>
                 <p className="text-xs text-muted-foreground">
                     {line.spec_snapshot ?? "无规格"} ·{" "}
-                    {line.unit_snapshot ?? "—"}
+                    {salesChangeUnitName(line, unitNames) ?? "—"}
                 </p>
                 {line.goods && !original ? (
                     <form.AppField name={`lines[${index}].gift`}>

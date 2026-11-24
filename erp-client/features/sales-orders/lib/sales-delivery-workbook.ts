@@ -64,13 +64,17 @@ function setColumns(
     sheet.views = [{ state: "frozen", ySplit: 1, showGridLines: false }]
 }
 
-function productCells(line: SalesOrderDraftLineInput, index: number) {
+function productCells(
+    line: SalesOrderDraftLineInput,
+    index: number,
+    unitName: string,
+) {
     return [
         String(index + 1),
         line.name.trim(),
         line.specification?.trim() ?? "",
         line.pricingMode === "GIFT" ? "赠品" : "销售",
-        line.unit.trim(),
+        unitName,
     ]
 }
 
@@ -130,7 +134,11 @@ export async function createSalesDeliveryWorkbook(
         products.map(({ line }) => allocationBaseline(line)),
     )
     products.forEach(({ line, index }, productIndex) => {
-        const cells = productCells(line, index)
+        const cells = productCells(
+            line,
+            index,
+            context.unitNames?.get(line.unit.trim()) ?? "",
+        )
         const quantity = compactFixed(line.quantity)
         metadata.addRow([
             cells[0],

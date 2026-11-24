@@ -4,16 +4,27 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import {
     ArrowLeftIcon,
     ArrowRightIcon,
-    CheckCircle2Icon,
+    ChevronDownIcon,
+    InfoIcon,
+    LayersIcon,
+    MapPinIcon,
     PlusIcon,
     RotateCcwIcon,
-    SplitIcon,
     TriangleAlertIcon,
+    XIcon,
 } from "lucide-react"
-import { DetailWorkspaceMeta, MoneyValue } from "@/components/business"
+import {
+    DetailWorkspaceMeta,
+    MoneyValue,
+    QuantityValue,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import {
     Dialog,
     DialogBody,
@@ -24,18 +35,28 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
-import { findSourcingOption } from "../lib/purchase-order-create-model"
+import {
+    findSourcingOption,
+    pickBestSourcingOption,
+} from "../lib/purchase-order-create-model"
 import { sourcingFormValidationError } from "../lib/purchase-order-create-validation"
 import { canSplitSourcingProduct } from "../lib/sourcing-quantity"
-import { computeGlobalAddressState } from "../lib/sourcing/address-grouping"
+import {
+    buildFillDirectShortfallPatches,
+    buildTrimDirectExcessPatches,
+    computeGlobalAddressState,
+    isPositiveQuantity,
+    type LineUpdatePatch,
+} from "../lib/sourcing/address-grouping"
 import { usesAddressQuantity } from "../lib/sourcing/delivery-editor"
 import { sourcingRouteLabel } from "../lib/sourcing/delivery-terms"
 import { buildSourcingEditorRows } from "../lib/sourcing/editor-rows"
-import { summarizeRowPricing } from "../lib/sourcing/pricing"
+import {
+    sourceAccentForIndex,
+    sourceRouteBadgeVariant,
+} from "../lib/sourcing/source-palette"
 import type { SourcingLineInput } from "../lib/sourcing/types"
 import type {
     SourcingEditorProps,
@@ -43,11 +64,10 @@ import type {
 } from "./create-sourcing/types"
 import { SourcingAddressEditor } from "./sourcing-address-editor"
 import { SourcingAllocationSummary } from "./sourcing-allocation-summary"
+import { SourcingDeliveryRequirementSection } from "./sourcing-delivery-plan"
+import { SourcingOptionCompareMatrix } from "./sourcing-option-compare-matrix"
 import { SourcingParticipationControl } from "./sourcing-participation-control"
-import { SourcingProductEditor } from "./sourcing-product-editor"
-import { SourcingSourceList } from "./sourcing-source-list"
-
-type DialogStep = "source" | "addresses"
+import { SourcingSourceRow } from "./sourcing-source-row"
 
 function statusTone(status: string): StatusTone {
     if (status === "已就绪") return "success"
@@ -71,10 +91,12 @@ function cloneProductLines(
 }
 
 /**
- * 全宽单商品供给精调弹窗（两步分段式）：
- * - 页头收拢商品身份、售价/最晚交期、紧凑进度胶囊与「本次下单」开关；
- * - ① 供货方案与拆单：聚焦供应商选择、毛利比价、交期/目标仓与多源拆分；
- * - ② 交付地址分配（含直发地址时出现）：独占全宽，提供省市状态树 + 全局地址表 + 批量改派与按量凑单。
+ * 一体化多源协同供给分配弹窗：
+ * - 顶部固定「商品身份 + 分色堆叠配平条 + 混合履约守恒等式（仓库/库存 + 供应商直发）+ 一键智能配平」；
+ * - 上区（供给来源与数量分配）同屏平铺展示全部来源，支持直接行内改数量/选目标仓/改交期/比价换源，
+ *   并通过按履约方式分类的比价面板精准添加新来源（现有库存 / 集采入仓 / 代发直发 / 集采直发）；
+ * - 下区（交付地址分配工作区，含直发地址时同屏常驻，支持一键最大化专注 100+ 地址）实时联动，
+ *   支持直发改派、按量跨源调拨及将选中地址原子转交仓库/库存来源。
  */
 export function SourcingProductAdjustDialog({
     productId,
@@ -101,14 +123,19 @@ export function SourcingProductAdjustDialog({
     }) {
     const [showErrors, setShowErrors] = useState(false)
     const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null)
-    const [activeStep, setActiveStep] = useState<DialogStep>("source")
+    const [addPickerOpen, setAddPickerOpen] = useState(false)
+    const [addressMaximized, setAddressMaximized] = useState(false)
+    const [addressSourceFilter, setAddressSourceFilter] = useState<
+        string | null
+    >(null)
+    const [actionNotice, setActionNotice] = useState<string | null>(null)
     const [snapshotState, setSnapshotState] = useState<{
         productId: string
         lines: SourcingLineInput[]
     } | null>(null)
+
     const lastProductId = useRef(productId)
-    const bodyRef = useRef<HTMLDivElement>(null)
-    const listRef = useRef<HTMLDivElement>(null)
+    const sourcesScrollRef = useRef<HTMLDivElement>(null)
     if (productId) lastProductId.current = productId
 
     const rows = buildSourcingEditorRows(
@@ -133,16 +160,8 @@ export function SourcingProductAdjustDialog({
         row?.allocations.find(({ line }) => line.rowKey === selectedRowKey) ??
         row?.allocations[0]
     const activeRowKey = active?.line.rowKey
-    const activeIndex =
-        row?.allocations.findIndex(
-            ({ line }) => line.rowKey === activeRowKey,
-        ) ?? -1
-    const activeOption =
-        row && active
-            ? findSourcingOption(row.product, active.line.basisId)
-            : undefined
 
-    const hasDirectAddressStep = Boolean(
+    const hasDirectAddressWork = Boolean(
         row &&
         row.product.deliveryAllocations.length > 0 &&
         row.allocations.some(({ line }) =>
@@ -150,47 +169,56 @@ export function SourcingProductAdjustDialog({
         ),
     )
 
-    const resolvedStep: DialogStep = hasDirectAddressStep
-        ? activeStep
-        : "source"
-
     const addressState = useMemo(
         () =>
-            row && hasDirectAddressStep
+            row && hasDirectAddressWork
                 ? computeGlobalAddressState(row.product, row.allocations)
                 : null,
-        [hasDirectAddressStep, row],
+        [hasDirectAddressWork, row],
     )
 
-    const pricingSummary = useMemo(
-        () => (row ? summarizeRowPricing(row) : null),
+    const usedBasisIdsAll = useMemo(
+        () =>
+            new Set(
+                (row?.allocations ?? [])
+                    .map(({ line }) => line.basisId)
+                    .filter(Boolean),
+            ),
+        [row],
+    )
+
+    const unusedOptions = useMemo(
+        () =>
+            (row?.product.options ?? []).filter(
+                (opt) => !usedBasisIdsAll.has(opt.basisId),
+            ),
+        [row, usedBasisIdsAll],
+    )
+
+    const recommendedBasisId = useMemo(
+        () =>
+            row
+                ? pickBestSourcingOption(
+                      row.product.options,
+                      row.product.remainingQuantity,
+                      row.product,
+                  )?.basisId
+                : undefined,
         [row],
     )
 
     const addDisabledReason = !row
         ? undefined
-        : row.allocations.length >= row.product.options.length
+        : unusedOptions.length === 0
           ? "可用来源均已添加"
           : !canSplitSourcingProduct(row.product, row.allocations.length)
             ? "剩余需求不足以继续拆分，或商品单位不支持拆分"
             : undefined
 
-    const hasResidualDemand = (() => {
-        if (!row) return false
-        try {
-            return (
-                compareDecimal(row.quantity, row.product.remainingQuantity, 6) <
-                0
-            )
-        } catch {
-            return false
-        }
-    })()
-
     const fields =
         sourcingFormValidationError(props.order, props.form.state.values)
             ?.fields ?? {}
-    const errors = new Map(
+    const errorsByRowKey = new Map(
         (row?.allocations ?? []).map(({ line, index }) => [
             line.rowKey,
             showErrors
@@ -206,27 +234,30 @@ export function SourcingProductAdjustDialog({
                 : [],
         ]),
     )
-    const activeErrors = activeRowKey ? (errors.get(activeRowKey) ?? []) : []
     const allProductErrors = showErrors
         ? [
               ...new Set(
                   (row?.allocations ?? []).flatMap(
-                      ({ line }) => errors.get(line.rowKey) ?? [],
+                      ({ line }) => errorsByRowKey.get(line.rowKey) ?? [],
                   ),
               ),
           ]
         : []
 
-    // 打开或切换商品时，根据入口语义（compare / addresses）决定默认步骤并拍摄还原快照
+    // 打开或切换商品时，根据入口语义决定默认聚焦态并拍摄还原快照
     useEffect(() => {
         if (!productId) {
             setSnapshotState(null)
-            setActiveStep("source")
+            setAddPickerOpen(false)
+            setAddressMaximized(false)
+            setAddressSourceFilter(null)
+            setActionNotice(null)
             return
         }
-        setActiveStep(
-            initialFocusSection === "addresses" ? "addresses" : "source",
-        )
+        setAddPickerOpen(false)
+        setAddressMaximized(initialFocusSection === "addresses")
+        setAddressSourceFilter(null)
+        setActionNotice(null)
         setSnapshotState((current) => {
             if (current?.productId === productId) return current
             return {
@@ -247,20 +278,23 @@ export function SourcingProductAdjustDialog({
         JSON.stringify(currentProductLines) !==
             JSON.stringify(snapshotState?.lines ?? [])
 
-    useEffect(() => {
-        if (!activeRowKey || resolvedStep !== "source") return
-        bodyRef.current?.scrollTo({ top: 0 })
-        const target = document.getElementById(
-            `sourcing-source-${toAutomationIdSegment(activeRowKey)}-edit`,
-        )
-        if (target && listRef.current?.contains(target))
-            target.scrollIntoView({ block: "nearest", inline: "nearest" })
-    }, [activeRowKey, resolvedStep])
+    const applyPatches = (
+        patches: readonly LineUpdatePatch[],
+        feedback?: string,
+    ) => {
+        for (const patch of patches) {
+            props.form.setFieldValue(`lines[${patch.index}]`, patch.nextLine)
+        }
+        if (feedback) setActionNotice(feedback)
+    }
 
     const close = () => {
         setShowErrors(false)
         setSelectedRowKey(null)
-        setActiveStep("source")
+        setAddPickerOpen(false)
+        setAddressMaximized(false)
+        setAddressSourceFilter(null)
+        setActionNotice(null)
         onClose()
     }
 
@@ -268,30 +302,80 @@ export function SourcingProductAdjustDialog({
         if (!onNavigate) return
         setShowErrors(false)
         setSelectedRowKey(null)
-        setActiveStep("source")
+        setAddPickerOpen(false)
+        setAddressMaximized(false)
+        setAddressSourceFilter(null)
+        setActionNotice(null)
         onNavigate(targetId)
     }
 
-    const focusEditor = (rowKey: string, invalid = false) => {
+    const focusRowControl = (rowKey: string, invalid = false) => {
         requestAnimationFrame(() => {
+            const seg = toAutomationIdSegment(rowKey)
             const target = invalid
-                ? bodyRef.current?.querySelector<HTMLElement>(
+                ? sourcesScrollRef.current?.querySelector<HTMLElement>(
                       '[aria-invalid="true"], [role="alert"]',
                   )
                 : (document.getElementById(
-                      `procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-quantity`,
+                      `procurement-orders-create-row-${seg}-quantity`,
                   ) ??
                   document.getElementById(
-                      `procurement-orders-create-row-${toAutomationIdSegment(rowKey)}-sourcing-option`,
+                      `procurement-orders-create-row-${seg}-warehouse`,
+                  ) ??
+                  document.getElementById(
+                      `procurement-orders-create-row-${seg}-sourcing-option`,
                   ))
-            if (!target || !bodyRef.current?.contains(target)) return
+            if (!target) return
             target.scrollIntoView({ block: "nearest", inline: "nearest" })
             target.focus({ preventScroll: true })
         })
     }
 
-    const addSplit = () => {
+    const handleAddSourceByOption = (basisId: string) => {
         if (!row) return
+        let addedKey: string | undefined
+        if (props.onAddSplitWithOption) {
+            addedKey = props.onAddSplitWithOption(
+                row.product.salesOrderLineId,
+                basisId,
+            )
+        } else {
+            const previousKeys = new Set(
+                row.allocations.map(({ line }) => line.rowKey),
+            )
+            props.onAddSplit(row.product.salesOrderLineId)
+            addedKey = props.form.state.values.lines.find(
+                (line) =>
+                    line.salesOrderLineId === row.product.salesOrderLineId &&
+                    !previousKeys.has(line.rowKey),
+            )?.rowKey
+        }
+        setAddPickerOpen(false)
+        setAddressMaximized(false)
+        if (addedKey) {
+            setSelectedRowKey(addedKey)
+            focusRowControl(addedKey)
+        }
+    }
+
+    const handleAddSourceClick = () => {
+        if (!row || addDisabledReason) return
+        setAddressMaximized(false)
+        // 仅剩 1 个可选方案时一键直接添加；多个可选方案时展开按履约方式分类的比价面板让采购精准选定
+        if (unusedOptions.length === 1 && props.onAddSplitWithOption) {
+            handleAddSourceByOption(unusedOptions[0]!.basisId)
+            return
+        }
+        if (props.onAddSplitWithOption && unusedOptions.length > 1) {
+            setAddPickerOpen((prev) => !prev)
+            requestAnimationFrame(() => {
+                sourcesScrollRef.current?.scrollTo({
+                    top: sourcesScrollRef.current.scrollHeight,
+                    behavior: "smooth",
+                })
+            })
+            return
+        }
         const previousKeys = new Set(
             row.allocations.map(({ line }) => line.rowKey),
         )
@@ -301,10 +385,10 @@ export function SourcingProductAdjustDialog({
                 line.salesOrderLineId === row.product.salesOrderLineId &&
                 !previousKeys.has(line.rowKey),
         )
-        if (!added) return
-        setActiveStep("source")
-        setSelectedRowKey(added.rowKey)
-        focusEditor(added.rowKey)
+        if (added) {
+            setSelectedRowKey(added.rowKey)
+            focusRowControl(added.rowKey)
+        }
     }
 
     const splitResidual = (moveAddressKeys?: readonly string[]) => {
@@ -315,14 +399,13 @@ export function SourcingProductAdjustDialog({
                 moveAddressKeys ? { moveAddressKeys } : undefined,
             )
             if (addedKey) {
+                setAddPickerOpen(false)
                 setSelectedRowKey(addedKey)
-                if (resolvedStep === "source") {
-                    focusEditor(addedKey)
-                }
+                if (!addressMaximized) focusRowControl(addedKey)
             }
             return
         }
-        addSplit()
+        handleAddSourceClick()
     }
 
     const removeSource = (rowKey: string) => {
@@ -336,6 +419,7 @@ export function SourcingProductAdjustDialog({
         const nextRowKey =
             rowKey === activeRowKey ? fallback?.line.rowKey : activeRowKey
         if (rowKey === activeRowKey) setSelectedRowKey(nextRowKey ?? null)
+        if (addressSourceFilter === rowKey) setAddressSourceFilter(null)
         props.onRemoveSplit(rowKey)
         requestAnimationFrame(() => {
             if (!nextRowKey) return
@@ -345,6 +429,56 @@ export function SourcingProductAdjustDialog({
                 )
                 ?.focus({ preventScroll: true })
         })
+    }
+
+    const handleTrimDirectExcess = (
+        onlyRowKey?: string,
+        rawExcess?: string,
+    ) => {
+        if (!row || !addressState) return
+        const excessQty = rawExcess ?? addressState.directOverTargetQty
+        if (!isPositiveQuantity(excessQty)) return
+        const res = buildTrimDirectExcessPatches(
+            row.product,
+            props.form.state.values.lines,
+            excessQty,
+            onlyRowKey,
+        )
+        applyPatches(
+            res.patches,
+            `已自动缩减直发 ${res.trimmedQty} ${row.product.unit}（释放 ${res.releasedAddressCount} 处地址），总量已重新配平。`,
+        )
+    }
+
+    const handleFillDirectShortfall = (
+        targetRowKey?: string,
+        rawShortfall?: string,
+    ) => {
+        if (!row || !addressState) return
+        const resolvedTarget =
+            targetRowKey ??
+            (activeRowKey &&
+            addressState.directSources.some((s) => s.rowKey === activeRowKey)
+                ? activeRowKey
+                : addressState.primaryDirectSource?.rowKey)
+        const shortfallQty = rawShortfall ?? addressState.directShortfallQty
+        if (!resolvedTarget || !isPositiveQuantity(shortfallQty)) return
+        const res = buildFillDirectShortfallPatches(
+            row.product,
+            props.form.state.values.lines,
+            resolvedTarget,
+            shortfallQty,
+        )
+        if (res.patches.length === 0) {
+            setActionNotice(
+                "当前暂无可继续直发分配的剩余地址（可能存在不配送地区），请在下方地址表核对。",
+            )
+            return
+        }
+        applyPatches(
+            res.patches,
+            `已为直发来源自动补配 ${res.addedQty} ${row.product.unit}（${res.addedAddressCount} 处可配送地址）。`,
+        )
     }
 
     const finish = async () => {
@@ -376,16 +510,14 @@ export function SourcingProductAdjustDialog({
                 path.startsWith(`lines[${firstInvalid.index}].`),
             )
             const onlyAddressErrors =
-                hasDirectAddressStep &&
+                hasDirectAddressWork &&
                 invalidPaths.every((path) =>
                     path.endsWith(".deliveryAllocations"),
                 )
             setSelectedRowKey(firstInvalid.line.rowKey)
-            if (onlyAddressErrors) {
-                setActiveStep("addresses")
-            } else {
-                setActiveStep("source")
-                focusEditor(firstInvalid.line.rowKey, true)
+            if (!onlyAddressErrors) {
+                setAddressMaximized(false)
+                focusRowControl(firstInvalid.line.rowKey, true)
             }
             return
         }
@@ -393,51 +525,10 @@ export function SourcingProductAdjustDialog({
     }
 
     const salesUnitPrice = row?.product.salesPrices?.unit_price_gross
-
-    const step1Summary = (() => {
-        if (!row) return ""
-        const count = row.allocations.filter(({ line }) => line.selected).length
-        const base =
-            row.allocations.length > 1
-                ? `${count || row.allocations.length} 家组合`
-                : "1 家供货"
-        if (pricingSummary?.kind === "stock") return `${base} · 库存核算`
-        if (
-            pricingSummary?.kind === "purchase" &&
-            pricingSummary.unitCostGross
-        ) {
-            const marginText = pricingSummary.hasInvertedSource
-                ? "价格倒挂"
-                : pricingSummary.margin?.marginRateText
-                  ? `毛利 ${pricingSummary.margin.marginRateText}`
-                  : ""
-            return [base, `¥${pricingSummary.unitCostGross}`, marginText]
-                .filter(Boolean)
-                .join(" · ")
-        }
-        if (pricingSummary?.kind === "multiple") return `${base} · 多价格`
-        return `${base} · 待选方案`
-    })()
-
-    const step2Badge = (() => {
-        if (!addressState) return null
-        if (addressState.counts.issues > 0) {
-            return {
-                tone: "destructive" as const,
-                text: `${addressState.counts.issues} 处异常`,
-            }
-        }
-        if (addressState.counts.unassigned > 0) {
-            return {
-                tone: "warning" as const,
-                text: `待分 ${addressState.counts.unassigned} 处`,
-            }
-        }
-        return {
-            tone: "success" as const,
-            text: `已全分 ${addressState.counts.total} 处`,
-        }
-    })()
+    const included = Boolean(row && (row.selected || row.partiallySelected))
+    const productSeg = row
+        ? toAutomationIdSegment(row.product.salesOrderLineId)
+        : ""
 
     return (
         <Dialog
@@ -464,8 +555,8 @@ export function SourcingProductAdjustDialog({
             >
                 {row ? (
                     <>
-                        {/* 统一单层页头：商品身份 + 紧凑进度胶囊 + 本次下单开关 */}
-                        <DialogHeader className="border-border/60 bg-card py-3">
+                        {/* 页头：商品身份 + 本次下单开关 */}
+                        <DialogHeader className="border-border/60 bg-card py-2.5">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                                 <div className="min-w-0 flex-1 space-y-0.5">
                                     <div className="flex flex-wrap items-center gap-2">
@@ -512,19 +603,15 @@ export function SourcingProductAdjustDialog({
                                     />
                                 </div>
 
-                                <div className="flex shrink-0 flex-wrap items-center gap-2.5">
-                                    <SourcingAllocationSummary row={row} />
+                                <div className="flex shrink-0 items-center gap-2">
                                     <SourcingParticipationControl
-                                        idPrefix={`sourcing-product-adjust-${toAutomationIdSegment(row.product.salesOrderLineId)}`}
+                                        idPrefix={`sourcing-product-adjust-${productSeg}`}
                                         itemName={row.product.itemName}
-                                        included={
-                                            row.selected ||
-                                            row.partiallySelected
-                                        }
-                                        onChange={(included) =>
+                                        included={included}
+                                        onChange={(nextIncluded) =>
                                             onSetParticipation(
                                                 [row.product.salesOrderLineId],
-                                                included,
+                                                nextIncluded,
                                             )
                                         }
                                         showHint={false}
@@ -533,318 +620,527 @@ export function SourcingProductAdjustDialog({
                                 </div>
                             </div>
                             <DialogDescription className="sr-only">
-                                第一步选择供货方案、交期或拆单给多家供应商；若含直发收货地址，第二步在全局地址表中按地区、状态或数量批量分配。修改实时存入草稿。
+                                同屏查看和分配多个供给来源（现有库存、集采入仓、代发直发、集采直发）的数量、目标仓、交期与收货地址。修改实时存入草稿。
                             </DialogDescription>
                         </DialogHeader>
 
-                        {/* 两步分段标签栏（仅含直发收货地址时显示）：沿用全站飞书底线 Tab，清晰表达可切换 */}
-                        {hasDirectAddressStep ? (
-                            <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border/70 bg-card px-4 sm:px-6">
-                                <Tabs
-                                    value={resolvedStep}
-                                    onValueChange={(nextStep) => {
-                                        if (
-                                            nextStep === "source" ||
-                                            nextStep === "addresses"
-                                        ) {
-                                            setActiveStep(nextStep)
-                                        }
-                                    }}
+                        {/* 全局多源配平进度条：分色堆叠 + 混合履约守恒等式 + 一键智能配平 */}
+                        <SourcingAllocationSummary
+                            row={row}
+                            addressState={addressState}
+                            canSplitNewSource={!addDisabledReason}
+                            onTrimDirectExcess={() => handleTrimDirectExcess()}
+                            onFillDirectShortfall={() =>
+                                handleFillDirectShortfall()
+                            }
+                            onSplitResidual={
+                                !addDisabledReason
+                                    ? () => splitResidual()
+                                    : undefined
+                            }
+                        />
+
+                        {/* 主工作面：上区（全部来源同屏平铺编辑）+ 下区（地址矩阵实时联动） */}
+                        <DialogBody className="flex h-[min(78dvh,50rem)] min-h-0 flex-auto flex-col overflow-hidden p-0">
+                            {/* 全局校验错误条（始终可见） */}
+                            {allProductErrors.length > 0 ? (
+                                <div
+                                    id="sourcing-product-adjust-source-errors"
+                                    role="alert"
+                                    tabIndex={-1}
+                                    className="flex shrink-0 items-start gap-2 border-b border-destructive-border bg-destructive-soft px-4 py-2 text-xs text-destructive-soft-foreground outline-none sm:px-6"
                                 >
-                                    <TabsList
-                                        variant="line"
-                                        aria-label="供给分配步骤"
-                                        className="gap-6"
+                                    <TriangleAlertIcon
+                                        aria-hidden="true"
+                                        className="mt-0.5 size-3.5 shrink-0"
+                                    />
+                                    <div className="space-y-0.5">
+                                        {allProductErrors.map((message) => (
+                                            <p key={message}>{message}</p>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {/* 暂缓下单提示 */}
+                            {!included ? (
+                                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-surface-sunken px-4 py-2 text-xs text-muted-foreground sm:px-6">
+                                    <span className="flex items-center gap-2">
+                                        <InfoIcon
+                                            aria-hidden="true"
+                                            className="size-3.5 shrink-0"
+                                        />
+                                        <span>
+                                            当前已暂缓下单：本次提交不会包含此商品，所配方案保存在草稿中。
+                                        </span>
+                                    </span>
+                                    <Button
+                                        id={`sourcing-editor-${productSeg}-enable-participation`}
+                                        type="button"
+                                        variant="outline"
+                                        size="xs"
+                                        className="bg-card"
+                                        onClick={() =>
+                                            onSetParticipation(
+                                                [row.product.salesOrderLineId],
+                                                true,
+                                            )
+                                        }
                                     >
-                                        <TabsTrigger
-                                            id="sourcing-product-adjust-step-source"
-                                            value="source"
-                                            className="cursor-pointer gap-2 text-foreground/75 hover:text-primary after:bottom-0 hover:after:opacity-35 data-active:font-semibold data-active:text-primary"
-                                        >
-                                            <span
-                                                className={cn(
-                                                    "num inline-flex size-4.5 shrink-0 items-center justify-center rounded-full text-tiny font-semibold transition-colors",
-                                                    resolvedStep === "source"
-                                                        ? "bg-primary text-primary-foreground"
-                                                        : "bg-muted text-muted-foreground",
-                                                )}
-                                            >
-                                                1
-                                            </span>
-                                            <span>供货方案与拆单</span>
-                                        </TabsTrigger>
+                                        恢复本次下单
+                                    </Button>
+                                </div>
+                            ) : null}
 
-                                        <TabsTrigger
-                                            id="sourcing-product-adjust-step-addresses"
-                                            value="addresses"
-                                            className="cursor-pointer gap-2 text-foreground/75 hover:text-primary after:bottom-0 hover:after:opacity-35 data-active:font-semibold data-active:text-primary"
-                                        >
-                                            <span
-                                                className={cn(
-                                                    "num inline-flex size-4.5 shrink-0 items-center justify-center rounded-full text-tiny font-semibold transition-colors",
-                                                    resolvedStep === "addresses"
-                                                        ? "bg-primary text-primary-foreground"
-                                                        : "bg-muted text-muted-foreground",
-                                                )}
-                                            >
-                                                2
+                            {/* 操作反馈轻量条 */}
+                            {actionNotice ? (
+                                <div
+                                    role="status"
+                                    className="flex shrink-0 items-center justify-between gap-2 border-b border-info-border/70 bg-info-soft/50 px-4 py-1.5 text-xs text-info-soft-foreground sm:px-6"
+                                >
+                                    <span>{actionNotice}</span>
+                                    <button
+                                        id={`sourcing-product-adjust-${productSeg}-notice-dismiss`}
+                                        type="button"
+                                        aria-label="关闭提示"
+                                        className="cursor-pointer hover:text-foreground"
+                                        onClick={() => setActionNotice(null)}
+                                    >
+                                        <XIcon className="size-3.5" />
+                                    </button>
+                                </div>
+                            ) : null}
+
+                            {/* 上区：供给来源与配量（专注地址模式时收拢为单行实时概览条，否则全部平铺同屏编辑） */}
+                            <section
+                                aria-label="供给来源列表"
+                                className={cn(
+                                    "flex min-h-0 flex-col bg-card",
+                                    addressMaximized && hasDirectAddressWork
+                                        ? "shrink-0 border-b border-border/70"
+                                        : hasDirectAddressWork
+                                          ? addPickerOpen
+                                              ? "max-h-[64%] shrink-0 border-b-2 border-border/80"
+                                              : "max-h-[48%] shrink-0 border-b-2 border-border/80"
+                                          : "flex-1",
+                                )}
+                            >
+                                {addressMaximized && hasDirectAddressWork ? (
+                                    <div className="flex flex-wrap items-center justify-between gap-2 bg-surface-sunken/60 px-4 py-2 sm:px-6">
+                                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                                            <span className="text-xs font-medium text-muted-foreground">
+                                                供给来源：
                                             </span>
-                                            <span>交付地址分配</span>
-                                            {step2Badge ? (
-                                                <span
-                                                    className={cn(
-                                                        "num inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-tiny font-medium",
-                                                        step2Badge.tone ===
-                                                            "destructive"
-                                                            ? "bg-destructive-soft text-destructive-soft-foreground"
-                                                            : step2Badge.tone ===
-                                                                "warning"
-                                                              ? "bg-warning-soft text-warning-soft-foreground"
-                                                              : "bg-success-soft text-success-soft-foreground",
-                                                    )}
-                                                >
-                                                    {step2Badge.tone ===
-                                                    "success" ? (
-                                                        <CheckCircle2Icon
-                                                            aria-hidden="true"
-                                                            className="size-3"
-                                                        />
-                                                    ) : null}
-                                                    {step2Badge.text}
+                                            {row.allocations.map(
+                                                ({ line }, idx) => {
+                                                    const opt =
+                                                        findSourcingOption(
+                                                            row.product,
+                                                            line.basisId,
+                                                        )
+                                                    const isStock =
+                                                        opt?.sourceType ===
+                                                        "EXISTING_STOCK"
+                                                    const label = isStock
+                                                        ? opt.warehouseName ||
+                                                          opt.supplierName
+                                                        : opt?.supplierName ||
+                                                          "未选供应商"
+                                                    const route = opt
+                                                        ? sourcingRouteLabel(
+                                                              opt,
+                                                          )
+                                                        : "待选"
+                                                    const accent =
+                                                        sourceAccentForIndex(
+                                                            idx,
+                                                        )
+                                                    const hasErr = Boolean(
+                                                        errorsByRowKey.get(
+                                                            line.rowKey,
+                                                        )?.length,
+                                                    )
+                                                    return (
+                                                        <button
+                                                            key={line.rowKey}
+                                                            id={`sourcing-source-${toAutomationIdSegment(line.rowKey)}-edit`}
+                                                            type="button"
+                                                            aria-label={`编辑 ${label} · ${route}，分配数量 ${line.quantity || "待填写"}${row.product.unit}${hasErr ? "，待调整" : ""}`}
+                                                            onClick={() => {
+                                                                setSelectedRowKey(
+                                                                    line.rowKey,
+                                                                )
+                                                                setAddressMaximized(
+                                                                    false,
+                                                                )
+                                                            }}
+                                                            className={cn(
+                                                                "inline-flex max-w-64 cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors outline-none hover:bg-card focus-visible:ring-2 focus-visible:ring-ring",
+                                                                hasErr
+                                                                    ? "border-destructive/50 bg-destructive-soft/40 text-destructive-soft-foreground"
+                                                                    : "border-border/70 bg-card text-foreground",
+                                                                !line.selected &&
+                                                                    "border-dashed opacity-65",
+                                                            )}
+                                                        >
+                                                            <span
+                                                                aria-hidden="true"
+                                                                className={cn(
+                                                                    "size-2 shrink-0 rounded-full",
+                                                                    accent.barClass,
+                                                                )}
+                                                            />
+                                                            <span className="num font-semibold">
+                                                                源{idx + 1}
+                                                            </span>
+                                                            <Badge
+                                                                variant={sourceRouteBadgeVariant(
+                                                                    opt,
+                                                                )}
+                                                                className="h-4.5 px-1 text-tiny"
+                                                            >
+                                                                {route}
+                                                            </Badge>
+                                                            <span className="truncate">
+                                                                {label}
+                                                            </span>
+                                                            <span className="num font-semibold">
+                                                                {line.quantity ||
+                                                                    "0"}{" "}
+                                                                {
+                                                                    row.product
+                                                                        .unit
+                                                                }
+                                                            </span>
+                                                        </button>
+                                                    )
+                                                },
+                                            )}
+                                        </div>
+                                        <div className="flex shrink-0 items-center gap-1.5">
+                                            <Button
+                                                id={`sourcing-product-${productSeg}-split`}
+                                                type="button"
+                                                variant="outline"
+                                                size="xs"
+                                                className="bg-card"
+                                                disabled={Boolean(
+                                                    addDisabledReason,
+                                                )}
+                                                title={
+                                                    addDisabledReason ??
+                                                    `共 ${row.product.options.length} 个可用方案`
+                                                }
+                                                onClick={handleAddSourceClick}
+                                            >
+                                                <PlusIcon aria-hidden="true" />
+                                                添加来源
+                                            </Button>
+                                            <Button
+                                                id={`sourcing-product-${productSeg}-expand-sources`}
+                                                type="button"
+                                                variant="ghost"
+                                                size="xs"
+                                                onClick={() =>
+                                                    setAddressMaximized(false)
+                                                }
+                                            >
+                                                展开编辑来源
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {/* 来源区小标题栏 */}
+                                        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-sidebar/60 px-4 py-2 sm:px-6">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <h3 className="flex items-center gap-1.5 text-body-compact font-semibold text-foreground">
+                                                    <LayersIcon
+                                                        aria-hidden="true"
+                                                        className="size-3.5 text-primary"
+                                                    />
+                                                    供货来源与数量分配
+                                                </h3>
+                                                <span className="num rounded-sm bg-muted px-1.5 py-0.5 text-tiny font-medium text-muted-foreground">
+                                                    {row.allocations.length > 1
+                                                        ? `已拆 ${row.allocations.length} 源`
+                                                        : `共 ${row.product.options.length} 个可选方案`}
                                                 </span>
-                                            ) : null}
-                                        </TabsTrigger>
-                                    </TabsList>
-                                </Tabs>
-
-                                <p className="hidden truncate text-xs text-muted-foreground md:block">
-                                    {step1Summary}
-                                </p>
-                            </div>
-                        ) : null}
-
-                        <DialogBody className="flex h-[min(76dvh,48rem)] min-h-0 flex-auto flex-col overflow-hidden p-0">
-                            {resolvedStep === "source" ? (
-                                <>
-                                    {/* 多来源时展示清晰来源切换条；单源时隐藏避免重复卡片 */}
-                                    {row.allocations.length > 1 ? (
-                                        <section
-                                            ref={listRef}
-                                            className="flex shrink-0 flex-wrap items-center justify-between gap-2.5 border-b border-border/60 bg-sidebar px-4 py-2.5 sm:px-6"
-                                            aria-label="供给来源列表"
-                                        >
-                                            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                                                <SourcingSourceList
-                                                    row={row}
-                                                    activeRowKey={activeRowKey}
-                                                    onSelect={setSelectedRowKey}
-                                                    onRemove={removeSource}
-                                                    errors={errors}
-                                                />
-                                            </div>
-
-                                            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                                                {hasResidualDemand &&
-                                                !addDisabledReason ? (
-                                                    <Button
-                                                        id={`sourcing-product-${toAutomationIdSegment(row.product.salesOrderLineId)}-split-residual`}
-                                                        type="button"
-                                                        variant="secondary"
-                                                        size="xs"
-                                                        onClick={() =>
-                                                            splitResidual()
-                                                        }
-                                                    >
-                                                        <SplitIcon aria-hidden="true" />
-                                                        剩余缺口拆给新来源
-                                                    </Button>
+                                                {row.allocations.length > 1 ? (
+                                                    <span className="hidden text-xs text-muted-foreground lg:inline">
+                                                        支持现有库存、集采入仓、代发/集采直发同屏混配，实时守恒
+                                                    </span>
                                                 ) : null}
+                                            </div>
+                                            <div className="flex shrink-0 items-center gap-1.5">
                                                 <Button
-                                                    id={`sourcing-product-${toAutomationIdSegment(row.product.salesOrderLineId)}-split`}
+                                                    id={`sourcing-product-${productSeg}-split`}
                                                     type="button"
-                                                    variant="outline"
+                                                    variant={
+                                                        addPickerOpen
+                                                            ? "secondary"
+                                                            : "outline"
+                                                    }
                                                     size="xs"
+                                                    className={
+                                                        !addPickerOpen
+                                                            ? "bg-card"
+                                                            : undefined
+                                                    }
                                                     disabled={Boolean(
                                                         addDisabledReason,
                                                     )}
-                                                    onClick={addSplit}
+                                                    aria-expanded={
+                                                        addPickerOpen
+                                                    }
                                                     title={
                                                         addDisabledReason ??
-                                                        `共 ${row.product.options.length} 个可用供给方案，支持多源拆分`
+                                                        `还可添加 ${unusedOptions.length} 个供给方案`
+                                                    }
+                                                    onClick={
+                                                        handleAddSourceClick
                                                     }
                                                 >
                                                     <PlusIcon aria-hidden="true" />
-                                                    添加来源
+                                                    {addPickerOpen
+                                                        ? "收起候选方案"
+                                                        : row.allocations
+                                                                .length === 1
+                                                          ? "拆单添加来源"
+                                                          : `添加来源（余 ${unusedOptions.length}）`}
                                                 </Button>
                                             </div>
-                                        </section>
-                                    ) : null}
+                                        </div>
 
-                                    <section
-                                        id="sourcing-product-adjust-detail"
-                                        className="flex min-h-0 min-w-0 flex-1 flex-col bg-card"
-                                        aria-label="当前来源编辑"
-                                    >
-                                        {active &&
-                                        row.allocations.length > 1 ? (
-                                            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-card px-4 py-2 sm:px-6">
-                                                <div className="flex items-center gap-2">
-                                                    <h3 className="text-body-compact font-semibold text-foreground">
-                                                        正在编辑：来源{" "}
-                                                        {activeIndex + 1}
-                                                    </h3>
-                                                    {activeOption ? (
-                                                        <Badge
-                                                            variant={
-                                                                activeOption.sourceType ===
-                                                                "EXISTING_STOCK"
-                                                                    ? "info"
-                                                                    : "neutral"
-                                                            }
-                                                        >
-                                                            {sourcingRouteLabel(
-                                                                activeOption,
-                                                            )}
-                                                        </Badge>
-                                                    ) : null}
-                                                </div>
-                                                <props.form.AppField
-                                                    name={`lines[${active.index}].selected`}
-                                                >
-                                                    {(field) => (
-                                                        <label
-                                                            className="flex cursor-pointer items-center gap-2 text-xs font-medium text-muted-foreground select-none hover:text-foreground"
-                                                            htmlFor={`procurement-orders-create-row-${toAutomationIdSegment(active.line.rowKey)}-select`}
-                                                        >
-                                                            <Checkbox
-                                                                id={`procurement-orders-create-row-${toAutomationIdSegment(active.line.rowKey)}-select`}
-                                                                checked={
-                                                                    field.state
-                                                                        .value ===
-                                                                    true
-                                                                }
-                                                                onCheckedChange={(
-                                                                    checked,
-                                                                ) =>
-                                                                    field.handleChange(
-                                                                        checked ===
-                                                                            true,
-                                                                    )
-                                                                }
-                                                            />
-                                                            本次使用此来源
-                                                        </label>
-                                                    )}
-                                                </props.form.AppField>
-                                            </div>
-                                        ) : null}
-
+                                        {/* 来源行平铺滚动区 */}
                                         <div
                                             id="sourcing-product-adjust-body"
-                                            ref={bodyRef}
-                                            className="@container/sourcing min-h-0 flex-1 overflow-y-auto overscroll-contain"
+                                            ref={sourcesScrollRef}
+                                            className="@container/sourcing min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain px-4 py-3 sm:px-6"
                                         >
-                                            {activeErrors.length ? (
-                                                <div
-                                                    id="sourcing-product-adjust-source-errors"
-                                                    role="alert"
-                                                    tabIndex={-1}
-                                                    className="mx-4 mt-3.5 flex items-start gap-2 rounded-lg border border-destructive-border bg-destructive-soft px-3.5 py-2.5 text-xs text-destructive-soft-foreground outline-none @min-[560px]/sourcing:mx-6"
-                                                >
-                                                    <TriangleAlertIcon
-                                                        aria-hidden="true"
-                                                        className="mt-0.5 size-3.5 shrink-0"
+                                            {row.allocations.map(
+                                                ({ line, index }, idx) => (
+                                                    <SourcingSourceRow
+                                                        key={line.rowKey}
+                                                        form={props.form}
+                                                        order={props.order}
+                                                        product={row.product}
+                                                        row={row}
+                                                        line={line}
+                                                        index={index}
+                                                        sourceNumber={idx + 1}
+                                                        isActive={
+                                                            line.rowKey ===
+                                                            activeRowKey
+                                                        }
+                                                        isMultiSource={
+                                                            row.allocations
+                                                                .length > 1
+                                                        }
+                                                        canRemove={
+                                                            row.allocations
+                                                                .length > 1
+                                                        }
+                                                        errors={
+                                                            errorsByRowKey.get(
+                                                                line.rowKey,
+                                                            ) ?? []
+                                                        }
+                                                        addressState={
+                                                            addressState
+                                                        }
+                                                        isAddressFiltered={
+                                                            addressSourceFilter ===
+                                                            line.rowKey
+                                                        }
+                                                        defaultCompareOpen={
+                                                            initialFocusSection ===
+                                                                "compare" &&
+                                                            idx === 0
+                                                        }
+                                                        onActivate={() =>
+                                                            setSelectedRowKey(
+                                                                line.rowKey,
+                                                            )
+                                                        }
+                                                        onRemove={() =>
+                                                            removeSource(
+                                                                line.rowKey,
+                                                            )
+                                                        }
+                                                        onToggleAddressFilter={
+                                                            hasDirectAddressWork
+                                                                ? () =>
+                                                                      setAddressSourceFilter(
+                                                                          (
+                                                                              curr,
+                                                                          ) =>
+                                                                              curr ===
+                                                                              line.rowKey
+                                                                                  ? null
+                                                                                  : line.rowKey,
+                                                                      )
+                                                                : undefined
+                                                        }
+                                                        onTrimDirectExcessForSource={(
+                                                            rk,
+                                                            excessQty,
+                                                        ) =>
+                                                            handleTrimDirectExcess(
+                                                                rk,
+                                                                excessQty,
+                                                            )
+                                                        }
+                                                        onFillDirectShortfallForSource={(
+                                                            rk,
+                                                            shortfallQty,
+                                                        ) =>
+                                                            handleFillDirectShortfall(
+                                                                rk,
+                                                                shortfallQty,
+                                                            )
+                                                        }
+                                                        onApplyPatches={
+                                                            applyPatches
+                                                        }
                                                     />
-                                                    <div className="space-y-0.5">
-                                                        {activeErrors.map(
-                                                            (message) => (
-                                                                <p
-                                                                    key={
-                                                                        message
-                                                                    }
-                                                                >
-                                                                    {message}
-                                                                </p>
-                                                            ),
-                                                        )}
+                                                ),
+                                            )}
+
+                                            {/* 按履约方式分类的新增来源比价面板 */}
+                                            {addPickerOpen ? (
+                                                <div className="space-y-2 rounded-lg border border-primary/35 bg-info-soft/20 p-3">
+                                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                                        <div>
+                                                            <p className="text-body-compact font-semibold text-foreground">
+                                                                选择要添加的新来源（按履约方式筛选）
+                                                            </p>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                点击任意未添加方案即可加入拆单；若有未覆盖缺口将自动带入余量。
+                                                            </p>
+                                                        </div>
+                                                        <Button
+                                                            id={`sourcing-product-${productSeg}-add-picker-close`}
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="xs"
+                                                            onClick={() =>
+                                                                setAddPickerOpen(
+                                                                    false,
+                                                                )
+                                                            }
+                                                        >
+                                                            <XIcon aria-hidden="true" />
+                                                            关闭
+                                                        </Button>
                                                     </div>
+                                                    <SourcingOptionCompareMatrix
+                                                        idPrefix={`sourcing-add-${productSeg}`}
+                                                        order={props.order}
+                                                        product={row.product}
+                                                        selectedBasisId=""
+                                                        usedBasisIds={
+                                                            usedBasisIdsAll
+                                                        }
+                                                        recommendedBasisId={
+                                                            recommendedBasisId
+                                                        }
+                                                        mode="add"
+                                                        onSelect={(option) =>
+                                                            handleAddSourceByOption(
+                                                                option.basisId,
+                                                            )
+                                                        }
+                                                    />
                                                 </div>
                                             ) : null}
-                                            {active ? (
-                                                <SourcingProductEditor
-                                                    key={active.line.rowKey}
-                                                    {...props}
-                                                    condensed
-                                                    hideAddressEditor={
-                                                        hasDirectAddressStep
-                                                    }
-                                                    activeRowKey={
-                                                        active.line.rowKey
-                                                    }
-                                                    defaultCompareOpen={
-                                                        initialFocusSection ===
-                                                        "compare"
-                                                    }
-                                                    onSplitResidual={
-                                                        !addDisabledReason
-                                                            ? () =>
-                                                                  splitResidual()
-                                                            : undefined
-                                                    }
-                                                    onAddSplitAction={addSplit}
-                                                    addSplitDisabledReason={
-                                                        addDisabledReason
-                                                    }
-                                                    onGoToAddresses={
-                                                        hasDirectAddressStep
-                                                            ? () =>
-                                                                  setActiveStep(
-                                                                      "addresses",
-                                                                  )
-                                                            : undefined
-                                                    }
-                                                    onSetParticipation={
-                                                        onSetParticipation
-                                                    }
-                                                    showParticipation={false}
-                                                    row={row}
-                                                />
-                                            ) : (
-                                                <p className="p-6 text-xs text-muted-foreground">
-                                                    尚未添加供给来源
-                                                </p>
-                                            )}
+
+                                            {/* 纯仓发/库存且存在客户地址时，底部折叠展示只读收货地址要求 */}
+                                            {!hasDirectAddressWork &&
+                                            row.product.deliveryAllocations
+                                                .length > 0 ? (
+                                                <Collapsible className="rounded-lg border border-border/70 bg-surface-sunken/50">
+                                                    <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2">
+                                                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                            <MapPinIcon
+                                                                aria-hidden="true"
+                                                                className="size-3.5 shrink-0 text-muted-foreground"
+                                                            />
+                                                            <span>
+                                                                客户收货地址共{" "}
+                                                                <strong className="num font-medium text-foreground">
+                                                                    {
+                                                                        row
+                                                                            .product
+                                                                            .deliveryAllocations
+                                                                            .length
+                                                                    }
+                                                                </strong>{" "}
+                                                                处（
+                                                                <QuantityValue
+                                                                    value={
+                                                                        row
+                                                                            .product
+                                                                            .remainingQuantity
+                                                                    }
+                                                                    unit={
+                                                                        row
+                                                                            .product
+                                                                            .unit
+                                                                    }
+                                                                    className="font-medium text-foreground"
+                                                                />
+                                                                ）·
+                                                                当前由仓库/库存出库时统一安排，如需部分直发请添加代发/集采直发来源。
+                                                            </span>
+                                                        </span>
+                                                        <CollapsibleTrigger
+                                                            id={`sourcing-product-${productSeg}-readonly-addr-toggle`}
+                                                            render={
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="xs"
+                                                                    className="group"
+                                                                />
+                                                            }
+                                                        >
+                                                            查看收货地址
+                                                            <ChevronDownIcon className="size-3.5 transition-transform group-data-[panel-open]:rotate-180" />
+                                                        </CollapsibleTrigger>
+                                                    </div>
+                                                    <CollapsibleContent>
+                                                        <div className="border-t border-border/60 bg-card">
+                                                            <SourcingDeliveryRequirementSection
+                                                                product={
+                                                                    row.product
+                                                                }
+                                                                condensed
+                                                            />
+                                                        </div>
+                                                    </CollapsibleContent>
+                                                </Collapsible>
+                                            ) : null}
                                         </div>
-                                    </section>
-                                </>
-                            ) : (
+                                    </>
+                                )}
+                            </section>
+
+                            {/* 下区：交付地址分配工作区（含直发地址时同屏实时联动） */}
+                            {hasDirectAddressWork ? (
                                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                                    {allProductErrors.length > 0 ? (
-                                        <div
-                                            id="sourcing-product-adjust-source-errors"
-                                            role="alert"
-                                            tabIndex={-1}
-                                            className="flex shrink-0 items-start gap-2 border-b border-destructive-border bg-destructive-soft px-5 py-2.5 text-xs text-destructive-soft-foreground outline-none"
-                                        >
-                                            <TriangleAlertIcon
-                                                aria-hidden="true"
-                                                className="mt-0.5 size-3.5 shrink-0"
-                                            />
-                                            <div className="space-y-0.5">
-                                                {allProductErrors.map(
-                                                    (message) => (
-                                                        <p key={message}>
-                                                            {message}
-                                                        </p>
-                                                    ),
-                                                )}
-                                            </div>
-                                        </div>
-                                    ) : null}
                                     <SourcingAddressEditor
                                         form={props.form}
                                         row={row}
                                         canSplitNewSource={!addDisabledReason}
+                                        sourceFilter={addressSourceFilter}
+                                        onSourceFilterChange={
+                                            setAddressSourceFilter
+                                        }
+                                        isMaximized={addressMaximized}
+                                        onToggleMaximize={() =>
+                                            setAddressMaximized((prev) => !prev)
+                                        }
                                         onSplitResidual={
                                             !addDisabledReason
                                                 ? () => splitResidual()
@@ -857,10 +1153,10 @@ export function SourcingProductAdjustDialog({
                                         }
                                     />
                                 </div>
-                            )}
+                            ) : null}
                         </DialogBody>
 
-                        {/* 精简底栏：只保留必要操作，无待调整项时隐藏无效按钮 */}
+                        {/* 精简底栏 */}
                         <DialogFooter className="items-center border-border/60 bg-card sm:justify-between">
                             <div className="flex flex-wrap items-center gap-2.5">
                                 {onRestoreProductLines &&
@@ -877,6 +1173,7 @@ export function SourcingProductAdjustDialog({
                                                 snapshotState.lines,
                                             )
                                             setShowErrors(false)
+                                            setActionNotice(null)
                                             setSelectedRowKey(
                                                 snapshotState.lines[0]
                                                     ?.rowKey ?? null,

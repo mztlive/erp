@@ -44,11 +44,13 @@ const prefix = "sales-delivery-workbook"
 export function SalesDeliveryWorkbookActions({
     form,
     lines,
+    unitNames,
     draftId,
     onApplied,
 }: {
     form: SalesOrderCreateFormApi
     lines: SalesOrderDraftLineInput[]
+    unitNames: ReadonlyMap<string, string>
     draftId?: string
     onApplied: () => void
 }) {
@@ -59,6 +61,7 @@ export function SalesDeliveryWorkbookActions({
     const getContext = () => ({
         scope: draftId ? `draft:${draftId}` : editorScope.current,
         customerId: form.getFieldValue("customerId"),
+        unitNames,
         lines: form.getFieldValue("lineItems"),
     })
     const prepare = () => {
@@ -246,6 +249,7 @@ function SalesDeliveryWorkbookDialog({
                 context.lines,
                 regions,
                 filled,
+                context.unitNames,
             )
             setPreview({ filename, source, result, snapshot, filled })
         } catch (reason) {

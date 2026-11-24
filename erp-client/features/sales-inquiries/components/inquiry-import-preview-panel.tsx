@@ -120,7 +120,7 @@ export function InquiryImportPreviewPanel({
         lines.map((line) => line.sku_id),
     )
     const unitLabel = React.useCallback(
-        (code: string) => skuDetails.units.get(code) ?? code,
+        (code: string) => skuDetails.units.get(code) ?? "",
         [skuDetails.units],
     )
 

@@ -1,5 +1,8 @@
 "use client"
 
+import { useStore } from "@tanstack/react-form"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
+
 import {
     DetailWorkspaceSection,
     QuantityValue,
@@ -65,6 +68,11 @@ export function InquiryDeliveryAllocationEditor({
     form: SalesOrderCreateFormApi
     source: Source
 }) {
+    const lines = useStore(form.store, (state) => state.values.lineItems)
+    const { nameForUnit } = useProductUnitNames(
+        lines.map((line) => line.sku),
+        lines.length > 0,
+    )
     return (
         <form.Subscribe selector={(state) => state.values.lineItems}>
             {(lines) => (
@@ -91,7 +99,10 @@ export function InquiryDeliveryAllocationEditor({
                                         开单数量{" "}
                                         <QuantityValue
                                             value={line.quantity}
-                                            unit={line.unit}
+                                            unit={nameForUnit(
+                                                line.unit,
+                                                line.sku,
+                                            )}
                                         />
                                     </span>
                                 </div>

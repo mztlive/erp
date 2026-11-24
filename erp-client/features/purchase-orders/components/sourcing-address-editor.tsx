@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import {
+    ArrowRightLeftIcon,
     CheckCircle2Icon,
     ChevronDownIcon,
     ChevronLeftIcon,
@@ -9,10 +10,15 @@ import {
     CircleAlertIcon,
     EraserIcon,
     MapPinIcon,
+    Maximize2Icon,
+    Minimize2Icon,
+    PackageCheckIcon,
     PlusIcon,
+    ScissorsIcon,
     SearchIcon,
     SplitIcon,
     TriangleAlertIcon,
+    WarehouseIcon,
     XIcon,
     ZapIcon,
 } from "lucide-react"
@@ -48,6 +54,8 @@ import {
     buildBatchAssignPatches,
     buildClearAddressesPatches,
     buildSetSliceQuantityPatch,
+    buildTransferAddressesToNonDirectPatches,
+    buildTrimDirectExcessPatches,
     computeGlobalAddressState,
     computeQuotaAutoAllocation,
     entryRegionFacetKey,
@@ -55,14 +63,21 @@ import {
     type DirectSourceInfo,
     type GlobalAddressEntry,
     type LineUpdatePatch,
+    type NonDirectSourceInfo,
 } from "../lib/sourcing/address-grouping"
 import { deliveryKey } from "../lib/sourcing/delivery"
-import { deliveryTermLabel } from "../lib/sourcing/delivery-terms"
+import {
+    addressDeliverable,
+    deliveryTermLabel,
+} from "../lib/sourcing/delivery-terms"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
+import { sourceAccentForIndex } from "../lib/sourcing/source-palette"
 import type { PurchaseDeliveryAllocation } from "../types"
 
 type StatusFilter = "all" | "assigned" | "unassigned" | "issues"
 type PageSizeOption = 25 | 50 | 100
+
+const TRANSFER_VALUE_PREFIX = "__transfer__:"
 
 function addressIdSegment(row: PurchaseDeliveryAllocation): string {
     return toAutomationIdSegment(encodeURIComponent(deliveryKey(row)))
@@ -78,10 +93,10 @@ function safeSumQuantities(values: readonly string[]): string {
 }
 
 /**
- * 步骤 ② 全局交付地址分配工作区（专为 100+ 地址与多源拆分设计）：
- * - 以地址为中心的统一视图，消除多来源间反复切 Tab 找地址的折磨；
- * - 左侧固定「状态 + 承接来源 + 自动省/市」三维分组导航；
- * - 右侧独立滚动分页表（默认 25 条/页）+ 跨页全选批量改派 + 「按数量自动分配」凑单工具。
+ * 混合履约感知的全局交付地址分配工作区：
+ * - 与上方多源配量区同屏实时联动，支持 100+ 地址按省/市/状态/来源快速筛选与分页；
+ * - 清晰区分「直发已分 / 直发缺口 / 直发超额 / 仓库或库存统筹」四种语义状态；
+ * - 支持在多个直发来源之间一键改派、按量跨源调拨，并支持将选中地址原子转交给仓库/库存来源（释放直发同时增加仓库数量）。
  */
 export function SourcingAddressEditor({
     form,
@@ -89,19 +104,29 @@ export function SourcingAddressEditor({
     canSplitNewSource,
     onSplitResidual,
     onSplitAddressesToNewSource,
+    sourceFilter: controlledSourceFilter,
+    onSourceFilterChange,
+    isMaximized = false,
+    onToggleMaximize,
 }: {
     form: PurchaseOrderCreateFormApi
     row: SourcingEditorRow
     canSplitNewSource: boolean
     onSplitResidual?: () => void
     onSplitAddressesToNewSource?: (addressKeys: readonly string[]) => void
+    sourceFilter?: string | null
+    onSourceFilterChange?: (next: string | null) => void
+    isMaximized?: boolean
+    onToggleMaximize?: () => void
 }) {
     const { product } = row
     const allLines = form.state.values.lines
     const idPrefix = `sourcing-addr-${toAutomationIdSegment(product.salesOrderLineId)}`
 
     const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
-    const [sourceFilter, setSourceFilter] = useState<string | null>(null)
+    const [internalSourceFilter, setInternalSourceFilter] = useState<
+        string | null
+    >(null)
     const [regionFilter, setRegionFilter] = useState<string | null>(null)
     const [query, setQuery] = useState("")
     const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(
@@ -115,8 +140,18 @@ export function SourcingAddressEditor({
     const [quotaTargetRowKey, setQuotaTargetRowKey] = useState<string>("")
     const [quotaQty, setQuotaQty] = useState("")
     const [quotaPreferFree, setQuotaPreferFree] = useState(true)
+    const [quotaAllowReallocate, setQuotaAllowReallocate] = useState(true)
     const [quotaScopeOnlyFiltered, setQuotaScopeOnlyFiltered] = useState(false)
     const [actionFeedback, setActionFeedback] = useState<string | null>(null)
+
+    const sourceFilter =
+        controlledSourceFilter !== undefined
+            ? controlledSourceFilter
+            : internalSourceFilter
+    const setSourceFilter = (next: string | null) => {
+        if (onSourceFilterChange) onSourceFilterChange(next)
+        else setInternalSourceFilter(next)
+    }
 
     const state = useMemo(
         () => computeGlobalAddressState(product, row.allocations),
@@ -137,6 +172,7 @@ export function SourcingAddressEditor({
     const showLeftRail =
         state.regionFacets.level !== "none" ||
         state.directSources.length > 1 ||
+        state.nonDirectSources.length > 0 ||
         state.entries.length >= 15
 
     const filteredEntries = useMemo(() => {
@@ -305,6 +341,29 @@ export function SourcingAddressEditor({
         clearSelection()
     }
 
+    const handleBatchTransferToNonDirect = (
+        targetNonDirectRowKey: string,
+        keys: ReadonlySet<string>,
+    ) => {
+        const result = buildTransferAddressesToNonDirectPatches(
+            product,
+            form.state.values.lines,
+            targetNonDirectRowKey,
+            keys,
+        )
+        applyPatches(result.patches)
+        const target = state.nonDirectSources.find(
+            (src) => src.rowKey === targetNonDirectRowKey,
+        )
+        const capNote = result.cappedByMax
+            ? "（已按该来源上限/商品剩余需求自动封顶）"
+            : ""
+        setActionFeedback(
+            `已将 ${result.releasedCount} 处地址从直发释放，并向 ${target?.shortLabel ?? "仓库来源"} 划入 ${result.transferredQty} ${product.unit}${capNote}。`,
+        )
+        clearSelection()
+    }
+
     const handleBatchClear = (keys: ReadonlySet<string>) => {
         const patches = buildClearAddressesPatches(
             product,
@@ -312,8 +371,21 @@ export function SourcingAddressEditor({
             keys,
         )
         applyPatches(patches)
-        setActionFeedback(`已清空 ${keys.size} 处地址的分配。`)
+        setActionFeedback(`已清空 ${keys.size} 处地址的直发分配。`)
         clearSelection()
+    }
+
+    const handleTrimDirectExcess = () => {
+        if (!isPositiveQuantity(state.directOverTargetQty)) return
+        const res = buildTrimDirectExcessPatches(
+            product,
+            form.state.values.lines,
+            state.directOverTargetQty,
+        )
+        applyPatches(res.patches)
+        setActionFeedback(
+            `已从直发自动缩减 ${res.trimmedQty} ${product.unit}（释放 ${res.releasedAddressCount} 处地址，由仓库/库存统筹发货）。`,
+        )
     }
 
     const resolvedQuotaTarget =
@@ -335,6 +407,8 @@ export function SourcingAddressEditor({
                         ? filteredKeySet
                         : undefined,
                 preferFreightIncluded: quotaPreferFree,
+                allowReallocateFromOtherDirect:
+                    state.directSources.length > 1 && quotaAllowReallocate,
             },
         )
     }, [
@@ -342,19 +416,22 @@ export function SourcingAddressEditor({
         filteredKeySet,
         hasActiveFilters,
         product,
+        quotaAllowReallocate,
         quotaOpen,
         quotaPreferFree,
         quotaQty,
         quotaScopeOnlyFiltered,
         resolvedQuotaTarget,
+        state.directSources.length,
     ])
 
-    const notDeliverableKeys = useMemo(
-        () =>
-            state.entries
-                .filter((entry) => entry.hasNotDeliverable)
-                .map((entry) => entry.key),
+    const notDeliverableEntries = useMemo(
+        () => state.entries.filter((entry) => entry.hasNotDeliverable),
         [state.entries],
+    )
+    const notDeliverableKeys = useMemo(
+        () => notDeliverableEntries.map((entry) => entry.key),
+        [notDeliverableEntries],
     )
     const allExceptionKeys = useMemo(
         () =>
@@ -366,15 +443,25 @@ export function SourcingAddressEditor({
         [state.entries],
     )
 
-    const isCleanSingleSourceAllCovered =
-        state.directSources.length === 1 &&
-        !state.hasNonDirectSources &&
-        state.counts.total > 0 &&
-        state.counts.unassigned === 0 &&
-        state.counts.issues === 0
+    // 若已存在另一个能覆盖不配送地址的直发来源，提供一键改派快捷按钮
+    const rescueDirectSource = useMemo(() => {
+        if (
+            notDeliverableEntries.length === 0 ||
+            state.directSources.length < 2
+        )
+            return undefined
+        return state.directSources.find((src) =>
+            notDeliverableEntries.some((entry) =>
+                addressDeliverable(src.option, entry.baseRow.region_code),
+            ),
+        )
+    }, [notDeliverableEntries, state.directSources])
+
+    const primaryNonDirectSource =
+        state.nonDirectSources.find((src) => src.selected) ??
+        state.nonDirectSources[0]
 
     const defaultSource = state.primaryDirectSource
-
     const activeRegionLabel = activeRegionFilter
         ? state.regionFacets.items.find((i) => i.key === activeRegionFilter)
               ?.label
@@ -384,39 +471,140 @@ export function SourcingAddressEditor({
               ?.shortLabel
         : null
 
+    const unassignedLabel = state.hasNonDirectSources
+        ? "仓库统筹 / 未直发"
+        : "待分配"
+    const hasDirectOverTarget = isPositiveQuantity(state.directOverTargetQty)
+    const hasDirectShortfall = isPositiveQuantity(state.directShortfallQty)
+
+    const statusBadge = (() => {
+        if (state.counts.issues > 0) {
+            return {
+                tone: "destructive" as const,
+                text: `${state.counts.issues} 处异常`,
+            }
+        }
+        if (hasDirectOverTarget) {
+            return {
+                tone: "destructive" as const,
+                text: `直发超出 ${state.directOverTargetQty} ${product.unit}`,
+            }
+        }
+        if (hasDirectShortfall) {
+            return {
+                tone: "warning" as const,
+                text: state.hasNonDirectSources
+                    ? `直发尚缺 ${state.directShortfallQty} ${product.unit}`
+                    : `待分 ${state.counts.unassigned} 处`,
+            }
+        }
+        if (state.hasNonDirectSources) {
+            return {
+                tone: "success" as const,
+                text: `直发已齐 ${state.directAssignedTotalQty}/${state.directTargetQty} ${product.unit}`,
+            }
+        }
+        return {
+            tone: "success" as const,
+            text: `已全分 ${state.counts.total} 处`,
+        }
+    })()
+
     return (
         <section
             className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card"
             aria-label="本来源交付地址"
         >
-            {/* 顶部语境引导条：混合来源公式 / 异常一键拆分 / 全正常定心丸 */}
-            {state.hasNonDirectSources ? (
-                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-info-soft/50 px-5 py-2 text-xs text-info-soft-foreground">
-                    <span>
-                        总需求{" "}
-                        <strong className="num font-semibold">
-                            {product.remainingQuantity} {product.unit}
-                        </strong>{" "}
-                        = 仓库/库存承担{" "}
-                        <strong className="num font-semibold">
-                            {state.nonDirectTotalQty} {product.unit}
-                        </strong>
-                        （由仓库出库时指定地址）+ 供应商直发需分配{" "}
-                        <strong className="num font-semibold">
-                            {state.directTargetQty} {product.unit}
-                        </strong>
-                        （当前已分{" "}
-                        <strong className="num font-semibold">
-                            {state.directAssignedTotalQty} {product.unit}
-                        </strong>
-                        ）
+            {/* 地址工作区标题条：混合履约状态一目了然 + 展开专注按钮 */}
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/70 bg-sidebar px-4 py-2 sm:px-6">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <h3 className="flex items-center gap-1.5 text-body-compact font-semibold text-foreground">
+                        <MapPinIcon
+                            aria-hidden="true"
+                            className="size-3.5 text-primary"
+                        />
+                        交付地址分配
+                    </h3>
+                    <span
+                        className={cn(
+                            "num inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-tiny font-medium",
+                            statusBadge.tone === "destructive"
+                                ? "bg-destructive-soft text-destructive-soft-foreground"
+                                : statusBadge.tone === "warning"
+                                  ? "bg-warning-soft text-warning-soft-foreground"
+                                  : "bg-success-soft text-success-soft-foreground",
+                        )}
+                    >
+                        {statusBadge.tone === "success" ? (
+                            <CheckCircle2Icon
+                                aria-hidden="true"
+                                className="size-3"
+                            />
+                        ) : null}
+                        {statusBadge.text}
                     </span>
+                    {state.hasNonDirectSources ? (
+                        <span className="text-xs text-muted-foreground">
+                            仓库/库存统筹{" "}
+                            <strong className="num font-medium text-foreground">
+                                {state.nonDirectTotalQty} {product.unit}
+                            </strong>
+                            （出库时安排地址）· 需指定直发{" "}
+                            <strong className="num font-medium text-foreground">
+                                {state.directTargetQty} {product.unit}
+                            </strong>
+                        </span>
+                    ) : (
+                        <span className="num text-xs text-muted-foreground">
+                            共 {state.counts.total} 处地址 · 已分直发{" "}
+                            {state.directAssignedTotalQty} {product.unit}
+                        </span>
+                    )}
                 </div>
-            ) : null}
 
+                <div className="flex shrink-0 items-center gap-1.5">
+                    {hasDirectOverTarget ? (
+                        <Button
+                            id={`${idPrefix}-header-trim-excess`}
+                            type="button"
+                            size="xs"
+                            variant="destructive"
+                            onClick={handleTrimDirectExcess}
+                        >
+                            <ScissorsIcon aria-hidden="true" />
+                            自动缩减多余 {state.directOverTargetQty}{" "}
+                            {product.unit}
+                        </Button>
+                    ) : null}
+                    {onToggleMaximize ? (
+                        <Button
+                            id={`${idPrefix}-toggle-maximize`}
+                            type="button"
+                            size="xs"
+                            variant="ghost"
+                            onClick={onToggleMaximize}
+                            aria-pressed={isMaximized}
+                        >
+                            {isMaximized ? (
+                                <>
+                                    <Minimize2Icon aria-hidden="true" />
+                                    展开来源明细
+                                </>
+                            ) : (
+                                <>
+                                    <Maximize2Icon aria-hidden="true" />
+                                    专注地址区
+                                </>
+                            )}
+                        </Button>
+                    ) : null}
+                </div>
+            </div>
+
+            {/* 配送异常一键处理条 */}
             {state.counts.notDeliverable > 0 ||
             state.counts.freightExtra > 0 ? (
-                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2.5 border-b border-warning-border/80 bg-warning-soft/65 px-5 py-2 text-xs text-warning-soft-foreground">
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-warning-border/80 bg-warning-soft/65 px-4 py-1.5 text-xs text-warning-soft-foreground sm:px-6">
                     <div className="flex flex-wrap items-center gap-2">
                         <TriangleAlertIcon
                             aria-hidden="true"
@@ -456,14 +644,52 @@ export function SourcingAddressEditor({
                         >
                             只看异常（{state.counts.issues}）
                         </Button>
+                        {rescueDirectSource && notDeliverableKeys.length > 0 ? (
+                            <Button
+                                id={`${idPrefix}-banner-reassign-undeliverable`}
+                                type="button"
+                                variant="secondary"
+                                size="xs"
+                                onClick={() =>
+                                    handleBatchAssign(
+                                        rescueDirectSource.rowKey,
+                                        new Set(notDeliverableKeys),
+                                        "move_full",
+                                    )
+                                }
+                            >
+                                不配送 {notDeliverableKeys.length} 处改派给{" "}
+                                {rescueDirectSource.shortLabel}
+                            </Button>
+                        ) : null}
+                        {primaryNonDirectSource &&
+                        notDeliverableKeys.length > 0 ? (
+                            <Button
+                                id={`${idPrefix}-banner-transfer-undeliverable`}
+                                type="button"
+                                variant="secondary"
+                                size="xs"
+                                onClick={() =>
+                                    handleBatchTransferToNonDirect(
+                                        primaryNonDirectSource.rowKey,
+                                        new Set(notDeliverableKeys),
+                                    )
+                                }
+                            >
+                                <ArrowRightLeftIcon aria-hidden="true" />
+                                不配送 {notDeliverableKeys.length} 处转交 源
+                                {primaryNonDirectSource.sourceNumber}
+                            </Button>
+                        ) : null}
                         {canSplitNewSource &&
                         onSplitAddressesToNewSource &&
                         notDeliverableKeys.length > 0 ? (
                             <Button
                                 id={`${idPrefix}-banner-split-undeliverable`}
                                 type="button"
-                                variant="secondary"
+                                variant="outline"
                                 size="xs"
+                                className="bg-card text-foreground"
                                 onClick={() => {
                                     onSplitAddressesToNewSource(
                                         notDeliverableKeys,
@@ -474,7 +700,7 @@ export function SourcingAddressEditor({
                                 }}
                             >
                                 <SplitIcon aria-hidden="true" />
-                                不配送 {notDeliverableKeys.length} 处拆给新来源
+                                拆给新来源
                             </Button>
                         ) : null}
                         {canSplitNewSource &&
@@ -497,35 +723,11 @@ export function SourcingAddressEditor({
                             >
                                 <SplitIcon aria-hidden="true" />
                                 {notDeliverableKeys.length > 0
-                                    ? `连同运费另计共 ${allExceptionKeys.length} 处一并拆分`
+                                    ? `含运费另计共 ${allExceptionKeys.length} 处一并拆分`
                                     : `${allExceptionKeys.length} 处运费另计拆给新来源`}
                             </Button>
                         ) : null}
                     </div>
-                </div>
-            ) : isCleanSingleSourceAllCovered && defaultSource ? (
-                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-success-soft/45 px-5 py-2 text-xs text-success-soft-foreground">
-                    <span className="flex items-center gap-2">
-                        <CheckCircle2Icon
-                            aria-hidden="true"
-                            className="size-3.5 shrink-0"
-                        />
-                        <span>
-                            全部{" "}
-                            <strong className="num font-semibold">
-                                {state.counts.total}
-                            </strong>{" "}
-                            处地址（共{" "}
-                            <strong className="num font-semibold">
-                                {state.directAssignedTotalQty} {product.unit}
-                            </strong>
-                            ）已由{" "}
-                            <strong className="font-semibold">
-                                {defaultSource.supplierName}
-                            </strong>{" "}
-                            全量承接且配送正常，无需逐条操作；如需按地区或按数量拆单，可在下方调整。
-                        </span>
-                    </span>
                 </div>
             ) : null}
 
@@ -534,10 +736,10 @@ export function SourcingAddressEditor({
                 {showLeftRail ? (
                     <aside
                         aria-label="地址分组导航"
-                        className="hidden w-56 shrink-0 flex-col gap-4 overflow-y-auto overscroll-contain border-r border-border/60 bg-sidebar p-3 md:flex"
+                        className="hidden w-52 shrink-0 flex-col gap-3.5 overflow-y-auto overscroll-contain border-r border-border/60 bg-sidebar/60 p-3 md:flex"
                     >
-                        <div className="space-y-1">
-                            <p className="px-2 text-tiny font-semibold text-muted-foreground">
+                        <div className="space-y-0.5">
+                            <p className="px-2 pb-0.5 text-tiny font-semibold text-muted-foreground">
                                 按分配状态
                             </p>
                             {(
@@ -545,12 +747,12 @@ export function SourcingAddressEditor({
                                     ["all", "全部地址", state.counts.total],
                                     [
                                         "assigned",
-                                        "已分配",
+                                        "已分直发",
                                         state.counts.assigned,
                                     ],
                                     [
                                         "unassigned",
-                                        "待分配",
+                                        unassignedLabel,
                                         state.counts.unassigned,
                                     ],
                                     ...(state.counts.issues > 0
@@ -596,7 +798,8 @@ export function SourcingAddressEditor({
                                                 value === "issues" && count > 0
                                                     ? "bg-destructive-soft text-destructive-soft-foreground"
                                                     : value === "unassigned" &&
-                                                        count > 0
+                                                        count > 0 &&
+                                                        !state.directBalanced
                                                       ? "bg-warning-soft text-warning-soft-foreground"
                                                       : "text-muted-foreground",
                                             )}
@@ -608,14 +811,17 @@ export function SourcingAddressEditor({
                             })}
                         </div>
 
-                        {state.directSources.length > 1 ? (
-                            <div className="space-y-1">
-                                <p className="px-2 text-tiny font-semibold text-muted-foreground">
-                                    按承接来源
+                        {state.directSources.length > 0 ? (
+                            <div className="space-y-0.5">
+                                <p className="px-2 pb-0.5 text-tiny font-semibold text-muted-foreground">
+                                    供应商直发来源
                                 </p>
                                 {state.directSources.map((src) => {
                                     const active =
                                         activeSourceFilter === src.rowKey
+                                    const accent = sourceAccentForIndex(
+                                        src.sourceNumber - 1,
+                                    )
                                     return (
                                         <button
                                             key={src.rowKey}
@@ -637,12 +843,21 @@ export function SourcingAddressEditor({
                                             )}
                                         >
                                             <span
-                                                className="truncate font-medium text-foreground"
+                                                className="flex items-center gap-1.5 truncate font-medium text-foreground"
                                                 title={src.shortLabel}
                                             >
-                                                {src.shortLabel}
+                                                <span
+                                                    aria-hidden="true"
+                                                    className={cn(
+                                                        "size-2 shrink-0 rounded-full",
+                                                        accent.barClass,
+                                                    )}
+                                                />
+                                                <span className="truncate">
+                                                    {src.shortLabel}
+                                                </span>
                                             </span>
-                                            <span className="num text-tiny text-muted-foreground">
+                                            <span className="num pl-3.5 text-tiny text-muted-foreground">
                                                 {src.assignedAddressCount} 处 ·{" "}
                                                 {src.assignedTotalQty}{" "}
                                                 {product.unit}
@@ -653,9 +868,55 @@ export function SourcingAddressEditor({
                             </div>
                         ) : null}
 
-                        {state.regionFacets.level !== "none" ? (
+                        {state.nonDirectSources.length > 0 ? (
                             <div className="space-y-1">
-                                <div className="flex items-center justify-between px-2">
+                                <p className="px-2 text-tiny font-semibold text-muted-foreground">
+                                    仓库 / 库存统筹
+                                </p>
+                                <div className="space-y-1">
+                                    {state.nonDirectSources.map((src) => {
+                                        const accent = sourceAccentForIndex(
+                                            src.sourceNumber - 1,
+                                        )
+                                        return (
+                                            <div
+                                                key={src.rowKey}
+                                                className={cn(
+                                                    "rounded-md border border-border/60 bg-card/70 px-2 py-1.5 text-xs",
+                                                    !src.selected &&
+                                                        "border-dashed opacity-65",
+                                                )}
+                                            >
+                                                <div className="flex items-center gap-1.5">
+                                                    <span
+                                                        aria-hidden="true"
+                                                        className={cn(
+                                                            "size-2 shrink-0 rounded-full",
+                                                            accent.barClass,
+                                                        )}
+                                                    />
+                                                    <span
+                                                        className="truncate font-medium text-foreground"
+                                                        title={src.shortLabel}
+                                                    >
+                                                        源{src.sourceNumber} ·{" "}
+                                                        {src.routeLabel}
+                                                    </span>
+                                                </div>
+                                                <p className="num mt-0.5 pl-3.5 text-tiny text-muted-foreground">
+                                                    承担 {src.quantity}{" "}
+                                                    {product.unit}（出库选址）
+                                                </p>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {state.regionFacets.level !== "none" ? (
+                            <div className="space-y-0.5">
+                                <div className="flex items-center justify-between px-2 pb-0.5">
                                     <p className="text-tiny font-semibold text-muted-foreground">
                                         {state.regionFacets.level === "province"
                                             ? "按省 / 直辖市"
@@ -740,9 +1001,9 @@ export function SourcingAddressEditor({
                 {/* 右侧地址工作表：固定工具栏 + 批量条 + 固定表头 + 独立滚动表身 + 固定分页 */}
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                     {/* 固定工具栏 */}
-                    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-card px-4 py-2.5 sm:px-5">
+                    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-card px-4 py-2 sm:px-5">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
-                            <div className="relative w-52 sm:w-60">
+                            <div className="relative w-52 sm:w-56">
                                 <SearchIcon
                                     aria-hidden="true"
                                     className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
@@ -790,11 +1051,11 @@ export function SourcingAddressEditor({
                                             ],
                                             [
                                                 "assigned",
-                                                `已分配 ${state.counts.assigned}`,
+                                                `已分直发 ${state.counts.assigned}`,
                                             ],
                                             [
                                                 "unassigned",
-                                                `待分配 ${state.counts.unassigned}`,
+                                                `${unassignedLabel} ${state.counts.unassigned}`,
                                             ],
                                             ...(state.counts.issues > 0
                                                 ? ([
@@ -876,9 +1137,9 @@ export function SourcingAddressEditor({
                                             className="gap-1 pr-1"
                                         >
                                             {statusFilter === "assigned"
-                                                ? "仅看已分配"
+                                                ? "仅看已分直发"
                                                 : statusFilter === "unassigned"
-                                                  ? "仅看待分配"
+                                                  ? `仅看${unassignedLabel}`
                                                   : "仅看配送异常"}
                                             <button
                                                 id={`${idPrefix}-chip-clear-status`}
@@ -898,7 +1159,7 @@ export function SourcingAddressEditor({
                             )}
                         </div>
 
-                        {/* 右侧批量提效工具：按数量自动凑单 / 一键全分 / 清空 / 拆给新来源 */}
+                        {/* 右侧批量提效工具 */}
                         <div className="flex flex-wrap items-center gap-1.5">
                             {state.directSources.length > 0 ? (
                                 <Popover
@@ -940,14 +1201,14 @@ export function SourcingAddressEditor({
                                                 按目标数量自动凑单分配
                                             </p>
                                             <p className="text-xs text-muted-foreground">
-                                                适合大量同城地址按库存或起订量快速拆单，自动跳过不可配送地址。
+                                                按目标量快速挑选可配送地址，自动跳过不可配送地区。
                                             </p>
                                         </div>
 
                                         {state.directSources.length > 1 ? (
                                             <div className="space-y-1">
                                                 <p className="text-xs font-medium text-foreground/75">
-                                                    目标供货来源
+                                                    目标直发来源
                                                 </p>
                                                 <Select
                                                     value={resolvedQuotaTarget}
@@ -967,7 +1228,7 @@ export function SourcingAddressEditor({
                                                     <SelectTrigger
                                                         id={`${idPrefix}-quota-source`}
                                                         size="sm"
-                                                        aria-label="目标供货来源"
+                                                        aria-label="目标直发来源"
                                                         className="w-full"
                                                     >
                                                         <SelectValue />
@@ -1039,6 +1300,25 @@ export function SourcingAddressEditor({
                                                 />
                                                 优先分配包邮 / 免运费地址
                                             </label>
+                                            {state.directSources.length > 1 ? (
+                                                <label
+                                                    htmlFor={`${idPrefix}-quota-allow-reallocate`}
+                                                    className="flex cursor-pointer items-center gap-2 text-xs text-foreground"
+                                                >
+                                                    <Checkbox
+                                                        id={`${idPrefix}-quota-allow-reallocate`}
+                                                        checked={
+                                                            quotaAllowReallocate
+                                                        }
+                                                        onCheckedChange={(c) =>
+                                                            setQuotaAllowReallocate(
+                                                                c === true,
+                                                            )
+                                                        }
+                                                    />
+                                                    未分配不足时从其他直发源调拨
+                                                </label>
+                                            ) : null}
                                             {hasActiveFilters ? (
                                                 <label
                                                     htmlFor={`${idPrefix}-quota-scope-filtered`}
@@ -1121,11 +1401,7 @@ export function SourcingAddressEditor({
                                                 id={`${idPrefix}-quota-apply`}
                                                 type="button"
                                                 size="xs"
-                                                disabled={
-                                                    !quotaPreview?.valid ||
-                                                    quotaPreview.allocatedAddressCount ===
-                                                        0
-                                                }
+                                                disabled={!quotaPreview?.valid}
                                                 onClick={() => {
                                                     if (!quotaPreview?.valid)
                                                         return
@@ -1193,13 +1469,14 @@ export function SourcingAddressEditor({
                                         <EraserIcon aria-hidden="true" />
                                         {hasActiveFilters
                                             ? "清空筛选"
-                                            : "清空分配"}
+                                            : "清空直发"}
                                     </Button>
                                 </>
                             ) : null}
 
                             {canSplitNewSource &&
                             onSplitResidual &&
+                            hasDirectShortfall &&
                             state.counts.unassigned > 0 ? (
                                 <Button
                                     id={`${idPrefix}-split-residual`}
@@ -1209,19 +1486,18 @@ export function SourcingAddressEditor({
                                     onClick={() => {
                                         onSplitResidual()
                                         setActionFeedback(
-                                            `已将未分配地址拆给新来源。`,
+                                            `已将未分配余量拆给新来源。`,
                                         )
                                     }}
                                 >
                                     <SplitIcon aria-hidden="true" />
-                                    未分配 {state.counts.unassigned}{" "}
-                                    处拆给新来源
+                                    未分余量拆给新来源
                                 </Button>
                             ) : null}
                         </div>
                     </div>
 
-                    {/* 勾选后的批量操作条：支持跨页全选 + 一步改派给任意来源 / 拆新来源 */}
+                    {/* 勾选后的批量操作条：支持直发改派 + 跨模式转交仓库/库存 + 拆新来源 */}
                     {effectiveSelectedKeys.size > 0 ? (
                         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-primary/25 bg-primary/5 px-4 py-2 text-xs sm:px-5">
                             <div className="flex flex-wrap items-center gap-2">
@@ -1275,7 +1551,7 @@ export function SourcingAddressEditor({
                                             )
                                         }
                                     >
-                                        全部分配给 {defaultSource.supplierName}
+                                        分配给 {defaultSource.shortLabel}
                                     </Button>
                                 ) : state.directSources.length > 1 ? (
                                     <DropdownMenu>
@@ -1289,7 +1565,7 @@ export function SourcingAddressEditor({
                                                 />
                                             }
                                         >
-                                            批量改派给
+                                            改派给直发来源
                                             <ChevronDownIcon aria-hidden="true" />
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent
@@ -1313,6 +1589,83 @@ export function SourcingAddressEditor({
                                                     </span>
                                                 </DropdownMenuItem>
                                             ))}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                ) : null}
+
+                                {/* 混合履约：将选中地址释放直发并把对应数量划入仓库/库存来源 */}
+                                {state.nonDirectSources.length === 1 &&
+                                primaryNonDirectSource ? (
+                                    <Button
+                                        id={`${idPrefix}-bulk-transfer-warehouse`}
+                                        type="button"
+                                        size="xs"
+                                        variant="outline"
+                                        className="bg-card"
+                                        onClick={() =>
+                                            handleBatchTransferToNonDirect(
+                                                primaryNonDirectSource.rowKey,
+                                                effectiveSelectedKeys,
+                                            )
+                                        }
+                                    >
+                                        <ArrowRightLeftIcon aria-hidden="true" />
+                                        转入 源
+                                        {primaryNonDirectSource.sourceNumber}·
+                                        {primaryNonDirectSource.routeLabel}
+                                    </Button>
+                                ) : state.nonDirectSources.length > 1 ? (
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger
+                                            render={
+                                                <Button
+                                                    id={`${idPrefix}-bulk-transfer-trigger`}
+                                                    type="button"
+                                                    size="xs"
+                                                    variant="outline"
+                                                    className="bg-card"
+                                                />
+                                            }
+                                        >
+                                            <ArrowRightLeftIcon aria-hidden="true" />
+                                            转入仓库 / 库存
+                                            <ChevronDownIcon aria-hidden="true" />
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent
+                                            align="end"
+                                            className="w-64"
+                                        >
+                                            {state.nonDirectSources.map(
+                                                (src) => (
+                                                    <DropdownMenuItem
+                                                        key={src.rowKey}
+                                                        id={`${idPrefix}-bulk-transfer-${toAutomationIdSegment(src.rowKey)}`}
+                                                        onClick={() =>
+                                                            handleBatchTransferToNonDirect(
+                                                                src.rowKey,
+                                                                effectiveSelectedKeys,
+                                                            )
+                                                        }
+                                                    >
+                                                        <span className="flex min-w-0 items-center gap-1.5">
+                                                            {src.isStock ? (
+                                                                <PackageCheckIcon
+                                                                    aria-hidden="true"
+                                                                    className="size-3.5 shrink-0 text-teal-soft-foreground"
+                                                                />
+                                                            ) : (
+                                                                <WarehouseIcon
+                                                                    aria-hidden="true"
+                                                                    className="size-3.5 shrink-0 text-orange-soft-foreground"
+                                                                />
+                                                            )}
+                                                            <span className="truncate">
+                                                                {src.shortLabel}
+                                                            </span>
+                                                        </span>
+                                                    </DropdownMenuItem>
+                                                ),
+                                            )}
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 ) : null}
@@ -1350,7 +1703,7 @@ export function SourcingAddressEditor({
                                         handleBatchClear(effectiveSelectedKeys)
                                     }
                                 >
-                                    取消分配
+                                    仅取消直发
                                 </Button>
                             </div>
                         </div>
@@ -1372,8 +1725,8 @@ export function SourcingAddressEditor({
                         </div>
                     ) : null}
 
-                    {/* 固定表头（真正占用第 1 列格子的全选复选框，彻底修复原 sr-only 错位 bug） */}
-                    <div className="grid shrink-0 grid-cols-[1.75rem_minmax(0,1fr)_5.5rem_10.5rem_8.5rem] items-center gap-3 border-b border-border/70 bg-table-header px-4 py-2 text-xs font-medium text-muted-foreground sm:px-5">
+                    {/* 固定表头 */}
+                    <div className="grid shrink-0 grid-cols-[1.75rem_minmax(0,1fr)_5.25rem_12.5rem_8.5rem] items-center gap-3 border-b border-border/70 bg-table-header px-4 py-1.5 text-xs font-medium text-muted-foreground sm:px-5">
                         <div className="flex items-center justify-center">
                             <NativeCheckbox
                                 id={`${idPrefix}-select-page`}
@@ -1388,14 +1741,14 @@ export function SourcingAddressEditor({
                         </div>
                         <span>收件人 / 交付地址</span>
                         <span>配送状态</span>
-                        <span>承接来源</span>
-                        <span className="text-right">分配 / 需求</span>
+                        <span>承接去向</span>
+                        <span className="text-right">直发量 / 需求</span>
                     </div>
 
                     {/* 独立滚动表身 */}
                     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                         {pageEntries.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center text-xs text-muted-foreground">
+                            <div className="flex flex-col items-center justify-center gap-2 px-6 py-10 text-center text-xs text-muted-foreground">
                                 <p>当前筛选条件下没有交付地址</p>
                                 {hasActiveFilters ? (
                                     <Button
@@ -1425,6 +1778,14 @@ export function SourcingAddressEditor({
                                         unit={product.unit}
                                         quantityScale={product.quantityScale}
                                         directSources={state.directSources}
+                                        nonDirectSources={
+                                            state.nonDirectSources
+                                        }
+                                        hasNonDirectSources={
+                                            state.hasNonDirectSources
+                                        }
+                                        hasDirectShortfall={hasDirectShortfall}
+                                        directBalanced={state.directBalanced}
                                         primarySource={defaultSource}
                                         checked={effectiveSelectedKeys.has(
                                             entry.key,
@@ -1444,6 +1805,21 @@ export function SourcingAddressEditor({
                                                         form.state.values.lines,
                                                         keySet,
                                                     ),
+                                                )
+                                                return
+                                            }
+                                            if (
+                                                targetRowKey.startsWith(
+                                                    TRANSFER_VALUE_PREFIX,
+                                                )
+                                            ) {
+                                                const nonDirectKey =
+                                                    targetRowKey.slice(
+                                                        TRANSFER_VALUE_PREFIX.length,
+                                                    )
+                                                handleBatchTransferToNonDirect(
+                                                    nonDirectKey,
+                                                    keySet,
                                                 )
                                                 return
                                             }
@@ -1492,7 +1868,7 @@ export function SourcingAddressEditor({
                     </div>
 
                     {/* 固定分页与汇总底栏 */}
-                    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/70 bg-surface-sunken px-4 py-2 text-xs text-muted-foreground sm:px-5">
+                    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/70 bg-surface-sunken px-4 py-1.5 text-xs text-muted-foreground sm:px-5">
                         <div className="flex flex-wrap items-center gap-3">
                             <span className="num">
                                 {filteredEntries.length === 0
@@ -1515,6 +1891,13 @@ export function SourcingAddressEditor({
                                     unit={product.unit}
                                     className="font-semibold text-foreground"
                                 />
+                                {state.hasNonDirectSources ? (
+                                    <span className="num text-muted-foreground">
+                                        {" "}
+                                        / 额度 {state.directTargetQty}{" "}
+                                        {product.unit}
+                                    </span>
+                                ) : null}
                             </span>
                         </div>
 
@@ -1623,6 +2006,10 @@ function GlobalAddressRow({
     unit,
     quantityScale,
     directSources,
+    nonDirectSources,
+    hasNonDirectSources,
+    hasDirectShortfall,
+    directBalanced,
     primarySource,
     checked,
     onToggleChecked,
@@ -1635,6 +2022,10 @@ function GlobalAddressRow({
     unit: string
     quantityScale?: number | null
     directSources: readonly DirectSourceInfo[]
+    nonDirectSources: readonly NonDirectSourceInfo[]
+    hasNonDirectSources: boolean
+    hasDirectShortfall: boolean
+    directBalanced: boolean
     primarySource?: DirectSourceInfo
     checked: boolean
     onToggleChecked: (checked: boolean) => void
@@ -1712,6 +2103,17 @@ function GlobalAddressRow({
         }
     }
 
+    const useRichSelect =
+        directSources.length > 1 || nonDirectSources.length > 0
+    const canTransferRowToNonDirect =
+        nonDirectSources.length > 0 &&
+        (Boolean(singleSlice?.positive) || hasDirectShortfall)
+    const unassignedDisplayLabel = hasNonDirectSources
+        ? directBalanced
+            ? "仓库 / 库存统筹"
+            : "暂不直发（留给仓库）"
+        : "未分配"
+
     return (
         <div
             className={cn(
@@ -1723,7 +2125,7 @@ function GlobalAddressRow({
                     "bg-surface-sunken/35",
             )}
         >
-            <div className="grid grid-cols-[1.75rem_minmax(0,1fr)_5.5rem_10.5rem_8.5rem] items-center gap-3 px-4 py-2 sm:px-5">
+            <div className="grid grid-cols-[1.75rem_minmax(0,1fr)_5.25rem_12.5rem_8.5rem] items-center gap-3 px-4 py-1.5 sm:px-5">
                 <div className="flex items-center justify-center">
                     <NativeCheckbox
                         id={`${rowId}-select`}
@@ -1754,13 +2156,13 @@ function GlobalAddressRow({
                 {/* 配送状态 */}
                 <div>{termBadge}</div>
 
-                {/* 承接来源（单源一键开关 / 多源直接下拉改派 / 多源拆分徽章） */}
+                {/* 承接去向（支持单源一键开关 / 多源直发改派 / 跨模式转交仓库或库存） */}
                 <div className="min-w-0">
                     {isSplitMulti ? (
                         <Badge variant="secondary" className="h-5 px-2 text-xs">
                             已拆 {entry.slices.length} 源
                         </Badge>
-                    ) : directSources.length === 1 && primarySource ? (
+                    ) : !useRichSelect && primarySource ? (
                         !entry.deliverableByPrimary &&
                         !singleSlice?.positive ? (
                             <span className="text-xs text-muted-foreground">
@@ -1805,11 +2207,20 @@ function GlobalAddressRow({
                         <Select
                             value={singleSlice?.rowKey ?? "__unassigned__"}
                             items={[
-                                { value: "__unassigned__", label: "未分配" },
+                                {
+                                    value: "__unassigned__",
+                                    label: unassignedDisplayLabel,
+                                },
                                 ...directSources.map((src) => ({
                                     value: src.rowKey,
                                     label: src.shortLabel,
                                 })),
+                                ...(canTransferRowToNonDirect
+                                    ? nonDirectSources.map((src) => ({
+                                          value: `${TRANSFER_VALUE_PREFIX}${src.rowKey}`,
+                                          label: `转入 源${src.sourceNumber}·${src.routeLabel}（+${entry.demandQty}）`,
+                                      }))
+                                    : []),
                             ]}
                             onValueChange={(next) =>
                                 onAssignExclusive(
@@ -1822,17 +2233,19 @@ function GlobalAddressRow({
                             <SelectTrigger
                                 id={`${rowId}-source`}
                                 size="sm"
-                                aria-label={`${entry.baseRow.recipient} 的承接来源`}
+                                aria-label={`${entry.baseRow.recipient} 的承接去向`}
                                 className="w-full bg-card text-xs"
                             >
                                 <SelectValue />
                             </SelectTrigger>
-                            <SelectContent align="start" className="min-w-48">
+                            <SelectContent align="start" className="min-w-56">
                                 <SelectItem
                                     idPrefix={`${rowId}-source`}
                                     value="__unassigned__"
                                 >
-                                    未分配
+                                    {hasNonDirectSources
+                                        ? "仅取消直发（留给仓库统筹）"
+                                        : "未分配"}
                                 </SelectItem>
                                 {directSources.map((src) => {
                                     const term =
@@ -1862,6 +2275,19 @@ function GlobalAddressRow({
                                         </SelectItem>
                                     )
                                 })}
+                                {canTransferRowToNonDirect
+                                    ? nonDirectSources.map((src) => (
+                                          <SelectItem
+                                              key={`${TRANSFER_VALUE_PREFIX}${src.rowKey}`}
+                                              idPrefix={`${rowId}-source`}
+                                              value={`${TRANSFER_VALUE_PREFIX}${src.rowKey}`}
+                                          >
+                                              转入 源{src.sourceNumber}·
+                                              {src.routeLabel}（仓量 +
+                                              {entry.demandQty} {unit}）
+                                          </SelectItem>
+                                      ))
+                                    : null}
                             </SelectContent>
                         </Select>
                     )}

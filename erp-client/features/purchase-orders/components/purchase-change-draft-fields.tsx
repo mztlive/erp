@@ -1,4 +1,5 @@
 "use client"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 
 import {
     blockedChangeOrderSections,
@@ -37,6 +38,10 @@ export function PurchaseChangeDraftFields({
     disabled: boolean
     occurredExpenseIds: ReadonlySet<string>
 }) {
+    const { names } = useProductUnitNames(
+        draft.lines.map((line) => line.sku_id),
+        draft.lines.length > 0,
+    )
     const paymentOptions = SUPPLIER_PAYMENT_TERM_OPTIONS.some(
         (option) => option.value === draft.payment_term_code,
     )
@@ -55,6 +60,7 @@ export function PurchaseChangeDraftFields({
     return (
         <div className="space-y-6">
             <PurchaseChangeLineItems
+                unitNames={names}
                 form={form}
                 id={id}
                 draft={draft}
@@ -63,6 +69,7 @@ export function PurchaseChangeDraftFields({
                 occurredExpenseIds={occurredExpenseIds}
             />
             <PurchaseChangeDeliverySection
+                unitNames={names}
                 form={form}
                 id={id}
                 options={options}

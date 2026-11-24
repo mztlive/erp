@@ -1,5 +1,7 @@
 "use client"
 
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
+
 import { useState } from "react"
 import { CircleAlertIcon, RefreshCwIcon } from "lucide-react"
 
@@ -63,6 +65,10 @@ export function SalesOrderLinesImportDialog({
     )
 
     const lines = query.data?.lines ?? []
+    const { nameForUnit } = useProductUnitNames(
+        lines.map((line) => line.skuId),
+        open && lines.length > 0,
+    )
     const selectableLines = lines.filter((line) => line.selectable)
     const selectedLines = selectableLines.filter(
         (line) => !deselectedIds.has(line.id),
@@ -288,6 +294,12 @@ export function SalesOrderLinesImportDialog({
                                     </TableHeader>
                                     <TableBody>
                                         {lines.map((line) => {
+                                            const unitName =
+                                                line.unitName ??
+                                                nameForUnit(
+                                                    line.unit,
+                                                    line.skuId,
+                                                )
                                             const checked =
                                                 line.selectable &&
                                                 !deselectedIds.has(line.id)
@@ -339,7 +351,7 @@ export function SalesOrderLinesImportDialog({
                                                     </TableCell>
                                                     <TableCell className="num text-right">
                                                         {line.quantity
-                                                            ? `${formatFixedDisplay(line.quantity, { maxScale: INVOICE_QUANTITY_SCALE })}${line.unit ? ` ${line.unit}` : ""}`
+                                                            ? `${formatFixedDisplay(line.quantity, { maxScale: INVOICE_QUANTITY_SCALE })}${unitName ? ` ${unitName}` : ""}`
                                                             : "—"}
                                                     </TableCell>
                                                     <TableCell className="num text-right">

@@ -136,7 +136,7 @@ export function SalesOrderPaperDocument({
                               cell: (row) => (
                                   <QuantityValue
                                       value={row.quantity}
-                                      unit={row.unit}
+                                      unit={row.unitName ?? ""}
                                   />
                               ),
                           },
@@ -200,7 +200,7 @@ export function SalesOrderPaperDocument({
                               cell: (row) => (
                                   <QuantityValue
                                       value={row.quantity}
-                                      unit={row.unit}
+                                      unit={row.unitName ?? ""}
                                   />
                               ),
                           },

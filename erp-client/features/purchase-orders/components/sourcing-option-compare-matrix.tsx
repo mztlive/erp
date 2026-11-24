@@ -6,6 +6,7 @@ import {
     CheckCircle2Icon,
     CircleIcon,
     PackageCheckIcon,
+    PlusCircleIcon,
     SparklesIcon,
     TriangleAlertIcon,
 } from "lucide-react"
@@ -23,18 +24,30 @@ import {
     sourcingRouteLabel,
 } from "../lib/sourcing/delivery-terms"
 import { comparePurchaseCostToSalesPrice } from "../lib/sourcing/pricing"
+import {
+    sourceRouteBadgeVariant,
+    sourceRouteCategory,
+} from "../lib/sourcing/source-palette"
 import type {
     SourcingProductLine,
     SourcingSalesOrder,
     SourcingSupplierOption,
 } from "../lib/sourcing/types"
 
-type FilterKind = "all" | "deliverable" | "inquiry" | "stock"
+type FilterKind =
+    | "all"
+    | "stock"
+    | "warehouse"
+    | "direct_dropship"
+    | "direct_bulk"
+    | "deliverable"
+    | "inquiry"
 type SortKind = "default" | "price" | "delivery"
 
 /**
- * 可视化比价选源矩阵：并排展示所有合格供给的价格、毛利/倒挂、税率、账期、配送判定与交期，
- * 点击任意可用行即可选中，彻底取代盲选下拉框。
+ * 可视化比价选源矩阵：支持「替换当前来源」与「添加新来源」两种模式，
+ * 按履约方式（现有库存 / 集采入仓 / 代发直发 / 集采直发）直观筛选，
+ * 并排展示价格、毛利/倒挂、税率、账期、配送覆盖与可供量。
  */
 export function SourcingOptionCompareMatrix({
     idPrefix,
@@ -43,15 +56,17 @@ export function SourcingOptionCompareMatrix({
     selectedBasisId,
     usedBasisIds,
     recommendedBasisId,
+    mode = "replace",
     onSelect,
 }: {
     idPrefix: string
     order: SourcingSalesOrder
     product: SourcingProductLine
     selectedBasisId: string
-    /** 同一商品其他拆分来源已占用的 basisId，防止重复选择同一履约方案。 */
+    /** 同一商品其他（或全部，在 add 模式下）拆分来源已占用的 basisId，防止重复选择同一履约方案。 */
     usedBasisIds: ReadonlySet<string>
     recommendedBasisId?: string
+    mode?: "replace" | "add"
     onSelect: (option: SourcingSupplierOption) => void
 }) {
     const [filter, setFilter] = useState<FilterKind>("all")
@@ -59,26 +74,52 @@ export function SourcingOptionCompareMatrix({
 
     const salesPrice = product.salesPrices?.unit_price_gross?.trim()
     const hasAddresses = product.deliveryAllocations.length > 0
-    const inquiryCount = product.options.filter((o) =>
-        Boolean(o.inquirySource),
-    ).length
-    const stockCount = product.options.filter(
-        (o) => o.sourceType === "EXISTING_STOCK",
-    ).length
-    const deliverableCount = hasAddresses
-        ? product.options.filter((o) => {
-              if (o.sourceType === "EXISTING_STOCK") return true
-              if (o.fulfillmentResponsibility !== "SUPPLIER_DIRECT") return true
-              const summary = deliverySummary(o, product)
-              return summary.startsWith("全部地址")
-          }).length
-        : 0
+
+    const counts = useMemo(() => {
+        let stock = 0
+        let warehouse = 0
+        let directDropship = 0
+        let directBulk = 0
+        let inquiry = 0
+        let deliverable = 0
+        for (const o of product.options) {
+            const cat = sourceRouteCategory(o)
+            if (cat === "stock") stock += 1
+            else if (cat === "warehouse") warehouse += 1
+            else if (cat === "direct_dropship") directDropship += 1
+            else if (cat === "direct_bulk") directBulk += 1
+            if (o.inquirySource) inquiry += 1
+            if (hasAddresses) {
+                if (
+                    o.sourceType === "EXISTING_STOCK" ||
+                    o.fulfillmentResponsibility !== "SUPPLIER_DIRECT" ||
+                    deliverySummary(o, product).startsWith("全部地址")
+                ) {
+                    deliverable += 1
+                }
+            }
+        }
+        return {
+            stock,
+            warehouse,
+            directDropship,
+            directBulk,
+            inquiry,
+            deliverable,
+        }
+    }, [hasAddresses, product])
 
     const visibleOptions = useMemo(() => {
         const filtered = product.options.filter((option) => {
             if (filter === "inquiry") return Boolean(option.inquirySource)
-            if (filter === "stock")
-                return option.sourceType === "EXISTING_STOCK"
+            if (
+                filter === "stock" ||
+                filter === "warehouse" ||
+                filter === "direct_dropship" ||
+                filter === "direct_bulk"
+            ) {
+                return sourceRouteCategory(option) === filter
+            }
             if (filter === "deliverable") {
                 if (option.sourceType === "EXISTING_STOCK") return true
                 if (option.fulfillmentResponsibility !== "SUPPLIER_DIRECT")
@@ -88,7 +129,18 @@ export function SourcingOptionCompareMatrix({
             return true
         })
 
-        if (sort === "default") return filtered
+        if (sort === "default") {
+            if (mode === "add") {
+                // 添加模式把尚未添加的可用方案排在前面
+                return [...filtered].sort((left, right) => {
+                    const leftUsed = usedBasisIds.has(left.basisId)
+                    const rightUsed = usedBasisIds.has(right.basisId)
+                    if (leftUsed !== rightUsed) return leftUsed ? 1 : -1
+                    return 0
+                })
+            }
+            return filtered
+        }
         return [...filtered].sort((left, right) => {
             if (sort === "price") {
                 if (left.sourceType !== right.sourceType) {
@@ -114,7 +166,7 @@ export function SourcingOptionCompareMatrix({
                     : right.expectedDeliveryDate || "9999-99-99"
             return leftDate.localeCompare(rightDate)
         })
-    }, [filter, product, sort])
+    }, [filter, mode, product, sort, usedBasisIds])
 
     if (product.options.length === 0) {
         return (
@@ -124,64 +176,78 @@ export function SourcingOptionCompareMatrix({
         )
     }
 
+    const filterButtons: Array<{ value: FilterKind; label: string }> = [
+        { value: "all", label: `全部 ${product.options.length}` },
+        ...(counts.stock > 0
+            ? [{ value: "stock" as const, label: `现有库存 ${counts.stock}` }]
+            : []),
+        ...(counts.warehouse > 0
+            ? [
+                  {
+                      value: "warehouse" as const,
+                      label: `集采入仓 ${counts.warehouse}`,
+                  },
+              ]
+            : []),
+        ...(counts.directDropship > 0
+            ? [
+                  {
+                      value: "direct_dropship" as const,
+                      label: `代发直发 ${counts.directDropship}`,
+                  },
+              ]
+            : []),
+        ...(counts.directBulk > 0
+            ? [
+                  {
+                      value: "direct_bulk" as const,
+                      label: `集采直发 ${counts.directBulk}`,
+                  },
+              ]
+            : []),
+        ...(hasAddresses &&
+        counts.deliverable > 0 &&
+        counts.deliverable < product.options.length
+            ? [
+                  {
+                      value: "deliverable" as const,
+                      label: `全地址可配 ${counts.deliverable}`,
+                  },
+              ]
+            : []),
+        ...(counts.inquiry > 0 && counts.inquiry < product.options.length
+            ? [
+                  {
+                      value: "inquiry" as const,
+                      label: `询价报价 ${counts.inquiry}`,
+                  },
+              ]
+            : []),
+    ]
+
     return (
         <div className="overflow-hidden rounded-lg border border-border/80 bg-card">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-surface-sunken px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-surface-sunken px-3 py-1.5">
                 <div
                     role="group"
                     aria-label="筛选候选供给方案"
                     className="flex flex-wrap items-center gap-1"
                 >
-                    <Button
-                        id={`${idPrefix}-compare-filter-all`}
-                        type="button"
-                        size="xs"
-                        variant={filter === "all" ? "secondary" : "ghost"}
-                        aria-pressed={filter === "all"}
-                        onClick={() => setFilter("all")}
-                    >
-                        全部 {product.options.length}
-                    </Button>
-                    {hasAddresses && deliverableCount > 0 ? (
+                    {filterButtons.map((btn) => (
                         <Button
-                            id={`${idPrefix}-compare-filter-deliverable`}
+                            key={btn.value}
+                            id={`${idPrefix}-compare-filter-${btn.value}`}
                             type="button"
                             size="xs"
                             variant={
-                                filter === "deliverable" ? "secondary" : "ghost"
+                                filter === btn.value ? "secondary" : "ghost"
                             }
-                            aria-pressed={filter === "deliverable"}
-                            onClick={() => setFilter("deliverable")}
+                            aria-pressed={filter === btn.value}
+                            onClick={() => setFilter(btn.value)}
                         >
-                            全地址可配 {deliverableCount}
+                            {btn.label}
                         </Button>
-                    ) : null}
-                    {inquiryCount > 0 ? (
-                        <Button
-                            id={`${idPrefix}-compare-filter-inquiry`}
-                            type="button"
-                            size="xs"
-                            variant={
-                                filter === "inquiry" ? "secondary" : "ghost"
-                            }
-                            aria-pressed={filter === "inquiry"}
-                            onClick={() => setFilter("inquiry")}
-                        >
-                            询价报价 {inquiryCount}
-                        </Button>
-                    ) : null}
-                    {stockCount > 0 ? (
-                        <Button
-                            id={`${idPrefix}-compare-filter-stock`}
-                            type="button"
-                            size="xs"
-                            variant={filter === "stock" ? "secondary" : "ghost"}
-                            aria-pressed={filter === "stock"}
-                            onClick={() => setFilter("stock")}
-                        >
-                            现有库存 {stockCount}
-                        </Button>
-                    ) : null}
+                    ))}
                 </div>
 
                 <div className="flex items-center gap-1">
@@ -211,7 +277,7 @@ export function SourcingOptionCompareMatrix({
                 </div>
             </div>
 
-            <div className="max-h-72 overflow-y-auto overscroll-contain">
+            <div className="max-h-64 overflow-y-auto overscroll-contain">
                 <div className="hidden grid-cols-[1.5rem_minmax(0,1.6fr)_6rem_8.5rem_6.5rem_minmax(0,1.2fr)_5.5rem_5.5rem] items-center gap-2 border-b border-border/60 bg-table-header px-3 py-1.5 text-xs font-medium text-muted-foreground @min-[700px]/sourcing:grid">
                     <span className="sr-only">选择</span>
                     <span>供给方 / 仓库</span>
@@ -231,6 +297,7 @@ export function SourcingOptionCompareMatrix({
                     <ul className="divide-y divide-grid">
                         {visibleOptions.map((option) => {
                             const isSelected =
+                                mode === "replace" &&
                                 option.basisId === selectedBasisId
                             const isStock =
                                 option.sourceType === "EXISTING_STOCK"
@@ -249,6 +316,7 @@ export function SourcingOptionCompareMatrix({
                                 ? option.warehouseName || option.supplierName
                                 : option.supplierName
                             const route = sourcingRouteLabel(option)
+                            const routeVariant = sourceRouteBadgeVariant(option)
                             const deliveryText = deliverySummary(
                                 option,
                                 product,
@@ -291,7 +359,7 @@ export function SourcingOptionCompareMatrix({
                                         aria-pressed={isSelected}
                                         onClick={() => onSelect(option)}
                                         className={cn(
-                                            "grid w-full cursor-pointer grid-cols-1 items-center gap-x-2 gap-y-1.5 px-3 py-2.5 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring @min-[700px]/sourcing:grid-cols-[1.5rem_minmax(0,1.6fr)_6rem_8.5rem_6.5rem_minmax(0,1.2fr)_5.5rem_5.5rem]",
+                                            "grid w-full cursor-pointer grid-cols-1 items-center gap-x-2 gap-y-1.5 px-3 py-2 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring @min-[700px]/sourcing:grid-cols-[1.5rem_minmax(0,1.6fr)_6rem_8.5rem_6.5rem_minmax(0,1.2fr)_5.5rem_5.5rem]",
                                             isSelected
                                                 ? "bg-sidebar-accent/70"
                                                 : "hover:bg-row-hover",
@@ -302,6 +370,11 @@ export function SourcingOptionCompareMatrix({
                                         <span className="hidden items-center justify-center @min-[700px]/sourcing:flex">
                                             {isSelected ? (
                                                 <CheckCircle2Icon
+                                                    aria-hidden="true"
+                                                    className="size-4 text-primary"
+                                                />
+                                            ) : mode === "add" && !disabled ? (
+                                                <PlusCircleIcon
                                                     aria-hidden="true"
                                                     className="size-4 text-primary"
                                                 />
@@ -340,7 +413,9 @@ export function SourcingOptionCompareMatrix({
                                                         variant="neutral"
                                                         className="h-4.5 px-1.5 text-tiny"
                                                     >
-                                                        他源已用
+                                                        {mode === "add"
+                                                            ? "已添加"
+                                                            : "他源已用"}
                                                     </Badge>
                                                 ) : null}
                                             </div>
@@ -362,9 +437,7 @@ export function SourcingOptionCompareMatrix({
 
                                         <div>
                                             <Badge
-                                                variant={
-                                                    isStock ? "info" : "neutral"
-                                                }
+                                                variant={routeVariant}
                                                 className="h-5 px-1.5"
                                             >
                                                 {isStock ? (
@@ -441,7 +514,7 @@ export function SourcingOptionCompareMatrix({
                                             ) : option.fulfillmentResponsibility ===
                                               "WAREHOUSE" ? (
                                                 <span className="text-muted-foreground">
-                                                    采购入仓（需指定目标仓）
+                                                    采购入仓（需选目标仓）
                                                 </span>
                                             ) : (
                                                 <div className="space-y-0.5">

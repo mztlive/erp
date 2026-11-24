@@ -89,7 +89,7 @@ export function AcceptanceRegisterBatchRow({
                     ) : null}
                 </div>
                 <p className="text-xs font-medium">
-                    待验 {qtyWithUnit(fact.eligibleQuantity, fact.unitCode)}
+                    待验 {qtyWithUnit(fact.eligibleQuantity, fact.unitName)}
                 </p>
             </div>
 
@@ -258,10 +258,10 @@ export function AcceptanceRegisterBatchRow({
             ) : null}
             {draft ? (
                 <p className="mt-3 text-xs font-medium" role="status">
-                    本次验收 {qtyWithUnit(draft.qty, fact.unitCode)} · 通过{" "}
-                    {qtyWithUnit(passed, fact.unitCode)}
+                    本次验收 {qtyWithUnit(draft.qty, fact.unitName)} · 通过{" "}
+                    {qtyWithUnit(passed, fact.unitName)}
                     {result !== "PASS"
-                        ? ` · ${RESULT_COPY[result].quantityLabel} ${qtyWithUnit(draft.exceptionQty, fact.unitCode)}`
+                        ? ` · ${RESULT_COPY[result].quantityLabel} ${qtyWithUnit(draft.exceptionQty, fact.unitName)}`
                         : ""}
                 </p>
             ) : null}

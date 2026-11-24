@@ -96,10 +96,16 @@ export const displayActorName = displayReadableName
 export function approvalSalesUnit(
     line: ApprovalSalesSubmission["lines"][number],
     isCard: boolean,
+    names: ReadonlyMap<string, string>,
 ): string | undefined {
+    const snapshot = displayReadableName(line.unit_snapshot)
+    const code = line.base_unit_code?.trim()
     return (
-        displayReadableName(line.unit_name ?? line.unit_snapshot) ||
-        (isCard ? "张" : undefined)
+        displayReadableName(line.unit_name) ||
+        (isCard
+            ? "张"
+            : (names.get(snapshot ?? code ?? "") ??
+              (snapshot !== code && code ? snapshot : undefined)))
     )
 }
 

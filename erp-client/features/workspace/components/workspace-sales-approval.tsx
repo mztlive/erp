@@ -1,4 +1,5 @@
 "use client"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 
 import { useState } from "react"
 import {
@@ -134,6 +135,10 @@ export function WorkspaceSalesApproval({
     const prefix = `workspace-sales-approval-${toAutomationIdSegment(instanceId)}`
     const risk = assessSalesApprovalRisk(submission)
     const isCard = submission?.business_type === "VOUCHER"
+    const { names } = useProductUnitNames(
+        submission?.lines.map((line) => line.sku_id),
+        Boolean(!isCard && submission?.lines.length),
+    )
 
     return (
         <>
@@ -235,6 +240,11 @@ export function WorkspaceSalesApproval({
                                                 key={line.id}
                                                 line={line}
                                                 isCard={isCard}
+                                                unit={approvalSalesUnit(
+                                                    line,
+                                                    isCard,
+                                                    names,
+                                                )}
                                                 idPrefix={`${prefix}-line-${toAutomationIdSegment(line.id)}`}
                                             />
                                         ))}
@@ -287,17 +297,18 @@ const ALLOCATION_PAGE_SIZE = 20
 
 function SalesLine({
     line,
+    unit,
     isCard,
     idPrefix,
 }: {
     line: SalesApprovalLine
+    unit?: string
     isCard: boolean
     idPrefix: string
 }) {
     const [allocationsOpen, setAllocationsOpen] = useState(false)
     const [allocationPage, setAllocationPage] = useState(0)
 
-    const unit = approvalSalesUnit(line, isCard)
     const spec = displayBusinessText(line.spec_snapshot, line.sku_id)
     const quantity =
         line.quantity ??

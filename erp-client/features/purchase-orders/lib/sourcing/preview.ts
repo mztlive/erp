@@ -82,7 +82,7 @@ function purchasePreviewLine(
         deliveryAllocations: sourcingDeliveryAllocations(product, input),
         itemName: product.itemName,
         itemSku: product.itemSku,
-        unit: product.unit,
+        unit: product.unitName ?? "",
         quantity: input.quantity.trim(),
         unitCostGross: option.unitCostGross,
         inputTaxRate: option.inputTaxRate,
@@ -149,7 +149,7 @@ export function buildStockAllocationPreviews(
                 warehouseName:
                     option.warehouseName ?? option.supplierName ?? "公司仓库",
                 quantity: input.quantity.trim(),
-                unit: product.unit,
+                unit: product.unitName ?? "",
             },
         ]
     })

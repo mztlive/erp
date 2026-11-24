@@ -1,3 +1,4 @@
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
 import {
     DetailWorkspaceSection,
@@ -18,6 +19,7 @@ export function CopyPurchaseLines({
 }: {
     lines: ApprovalPurchaseLine[]
 }) {
+    const { names } = useProductUnitNames([], lines.length > 0)
     if (!lines.length) return null
     return (
         <DetailWorkspaceSection title="本次采购提交明细">
@@ -48,7 +50,9 @@ export function CopyPurchaseLines({
                                     {line.specification || "—"}
                                 </TableCell>
                                 <TableCell className="num" data-align="end">
-                                    {line.quantity ?? "—"} {line.unit}
+                                    {line.quantity ?? "—"}{" "}
+                                    {line.unitName ??
+                                        names.get(line.unit?.trim() ?? "")}
                                 </TableCell>
                                 <TableCell className="num" data-align="end">
                                     {line.unit_cost_gross ?? "—"}

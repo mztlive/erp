@@ -99,15 +99,16 @@ export function PurchaseLineSupplement({
                                         本次采购超过来源行全部销售需求{" "}
                                         <QuantityValue
                                             value={comparison.quantityExcess}
-                                            unit={line.unit ?? ""}
+                                            unit={line.unitName}
                                         />
                                         ，请核对超量采购依据。
                                     </>
                                 ) : warning === "单位需核对" ? (
                                     <>
                                         销售单位为“
-                                        {line.source?.unit || "未记录"}
-                                        ”，采购单位为“{line.unit || "未记录"}
+                                        {line.source?.unitName || "未记录"}
+                                        ”，采购单位为“
+                                        {line.unitName || "未记录"}
                                         ”；单位不一致，暂不计算单价和数量差额。
                                     </>
                                 ) : warning.startsWith("交期晚 ") ? (
@@ -218,7 +219,7 @@ export function PurchaseLineSupplement({
                                     分配数量{" "}
                                     <QuantityValue
                                         value={delivery.quantity}
-                                        unit={line.unit ?? ""}
+                                        unit={line.unitName}
                                     />
                                 </p>
                             </li>

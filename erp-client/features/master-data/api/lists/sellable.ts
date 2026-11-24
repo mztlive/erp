@@ -2,8 +2,7 @@
 
 import type { SellableSkuDto } from "@/features/master-data/api/contracts"
 import { mapSkuAsSellable } from "@/features/master-data/api/list-mappers"
-import { apiGet } from "@/lib/api"
-import type { Page } from "@/lib/api/paging"
+import { fetchSellableSkuPage } from "@/lib/api/sellable-skus"
 import type {
     MasterDataListItem,
     MasterDataListQuery,
@@ -60,7 +59,7 @@ export async function listSellableItemsPage(
         maxSupplierCount?: number
     },
 ): Promise<{ rows: MasterDataListItem[]; total: number }> {
-    const page = await apiGet<Page<SellableSkuDto>>("/admin/sellable-skus", {
+    const page = await fetchSellableSkuPage({
         ...sellableListParams(query),
         page: query.page,
         page_size: query.pageSize,

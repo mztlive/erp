@@ -1,4 +1,5 @@
 "use client"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 
 import { useState } from "react"
 import { BusinessFailureState, BusinessEmptyState } from "@/components/business"
@@ -11,11 +12,14 @@ import { offeringTime, offeringValidity } from "../lib/detail"
 
 export function OfferingHistory({
     offeringId,
+    skuId,
     canViewCosts,
 }: {
     offeringId: string
+    skuId: string
     canViewCosts: boolean
 }) {
+    const { namesBySkuId } = useProductUnitNames([skuId])
     const query = useOfferingHistoryQuery(offeringId)
     const [selectedId, setSelectedId] = useState<string | null>(null)
     const revisions = query.data?.pages.flatMap((page) => page.items) ?? []
@@ -105,7 +109,11 @@ export function OfferingHistory({
                         {offeringValidity(selected)}
                     </p>
                 </div>
-                <OfferingTerms terms={selected} canViewCosts={canViewCosts} />
+                <OfferingTerms
+                    terms={selected}
+                    canViewCosts={canViewCosts}
+                    unitName={namesBySkuId.get(skuId)}
+                />
             </section>
         </div>
     )

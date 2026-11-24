@@ -204,7 +204,7 @@ export function FulfillmentDraftReadOnly({
                                 待处理{" "}
                                 <QuantityValue
                                     value={line.remainingQuantity}
-                                    unit={line.unitCode}
+                                    unit={line.unitName}
                                 />
                             </span>
                             {receipt && (
@@ -212,17 +212,17 @@ export function FulfillmentDraftReadOnly({
                                     实收{" "}
                                     <QuantityValue
                                         value={receipt.receivedQuantity}
-                                        unit={line.unitCode}
+                                        unit={line.unitName}
                                     />{" "}
                                     · 合格{" "}
                                     <QuantityValue
                                         value={receipt.qualifiedQuantity}
-                                        unit={line.unitCode}
+                                        unit={line.unitName}
                                     />{" "}
                                     · 不合格{" "}
                                     <QuantityValue
                                         value={receipt.rejectedQuantity}
-                                        unit={line.unitCode}
+                                        unit={line.unitName}
                                     />
                                 </span>
                             )}
@@ -231,7 +231,7 @@ export function FulfillmentDraftReadOnly({
                                     已填数量{" "}
                                     <QuantityValue
                                         value={saved.quantity}
-                                        unit={line.unitCode}
+                                        unit={line.unitName}
                                     />
                                 </span>
                             )}

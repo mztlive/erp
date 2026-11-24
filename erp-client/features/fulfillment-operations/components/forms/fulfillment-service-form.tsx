@@ -54,7 +54,7 @@ export function FulfillmentServiceForm({
                             item.salesOrderLineId === line.salesOrderLineId,
                     )
                     const remaining = displayText(src?.remainingQuantity)
-                    const unit = displayText(src?.unitCode)
+                    const unit = displayText(src?.unitName)
                     return (
                         <div
                             key={line.salesOrderLineId}

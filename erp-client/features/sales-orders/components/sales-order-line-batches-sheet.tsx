@@ -73,11 +73,20 @@ export function SalesOrderLineBatchesSheet({
                     />
                     <span className="num text-xs text-muted-foreground">
                         已交{" "}
-                        {qtyWithUnit(progress.deliveredQuantity, line.unit)}
+                        {qtyWithUnit(
+                            progress.deliveredQuantity,
+                            line.unitName ?? "",
+                        )}
                         {" / "}
-                        {qtyWithUnit(progress.requiredQuantity, line.unit)}
+                        {qtyWithUnit(
+                            progress.requiredQuantity,
+                            line.unitName ?? "",
+                        )}
                         {" · 已验 "}
-                        {qtyWithUnit(progress.acceptedQuantity, line.unit)}
+                        {qtyWithUnit(
+                            progress.acceptedQuantity,
+                            line.unitName ?? "",
+                        )}
                     </span>
                 </div>
             }
@@ -159,7 +168,7 @@ function BatchItem({
     const batchStatus = pending
         ? {
               tone: "info" as const,
-              label: `待验 ${qtyWithUnit(fact.eligibleQuantity, fact.unitCode)}`,
+              label: `待验 ${qtyWithUnit(fact.eligibleQuantity, fact.unitName)}`,
           }
         : accepted
           ? { tone: "success" as const, label: "已验收" }
@@ -194,7 +203,7 @@ function BatchItem({
                 <div className="space-y-0.5">
                     <dt className="text-muted-foreground">本批交付</dt>
                     <dd className="num font-medium text-foreground">
-                        {qtyWithUnit(fact.netSuccessfulQuantity, fact.unitCode)}
+                        {qtyWithUnit(fact.netSuccessfulQuantity, fact.unitName)}
                     </dd>
                 </div>
                 <div className="space-y-0.5">
@@ -202,7 +211,7 @@ function BatchItem({
                     <dd className="num font-medium text-foreground">
                         {qtyWithUnit(
                             fact.netAcceptedAllocatedQuantity,
-                            fact.unitCode,
+                            fact.unitName,
                         )}
                     </dd>
                 </div>
@@ -215,7 +224,7 @@ function BatchItem({
                                 : "num text-muted-foreground"
                         }
                     >
-                        {qtyWithUnit(fact.eligibleQuantity, fact.unitCode)}
+                        {qtyWithUnit(fact.eligibleQuantity, fact.unitName)}
                     </dd>
                 </div>
             </dl>

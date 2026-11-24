@@ -13,6 +13,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { fetchCustomerAcceptanceWorkspace } from "@/features/sales-orders/api/acceptance"
 import {
     type AcceptanceHistoryItem,
@@ -20,6 +21,7 @@ import {
     type PostAcceptanceInput,
 } from "@/features/sales-orders/lib/acceptance-types"
 import {
+    acceptanceFactUnit,
     buildDraftLines,
     buildOrderProgress,
     pendingAsPassSelection,
@@ -150,11 +152,45 @@ export function AcceptanceWorkspace({
             !workItemId || Boolean(resolvedWorkItem) || workItemQuery.isFetched,
     })
 
-    const view = workspaceQuery.data
+    const raw = workspaceQuery.data
+    const { names } = useProductUnitNames(
+        raw?.salesLines.map((line) => line.skuId),
+        Boolean(raw?.salesLines.length),
+    )
+    const view = React.useMemo(
+        () =>
+            raw && {
+                ...raw,
+                history: raw.history.map((item) => ({
+                    ...item,
+                    lines: item.lines.map((line) => ({
+                        ...line,
+                        unitName: names.get(line.unitCode.trim()),
+                    })),
+                })),
+                salesLines: raw.salesLines.map((line) => {
+                    const unitName =
+                        line.unitName ?? names.get(line.unitCode.trim())
+                    return {
+                        ...line,
+                        unitName,
+                        fulfillmentFacts: line.fulfillmentFacts.map((fact) =>
+                            acceptanceFactUnit(
+                                fact,
+                                { unitCode: line.unitCode, unitName },
+                                names,
+                            ),
+                        ),
+                    }
+                }),
+            },
+        [raw, names],
+    )
 
     const { postMutation, reverseMutation, formalResult, setFormalResult } =
         useAcceptanceMutations({
             salesOrderId,
+            unitNames: names,
             idempotencyKey,
             submittedOverallRef,
             onPostSucceeded: (payload) => {

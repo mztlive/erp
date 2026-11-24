@@ -203,8 +203,10 @@ export function mapCenter(center: BackendCenter): PurchaseOrderCenterView {
                     ? expenseLineName(expense)
                     : "采购明细"),
             itemSku: line.specification ?? undefined,
+            skuId: line.sku_id ?? undefined,
             quantity: line.quantity ?? undefined,
             unit: line.base_unit_code ?? undefined,
+            unitName: line.unit_name?.trim() || undefined,
             unitCostGross: line.unit_cost_gross ?? "0",
             inputTaxRate: line.input_tax_rate ?? "0",
             grossAmount: line.gross_amount ?? "0",

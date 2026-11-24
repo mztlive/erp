@@ -194,7 +194,7 @@ export function SourcingInlineOptionPicker({
                                 {" · "}待分配{" "}
                                 <QuantityValue
                                     value={product.remainingQuantity}
-                                    unit={product.unit}
+                                    unit={product.unitName ?? ""}
                                 />
                             </p>
                         ) : null}
@@ -351,7 +351,10 @@ export function SourcingInlineOptionPicker({
                                                         可供{" "}
                                                         <QuantityValue
                                                             value={maxQty}
-                                                            unit={product.unit}
+                                                            unit={
+                                                                product.unitName ??
+                                                                ""
+                                                            }
                                                         />
                                                     </span>
                                                     {!stock &&

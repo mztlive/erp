@@ -1,5 +1,9 @@
 "use client"
 
+import { useMemo } from "react"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
+import type { FulfillmentOperation } from "../types"
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { getDeliveryPackingDetail } from "../api/packing"
 import { queryKeyRoots } from "@/lib/query-key-roots"
@@ -20,10 +24,35 @@ export const fulfillmentKeys = {
 }
 
 export function useFulfillmentQueueQuery(filters: FulfillmentQueueFilters) {
-    return useQuery({
+    const result = useQuery({
         queryKey: fulfillmentKeys.queue(filters),
         queryFn: () => fetchFulfillmentQueue(filters),
     })
+    const view = result.data
+    const skuIds = view?.operations.flatMap((operation) =>
+        operation.lines.map((line) => line.skuId),
+    )
+    const { nameForUnit } = useProductUnitNames(
+        skuIds,
+        Boolean(view?.operations.length),
+    )
+    const data = useMemo(() => {
+        if (!view) return view
+        const withUnits = (operation: FulfillmentOperation) => ({
+            ...operation,
+            lines: operation.lines.map((line) => ({
+                ...line,
+                unitName:
+                    line.unitName ?? nameForUnit(line.unitCode, line.skuId),
+            })),
+        })
+        return {
+            ...view,
+            operations: view.operations.map(withUnits),
+            current: view.current ? withUnits(view.current) : view.current,
+        }
+    }, [view, nameForUnit])
+    return { ...result, data }
 }
 
 /**

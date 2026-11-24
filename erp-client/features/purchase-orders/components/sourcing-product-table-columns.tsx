@@ -395,7 +395,7 @@ export function sourcingProductColumns({
                                             row.product.quantityScale,
                                         ) ?? "1"
                                     }
-                                    aria-label={`行内修改 ${row.product.itemName} 分配数量（${row.product.unit}）`}
+                                    aria-label={`行内修改 ${row.product.itemName} 分配数量（${row.product.unitName ?? ""}）`}
                                     className="num h-control-sm w-16 shrink-0 bg-surface-sunken text-right hover:bg-card focus-visible:bg-card"
                                     value={single.line.quantity}
                                     onChange={(event) =>
@@ -410,7 +410,7 @@ export function sourcingProductColumns({
                                 </span>
                                 <QuantityValue
                                     value={row.product.remainingQuantity}
-                                    unit={row.product.unit}
+                                    unit={row.product.unitName ?? ""}
                                     tone={isPartial ? "warning" : "neutral"}
                                     className="text-xs [&_.num]:text-muted-foreground"
                                 />
@@ -432,7 +432,7 @@ export function sourcingProductColumns({
                                 </span>
                                 <QuantityValue
                                     value={row.product.remainingQuantity}
-                                    unit={row.product.unit}
+                                    unit={row.product.unitName ?? ""}
                                     className="text-xs [&_.num]:text-muted-foreground"
                                 />
                             </>
@@ -573,7 +573,9 @@ export function sourcingProductColumns({
                                             ) : null}
                                             <SalesLinePriceComparison
                                                 prices={row.product.salesPrices}
-                                                unit={row.product.unit}
+                                                unit={
+                                                    row.product.unitName ?? ""
+                                                }
                                             />
                                         </div>
                                     </TooltipContent>
@@ -687,7 +689,7 @@ export function sourcingProductColumns({
                     <SalesLinePriceComparison
                         prices={row.product.salesPrices}
                         compact
-                        unit={row.product.unit}
+                        unit={row.product.unitName ?? ""}
                     />
                 ) : (
                     "—"

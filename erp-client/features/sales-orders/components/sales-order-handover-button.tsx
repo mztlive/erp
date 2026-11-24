@@ -91,12 +91,27 @@ export function SalesOrderHandoverButton({
     const acceptanceSummary = React.useMemo(() => {
         const lines = acceptancePreview.data?.salesLines
         if (!lines) return null
-        const progress = buildOrderProgress(lines)
+        const orderLines = new Map(
+            order.lineItems.map((line) => [line.id, line]),
+        )
+        const progress = buildOrderProgress(
+            lines.map((line) => {
+                const source = orderLines.get(line.salesOrderLineId)
+                return {
+                    ...line,
+                    unitName:
+                        line.unitName ??
+                        (line.unitCode === source?.unit
+                            ? source.unitName
+                            : undefined),
+                }
+            }),
+        )
         const openLines = progress.lines.filter((line) =>
             isPositiveQty(line.pendingQuantity),
         ).length
         return { openLines, ...progress }
-    }, [acceptancePreview.data])
+    }, [acceptancePreview.data, order.lineItems])
 
     const candidates = React.useMemo(
         () =>
@@ -170,7 +185,7 @@ export function SalesOrderHandoverButton({
                             <p className="mt-1 text-muted-foreground">
                                 待验收记录 {acceptanceSummary.openLines} 行
                                 {acceptanceSummary.unitCode
-                                    ? `，待验收 ${qtyWithUnit(acceptanceSummary.pendingQuantity, acceptanceSummary.unitCode)}`
+                                    ? `，待验收 ${qtyWithUnit(acceptanceSummary.pendingQuantity, acceptanceSummary.unitName)}`
                                     : ""}
                                 ，随交接一并转交；审批任务保持不变。
                             </p>

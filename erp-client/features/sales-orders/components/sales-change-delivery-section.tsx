@@ -16,6 +16,7 @@ import { useDeliveryCoverage } from "../hooks/use-delivery-coverage"
 import { ChangeOrderSection } from "@/components/business/change-order-section"
 import {
     salesChangeLineRemoved,
+    salesChangeUnitName,
     type SalesChangeDraftValues,
 } from "../lib/sales-change-draft"
 import type { SalesChangeDraftFormApi } from "../lib/sales-change-draft-form-types"
@@ -29,10 +30,12 @@ const ADDRESS_GRID =
 export function SalesChangeDeliverySection({
     form,
     id,
+    unitNames,
     disabled,
 }: {
     form: SalesChangeDraftFormApi
     id: string
+    unitNames: ReadonlyMap<string, string>
     disabled: boolean
 }) {
     return (
@@ -50,6 +53,7 @@ export function SalesChangeDeliverySection({
                     <DeliverySectionBody
                         form={form}
                         id={id}
+                        unitNames={unitNames}
                         disabled={disabled}
                         rows={rows}
                     />
@@ -62,11 +66,13 @@ export function SalesChangeDeliverySection({
 function DeliverySectionBody({
     form,
     id,
+    unitNames,
     disabled,
     rows,
 }: {
     form: SalesChangeDraftFormApi
     id: string
+    unitNames: ReadonlyMap<string, string>
     disabled: boolean
     rows: { line: LineValues; index: number }[]
 }) {
@@ -88,6 +94,7 @@ function DeliverySectionBody({
                         key={line.source.sales_order_line_id}
                         form={form}
                         id={id}
+                        unitNames={unitNames}
                         line={line}
                         index={index}
                         disabled={disabled}
@@ -102,6 +109,7 @@ function DeliverySectionBody({
 function DeliveryGroup({
     form,
     id,
+    unitNames,
     line,
     index,
     disabled,
@@ -109,13 +117,14 @@ function DeliveryGroup({
 }: {
     form: SalesChangeDraftFormApi
     id: string
+    unitNames: ReadonlyMap<string, string>
     line: LineValues
     index: number
     disabled: boolean
     coverageHint: (sku: string, regionCode: string) => DeliveryCoverageHintCode
 }) {
     const source = line.source
-    const unit = source.unit_snapshot ?? ""
+    const unit = salesChangeUnitName(source, unitNames) ?? ""
     const removed = salesChangeLineRemoved(line)
     const allocations = line.deliveryAllocations
     const summary = allocationSummary({ ...line, unit })

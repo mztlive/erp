@@ -16,6 +16,7 @@ const QTY_PRECISION = { maxScale: 6, outputScale: 6 } as const
 
 export type ArrangementLineMeta = Readonly<{
     unit?: string
+    unitName?: string
     sku?: string
     isGift?: boolean
 }>
@@ -49,6 +50,7 @@ export type DerivedArrangementLine = Readonly<{
     sku?: string
     isGift: boolean
     unit: string
+    unitCode: string
     quantity: string
     allocations: readonly DerivedAllocationRow[]
     unmatchedShipped: readonly DerivedUnmatchedShippedRow[]
@@ -70,6 +72,7 @@ export type DerivedAddressGroupItem = Readonly<{
     sku?: string
     isGift: boolean
     unit: string
+    unitCode: string
     quantity: string
     shippedQuantity: string
     hasShipped: boolean
@@ -249,6 +252,7 @@ export function formatArrangementQuantity(
 export function deriveArrangementSummary(
     data: ArrangementView,
     lineMeta?: Readonly<Record<string, ArrangementLineMeta>>,
+    unitNames?: ReadonlyMap<string, string>,
 ): DerivedArrangementSummary {
     const groupMap = new Map<
         string,
@@ -276,7 +280,8 @@ export function deriveArrangementSummary(
 
     const derivedLines: DerivedArrangementLine[] = data.lines.map((line) => {
         const meta = lineMeta?.[line.line_id]
-        const unit = meta?.unit?.trim() || line.unit
+        const unitCode = meta?.unit?.trim() || line.unit
+        const unit = meta?.unitName ?? unitNames?.get(unitCode.trim()) ?? ""
         const sku = meta?.sku && meta.sku !== "无规格" ? meta.sku : undefined
         const isGift = Boolean(meta?.isGift)
 
@@ -376,6 +381,7 @@ export function deriveArrangementSummary(
                 sku,
                 isGift,
                 unit,
+                unitCode,
                 quantity,
                 shippedQuantity,
                 hasShipped,
@@ -445,6 +451,7 @@ export function deriveArrangementSummary(
             sku,
             isGift,
             unit,
+            unitCode,
             quantity: line.quantity,
             allocations,
             unmatchedShipped,
@@ -466,9 +473,11 @@ export function deriveArrangementSummary(
 
     const addressGroups: DerivedAddressGroup[] = [...groupMap.values()]
         .map((group) => {
-            const units = new Set(group.items.map((item) => item.unit))
+            const units = new Set(group.items.map((item) => item.unitCode))
             const singleUnit =
-                units.size === 1 ? group.items[0]?.unit : undefined
+                units.size === 1
+                    ? (group.items.find((item) => item.unit)?.unit ?? "")
+                    : undefined
             const singleUnitTotal =
                 singleUnit !== undefined
                     ? {
@@ -505,8 +514,11 @@ export function deriveArrangementSummary(
             ? addressGroups[0]
             : undefined
 
-    const allUnits = new Set(derivedLines.map((line) => line.unit))
-    const commonUnit = allUnits.size === 1 ? derivedLines[0]?.unit : undefined
+    const allUnits = new Set(derivedLines.map((line) => line.unitCode))
+    const commonUnit =
+        allUnits.size === 1
+            ? (derivedLines.find((line) => line.unit)?.unit ?? "")
+            : undefined
     const singleUnitTotals =
         commonUnit !== undefined
             ? {

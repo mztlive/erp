@@ -56,7 +56,7 @@ function lineGross(quantity: string, unitPriceGross: string): string {
 
 export function buildSalesOrderSubmitSnapshot(
     values: CreateSalesOrderFormValues,
-    inquiryUnitNames?: ReadonlyMap<string, string>,
+    unitNames: ReadonlyMap<string, string>,
 ): SalesOrderSubmitSnapshot {
     const totals = calculateTotals(values.lineItems, values.taxRatePercent)
     const lineItems = values.lineItems
@@ -65,9 +65,10 @@ export function buildSalesOrderSubmitSnapshot(
             rowKey: line.rowKey,
             name: line.name,
             quantity: line.quantity,
-            unit: inquiryUnitNames
-                ? (inquiryUnitNames.get(line.unit) ?? "")
-                : line.unit,
+            unit:
+                values.nature === "card_voucher"
+                    ? "张"
+                    : (unitNames.get(line.unit.trim()) ?? ""),
             unitPriceGross: line.unitPriceGross,
             procurementSupplyPrice: line.procurementSupplyPrice ?? "",
             deliveryAllocations: line.deliveryAllocations,

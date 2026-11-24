@@ -1,5 +1,7 @@
 "use client"
 
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
+
 import * as React from "react"
 import {
     CheckIcon,
@@ -60,6 +62,7 @@ export function ArrangementSummary({
     lineMeta?: Readonly<Record<string, ArrangementLineMeta>>
 }) {
     const query = useArrangement("sales-orders", salesOrderId, true)
+    const { names } = useProductUnitNames([], Boolean(query.data?.lines.length))
     const orderSeg = toAutomationIdSegment(salesOrderId)
     const idPrefix = `sales-arrangement-${orderSeg}`
 
@@ -123,19 +126,18 @@ export function ArrangementSummary({
     const summary = React.useMemo(
         () =>
             query.data
-                ? deriveArrangementSummary(query.data, lineMeta)
+                ? deriveArrangementSummary(query.data, lineMeta, names)
                 : undefined,
-        [query.data, lineMeta],
+        [query.data, lineMeta, names],
     )
 
     const unitLabels = React.useMemo(() => {
-        if (!lineMeta) return undefined
         const labels: Record<string, string> = {}
-        for (const [lineId, meta] of Object.entries(lineMeta)) {
-            if (meta.unit?.trim()) labels[lineId] = meta.unit.trim()
+        for (const line of summary?.lines ?? []) {
+            if (line.unit) labels[line.lineId] = line.unit
         }
         return labels
-    }, [lineMeta])
+    }, [summary])
 
     if (query.isPending) {
         return (

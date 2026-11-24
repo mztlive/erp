@@ -97,6 +97,7 @@ function SalesOrderDetailContent({
             query.data.currentRevisionNo != null &&
             canReadDelivery,
         ),
+        query.data?.lineItems,
     )
     const canOperateAcceptance =
         !account.isError &&

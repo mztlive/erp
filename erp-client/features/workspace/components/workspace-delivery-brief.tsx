@@ -1,4 +1,5 @@
 "use client"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 
 import { DeliveryPackingDetails } from "@/features/fulfillment-operations/components/delivery-packing-details"
 
@@ -30,6 +31,7 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
     const value = (label: string) =>
         fields.find((field) => field.label === label)?.value
     const lines = item.deliveryLines ?? []
+    const { names } = useProductUnitNames([], lines.length > 0)
     const trackingLines = lines.filter((line) => line.tracking.length > 0)
     const shippedAt = value("发货时间")
     const hasDeliveryRecords =
@@ -142,13 +144,16 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                                     ) : null}
                                 </TableCell>
                                 <TableCell className="num text-right">
-                                    {line.quantity} {line.unit}
+                                    {line.quantity}{" "}
+                                    {names.get(line.unit?.trim() ?? "")}
                                 </TableCell>
                                 <TableCell className="num text-right">
-                                    {line.shipped_quantity} {line.unit}
+                                    {line.shipped_quantity}{" "}
+                                    {names.get(line.unit?.trim() ?? "")}
                                 </TableCell>
                                 <TableCell className="num text-right font-semibold">
-                                    {line.pending_quantity} {line.unit}
+                                    {line.pending_quantity}{" "}
+                                    {names.get(line.unit?.trim() ?? "")}
                                 </TableCell>
                                 <TableCell>
                                     <p className="num text-xs">

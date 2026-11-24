@@ -19,11 +19,13 @@ import { PurchaseDeliveryAllocationEditor } from "./purchase-delivery-allocation
 export function PurchaseChangeDeliverySection({
     form,
     id,
+    unitNames,
     options,
     disabled,
 }: {
     form: PurchaseChangeDraftFormApi
     id: string
+    unitNames: ReadonlyMap<string, string>
     options: PurchaseChangeDeliveryOptions
     disabled: boolean
 }) {
@@ -49,6 +51,7 @@ export function PurchaseChangeDeliverySection({
                                     key={line.lineKey}
                                     form={form}
                                     id={id}
+                                    unitNames={unitNames}
                                     line={line}
                                     index={index}
                                     options={options}
@@ -66,6 +69,7 @@ export function PurchaseChangeDeliverySection({
 function DeliveryGroup({
     form,
     id,
+    unitNames,
     line,
     index,
     options,
@@ -73,6 +77,7 @@ function DeliveryGroup({
 }: {
     form: PurchaseChangeDraftFormApi
     id: string
+    unitNames: ReadonlyMap<string, string>
     line: PurchaseChangeLineValues
     index: number
     options: PurchaseChangeDeliveryOptions
@@ -81,7 +86,7 @@ function DeliveryGroup({
     const source = line.source
     const option = purchaseChangeLineOption(source, options)
     const prefix = `${id}-line-${toAutomationIdSegment(line.lineKey)}`
-    const unit = source.base_unit_code ?? ""
+    const unit = unitNames.get(source.base_unit_code?.trim() ?? "") ?? ""
     return (
         <div className="min-w-0 space-y-3 p-4">
             <p className="break-words text-body-compact font-medium">

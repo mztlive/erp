@@ -1025,11 +1025,9 @@ export function SalesOrderCreateLineItemTable({
                                     taxRatePercent={taxRatePercent}
                                     inquiryLocked={inquiryLocked}
                                     displayUnit={
-                                        inquiryLocked
-                                            ? (skuDetails.unitNames.get(
-                                                  line.unit,
-                                              ) ?? "")
-                                            : line.unit
+                                        skuDetails.unitNames.get(
+                                            line.unit.trim(),
+                                        ) ?? ""
                                     }
                                     quantityFromDelivery={
                                         inquiryDeliveryLineKeys?.has(

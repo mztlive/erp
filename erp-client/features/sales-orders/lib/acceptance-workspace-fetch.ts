@@ -169,7 +169,17 @@ export async function fetchCustomerAcceptanceWorkspace(
         throw err
     }
 
-    const salesLines = (eligibility.sales_lines ?? []).map(mapSalesLine)
+    const orderLines = new Map(order.lineItems.map((line) => [line.id, line]))
+    const salesLines = (eligibility.sales_lines ?? []).map((wire) => {
+        const line = mapSalesLine(wire)
+        const source = orderLines.get(line.salesOrderLineId)
+        return {
+            ...line,
+            skuId: source?.skuId,
+            unitName:
+                source?.unit === line.unitCode ? source.unitName : undefined,
+        }
+    })
     const eligibleFacts = salesLines
         .flatMap((line) => line.fulfillmentFacts)
         .filter((fact) => isPositiveQty(fact.eligibleQuantity))

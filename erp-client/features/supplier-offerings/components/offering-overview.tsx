@@ -1,4 +1,5 @@
 "use client"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 
 import Link from "next/link"
 import { ArrowUpRightIcon } from "lucide-react"
@@ -31,6 +32,8 @@ export function OfferingSummary({
     offering: SupplierOfferingView
     canViewCosts: boolean
 }) {
+    const { namesBySkuId } = useProductUnitNames([offering.sku_id])
+    const unitName = namesBySkuId.get(offering.sku_id)
     const available = offering.availability_status === "AVAILABLE"
     const availabilityMetric = (
         <DetailWorkspaceMetricItem
@@ -41,7 +44,7 @@ export function OfferingSummary({
                     {offering.available_quantity != null ? (
                         <QuantityValue
                             value={offering.available_quantity}
-                            unit=""
+                            unit={unitName}
                         />
                     ) : (
                         <span className="text-body-compact font-medium text-muted-foreground">
@@ -78,7 +81,7 @@ export function OfferingSummary({
                         offering.bulk_minimum_order_quantity != null ? (
                             <QuantityValue
                                 value={offering.bulk_minimum_order_quantity}
-                                unit=""
+                                unit={unitName}
                             />
                         ) : (
                             <span className="text-body-compact font-medium text-muted-foreground">
@@ -130,7 +133,7 @@ export function OfferingSummary({
                         {offering.bulk_minimum_order_quantity != null ? (
                             <QuantityValue
                                 value={offering.bulk_minimum_order_quantity}
-                                unit=""
+                                unit={unitName}
                             />
                         ) : (
                             "未提供"
@@ -165,6 +168,8 @@ export function OfferingTermsSection({
 }: {
     offering: SupplierOfferingView
 }) {
+    const { namesBySkuId } = useProductUnitNames([offering.sku_id])
+    const unitName = namesBySkuId.get(offering.sku_id)
     return (
         <DetailWorkspaceSection
             headingId="offering-terms-title"
@@ -186,7 +191,7 @@ export function OfferingTermsSection({
                     {offering.bulk_minimum_order_quantity != null ? (
                         <QuantityValue
                             value={offering.bulk_minimum_order_quantity}
-                            unit=""
+                            unit={unitName}
                         />
                     ) : (
                         "未提供"

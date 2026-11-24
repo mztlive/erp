@@ -1,5 +1,6 @@
 import { ChevronRightIcon } from "lucide-react"
 import { MoneyValue, QuantityValue } from "@/components/business"
+import { useInquirySkuDetailsQuery } from "../hooks/queries"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { inquiryDate, inquiryDateInput } from "../lib/format"
 import type {
@@ -17,6 +18,9 @@ export function InquiryRequirementSummary({
     procurement?: boolean
     showNote?: boolean
 }) {
+    const { units } = useInquirySkuDetailsQuery(
+        requirement.lines.map((line) => line.sku_id),
+    )
     return (
         <section className="divide-y divide-border/60" aria-label="需求内容">
             {showNote && requirement.note && (
@@ -44,7 +48,7 @@ export function InquiryRequirementSummary({
                         </div>
                         <QuantityValue
                             value={line.quantity}
-                            unit={line.unit_code}
+                            unit={units.get(line.unit_code) ?? ""}
                             className="shrink-0 font-medium"
                         />
                     </div>
@@ -90,7 +94,7 @@ export function InquiryRequirementSummary({
                                     </div>
                                     <QuantityValue
                                         value={allocation.quantity}
-                                        unit={line.unit_code}
+                                        unit={units.get(line.unit_code) ?? ""}
                                         className="shrink-0 text-muted-foreground"
                                     />
                                 </div>

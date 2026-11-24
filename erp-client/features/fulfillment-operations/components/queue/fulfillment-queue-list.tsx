@@ -125,7 +125,7 @@ export function FulfillmentQueueList({
                                         },
                                     ),
                                 )}
-                                {item.lines[0]?.unitCode ?? ""}
+                                {item.lines[0]?.unitName ?? ""}
                             </Badge>
                             {item.lines.length > 1 ? (
                                 <Badge

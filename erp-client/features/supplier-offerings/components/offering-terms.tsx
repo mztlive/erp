@@ -27,6 +27,7 @@ export function OfferingField({
 export function OfferingTerms({
     terms,
     canViewCosts,
+    unitName,
     compact = false,
     deliveryTemplateName,
 }: {
@@ -35,6 +36,7 @@ export function OfferingTerms({
         "id" | "created_at" | "revision_no" | "is_current"
     >
     canViewCosts: boolean
+    unitName?: string
     compact?: boolean
     /** 当前生效配送模板；条款历史不传。 */
     deliveryTemplateName?: string
@@ -71,7 +73,7 @@ export function OfferingTerms({
                         {terms.bulk_minimum_order_quantity != null ? (
                             <QuantityValue
                                 value={terms.bulk_minimum_order_quantity}
-                                unit=""
+                                unit={unitName}
                             />
                         ) : (
                             "未提供"

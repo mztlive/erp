@@ -345,6 +345,7 @@ function LineItemsSectionInner({
             >
                 {nature === "physical_service" && lines.length > 0 ? (
                     <SalesDeliverySummaryBar
+                        unitNames={skuDetails.unitNames}
                         form={form}
                         lines={lines}
                         draftId={draftId}

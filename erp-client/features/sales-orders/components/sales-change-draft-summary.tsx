@@ -1,4 +1,6 @@
 "use client"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
+import { salesChangeUnitName } from "../lib/sales-change-draft"
 
 import { MoneyValue, QuantityValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -12,6 +14,10 @@ export function SalesChangeDraftSummary({
     changeOrderId: string
 }) {
     const query = useSalesChangeDraftQuery(changeOrderId, true)
+    const { names } = useProductUnitNames(
+        query.data?.lines.map((line) => line.goods?.sku_id),
+        Boolean(query.data?.lines.length),
+    )
     if (query.isPending)
         return (
             <p role="status" className="text-xs text-muted-foreground">
@@ -91,7 +97,7 @@ export function SalesChangeDraftSummary({
                         <span className="flex items-baseline gap-4">
                             <QuantityValue
                                 value={quantity}
-                                unit={line.goods ? line.unit_snapshot : "张"}
+                                unit={salesChangeUnitName(line, names)}
                             />
                             <MoneyValue value={amount} />
                         </span>

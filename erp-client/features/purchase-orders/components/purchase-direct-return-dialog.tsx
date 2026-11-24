@@ -1,4 +1,5 @@
 "use client"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { useRef, useState } from "react"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
@@ -25,13 +26,20 @@ export function PurchaseDirectReturnDialog({
     purchaseOrderId,
     version,
     plan,
+    unitNamesByLine,
     onClose,
 }: {
     purchaseOrderId: string
     version: number
     plan: DirectReturnPlan
+    unitNamesByLine: ReadonlyMap<string, string | undefined>
     onClose: () => void
 }) {
+    const { names } = useProductUnitNames([], plan.lines.length > 0)
+    const unitName = (line: DirectReturnPlan["lines"][number]) =>
+        unitNamesByLine.get(line.purchase_line_id) ??
+        names.get(line.unit.trim()) ??
+        ""
     const mutation = useConfirmDirectReturnMutation()
     const [error, setError] = useState<string | null>(null)
     const [unknown, setUnknown] = useState(false)
@@ -164,7 +172,7 @@ export function PurchaseDirectReturnDialog({
                                         {compactFixed(line.returned_quantity)} ·
                                         还需退回{" "}
                                         {compactFixed(line.required_return)}{" "}
-                                        {line.unit}
+                                        {unitName(line)}
                                     </p>
                                 </div>
                                 <form.AppField
@@ -176,7 +184,7 @@ export function PurchaseDirectReturnDialog({
                                             required
                                             inputMode="decimal"
                                             disabled={pending || unknown}
-                                            description={`最多 ${compactFixed(line.max_direct_return)} ${line.unit}`}
+                                            description={`最多 ${compactFixed(line.max_direct_return)} ${unitName(line)}`}
                                         />
                                     )}
                                 />

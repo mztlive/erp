@@ -465,7 +465,7 @@ function DeliveryAllocationEditors({
                             line.deliveryAllocations ?? [],
                         )}
                         quantity={draft?.quantity ?? line.quantity ?? ""}
-                        unit={line.unit}
+                        unit={line.unitName}
                         onChange={(rows) =>
                             patchLineEdit(
                                 setLineEdits,

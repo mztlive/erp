@@ -178,9 +178,9 @@ function VersionRecord({
                                     <div className="truncate font-medium text-foreground">
                                         {line.name}
                                     </div>
-                                    {line.spec || line.unit ? (
+                                    {line.spec || line.unitName ? (
                                         <div className="truncate text-xs text-muted-foreground">
-                                            {[line.spec, line.unit]
+                                            {[line.spec, line.unitName]
                                                 .filter(Boolean)
                                                 .join(" · ")}
                                         </div>

@@ -32,7 +32,7 @@ export function bulkMinimumOptionState(
                 entry.delivery?.supplierOfferingId === offeringId,
         )
         if (!candidate) continue
-        unit = product.unit
+        unit = product.unitName ?? ""
         const deliveryCapacity = directDeliveryCapacity(product, candidate)
         capacity += minimumUnits(
             quantityUnits(product.remainingQuantity),

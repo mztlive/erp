@@ -13,6 +13,7 @@ import {
     QuantityValue,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { getErrorMessage } from "@/lib/api/errors"
 import { type FormalCommandIdentity } from "@/lib/formal-command"
@@ -163,6 +164,9 @@ function InquirySaleRecovery({
             setRecoveryError(error)
         }
     }
+    const { names } = useProductUnitNames(
+        command.payload.lineItems.map((line) => line.sku),
+    )
     return (
         <DetailWorkspacePage>
             <DetailWorkspaceChrome
@@ -186,7 +190,7 @@ function InquirySaleRecovery({
                                 </span>
                                 <QuantityValue
                                     value={line.quantity}
-                                    unit={line.unit}
+                                    unit={names.get(line.unit.trim())}
                                 />
                                 <span className="text-muted-foreground">
                                     成交单价{" "}

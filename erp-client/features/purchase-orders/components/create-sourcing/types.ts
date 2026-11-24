@@ -6,6 +6,11 @@ export type SourcingEditorProps = {
     form: PurchaseOrderCreateFormApi
     order: SourcingSalesOrder
     onAddSplit: (salesOrderLineId: string) => void
+    /** 按采购员在比价面板中选定的具体履约方案新增拆分来源，返回新增 rowKey。 */
+    onAddSplitWithOption?: (
+        salesOrderLineId: string,
+        basisId: string,
+    ) => string | undefined
     onRemoveSplit: (rowKey: string) => void
     /** 一键把剩余未覆盖需求或指定地址拆给新来源，返回新增 rowKey。 */
     onAddResidualSplit?: (

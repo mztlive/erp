@@ -1,4 +1,5 @@
 "use client"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 
 import { useMemo, useState, type ReactNode } from "react"
 import {
@@ -321,6 +322,7 @@ function PurchasePaper({
     preview: Extract<Preview, { kind: "purchase" }>
 }) {
     const snapshot = preview.snapshot
+    const { names } = useProductUnitNames([], snapshot.items.length > 0)
     return (
         <PaperDocument
             frame="borderless"
@@ -369,7 +371,10 @@ function PurchasePaper({
                     header: "数量",
                     align: "end",
                     cell: (row) => (
-                        <QuantityValue value={row.quantity} unit={row.unit} />
+                        <QuantityValue
+                            value={row.quantity}
+                            unit={names.get(row.unit?.trim() ?? "")}
+                        />
                     ),
                 },
                 {
@@ -400,6 +405,7 @@ function PurchasePaper({
 }
 
 function SalesPaper({ sales, payer }: { sales: SalesSnapshot; payer: string }) {
+    const { names } = useProductUnitNames([], sales.lines.length > 0)
     return (
         <PaperDocument
             frame="borderless"
@@ -441,7 +447,10 @@ function SalesPaper({ sales, payer }: { sales: SalesSnapshot; payer: string }) {
                     header: "数量",
                     align: "end",
                     cell: (row) => (
-                        <QuantityValue value={row.quantity} unit={row.unit} />
+                        <QuantityValue
+                            value={row.quantity}
+                            unit={names.get(row.unit?.trim() ?? "")}
+                        />
                     ),
                 },
                 {

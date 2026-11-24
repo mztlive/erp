@@ -1,5 +1,8 @@
 "use client"
 
+import { useMemo } from "react"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { accountProfileKeys } from "@/features/auth/hooks/queries"
@@ -16,6 +19,8 @@ import { workItemKeys } from "@/features/work-items/queries"
 import { queryKeyRoots } from "@/lib/query-key-roots"
 import { fetchHasEligibleAcceptance } from "@/features/sales-orders/api/acceptance"
 import { fetchSalesOrderDeliveryProgress } from "../api/sales-order-delivery-progress"
+import { acceptanceFactUnit } from "../lib/acceptance-model"
+import type { SalesOrderLineItem } from "../types"
 import {
     fetchSalesExtraCosts,
     fetchSalesInquiryFeeCandidates,
@@ -86,7 +91,7 @@ export function useSalesOrderDetailQuery(
     expectedSubjectVersion?: string,
 ) {
     const client = useQueryClient()
-    return useQuery({
+    const result = useQuery({
         queryKey: expectedSubjectVersion
             ? [
                   ...salesOrderKeys.detail(salesOrderId),
@@ -113,6 +118,52 @@ export function useSalesOrderDetailQuery(
         },
         enabled: Boolean(salesOrderId),
     })
+    const order = result.data
+    const skuIds = order
+        ? [
+              ...order.lineItems,
+              ...order.revisions.flatMap((revision) => revision.lines ?? []),
+          ].map((line) => line.skuId)
+        : []
+    const { names, nameForUnit } = useProductUnitNames(skuIds, Boolean(order))
+    const data = useMemo(() => {
+        if (!order) return order
+        const lineItems = order.lineItems.map((line) => ({
+            ...line,
+            unitName: line.unitName ?? nameForUnit(line.unit, line.skuId),
+        }))
+        const linesById = new Map(lineItems.map((line) => [line.id, line]))
+        const procurementProgress = order.related.procurementProgress
+        return {
+            ...order,
+            lineItems,
+            revisions: order.revisions.map((revision) => ({
+                ...revision,
+                lines: revision.lines?.map((line) => ({
+                    ...line,
+                    unitName:
+                        line.unitName ?? names.get(line.unit?.trim() ?? ""),
+                })),
+            })),
+            related: {
+                ...order.related,
+                procurementProgress: {
+                    ...procurementProgress,
+                    lines: procurementProgress.lines?.map((line) => {
+                        const salesLine = linesById.get(line.id)
+                        return {
+                            ...line,
+                            unitName:
+                                !line.unit || line.unit === salesLine?.unit
+                                    ? salesLine?.unitName
+                                    : names.get(line.unit.trim()),
+                        }
+                    }),
+                },
+            },
+        }
+    }, [order, names, nameForUnit])
+    return { ...result, data }
 }
 
 /** 按指定变更单读取，历史入口不得回退到当前活动变更单。 */
@@ -155,12 +206,54 @@ export function useSalesOrderAcceptanceEligibilityQuery(
 export function useSalesOrderDeliveryProgressQuery(
     id: string,
     enabled: boolean,
+    salesLines: readonly SalesOrderLineItem[] = [],
 ) {
-    return useQuery({
+    const result = useQuery({
         queryKey: [...salesOrderKeys.acceptanceRoot(id), "delivery-progress"],
         queryFn: () => fetchSalesOrderDeliveryProgress(id),
         enabled: Boolean(id) && enabled,
     })
+    const progress = result.data
+    const { names } = useProductUnitNames(
+        salesLines.map((line) => line.skuId),
+        Boolean(progress),
+    )
+    const data = useMemo(() => {
+        if (!progress) return progress
+        const linesById = new Map(salesLines.map((line) => [line.id, line]))
+        const lines = progress.lines.map((line) => {
+            const salesLine = linesById.get(line.salesOrderLineId)
+            const unitName =
+                names.get(line.unitCode.trim()) ??
+                (line.unitCode === salesLine?.unit
+                    ? salesLine.unitName
+                    : undefined)
+            const withUnit = (fact: Parameters<typeof acceptanceFactUnit>[0]) =>
+                acceptanceFactUnit(
+                    fact,
+                    { unitCode: line.unitCode, unitName },
+                    names,
+                )
+            return {
+                ...line,
+                unitName,
+                pendingFacts: line.pendingFacts.map(withUnit),
+                fulfillmentFacts: line.fulfillmentFacts?.map(withUnit),
+            }
+        })
+        return {
+            ...progress,
+            lines,
+            unitName: progress.unitCode
+                ? (names.get(progress.unitCode.trim()) ??
+                  lines.find(
+                      (line) =>
+                          line.unitCode === progress.unitCode && line.unitName,
+                  )?.unitName)
+                : undefined,
+        }
+    }, [progress, salesLines, names])
+    return { ...result, data }
 }
 
 export function useCancelSalesOrderApprovalMutation() {

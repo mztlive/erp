@@ -89,7 +89,7 @@ function buildPurchaseOrderLinesColumns(
                                                     line.inquiryQuoteSource
                                                         .adopted_quantity
                                                 }
-                                                unit={line.unit}
+                                                unit={line.unitName}
                                             />
                                         </>
                                     ) : null}
@@ -127,7 +127,7 @@ function buildPurchaseOrderLinesColumns(
                 return (
                     <QuantityValue
                         value={line.quantity ?? "0"}
-                        unit={line.unit}
+                        unit={line.unitName}
                     />
                 )
             },

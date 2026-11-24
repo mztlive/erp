@@ -1,5 +1,8 @@
 "use client"
 
+import { useMemo } from "react"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useScopedListQuery } from "@/lib/use-scoped-list-query"
@@ -138,7 +141,7 @@ export function usePurchaseOrderCenterQuery(
             Awaited<ReturnType<typeof fetchPurchaseOrderCenter>>
         >(firstKey)
     const scopeVersion = baseline?.scopeVersion
-    return useQuery({
+    const result = useQuery({
         queryKey: purchaseOrderKeys.center(purchaseOrderId, {
             changeOrderId: options?.changeOrderId,
             scopeVersion,
@@ -150,17 +153,64 @@ export function usePurchaseOrderCenterQuery(
             }),
         enabled: Boolean(purchaseOrderId),
     })
+    const order = result.data
+    const sourceLines = order?.currentContent.lines
+    const { names, nameForUnit } = useProductUnitNames(
+        sourceLines?.map((line) => line.skuId),
+        Boolean(order),
+    )
+    const data = useMemo(() => {
+        if (!order) return order
+        const lines = order.currentContent.lines.map((line) => ({
+            ...line,
+            unitName: line.unitName ?? nameForUnit(line.unit, line.skuId),
+        }))
+        const linesById = new Map(lines.map((line) => [line.lineId, line]))
+        const source = order.sourceSalesOrder
+        return {
+            ...order,
+            currentContent: { ...order.currentContent, lines },
+            sourceSalesOrder: source && {
+                ...source,
+                lines: source.lines.map((line) => ({
+                    ...line,
+                    unitName: names.get(line.unit.trim()),
+                })),
+            },
+            fulfillmentQuantities: order.fulfillmentQuantities?.map((line) => ({
+                ...line,
+                unitName:
+                    names.get(line.unit?.trim() ?? "") ??
+                    linesById.get(line.lineId)?.unitName,
+            })),
+        }
+    }, [order, names, nameForUnit])
+    return { ...result, data }
 }
 
 export function useCreationBasesQuery(
     query: CreationBasesQuery = {},
     options?: { enabled?: boolean },
 ) {
-    return useQuery({
+    const result = useQuery({
         queryKey: purchaseOrderKeys.bases(query),
         queryFn: () => fetchCreationBases(query),
         enabled: options?.enabled ?? true,
     })
+    const bases = result.data
+    const { names } = useProductUnitNames([], Boolean(bases?.length))
+    const data = useMemo(
+        () =>
+            bases?.map((basis) => ({
+                ...basis,
+                lines: basis.lines.map((line) => ({
+                    ...line,
+                    unitName: names.get(line.unit.trim()),
+                })),
+            })),
+        [bases, names],
+    )
+    return { ...result, data }
 }
 
 export function useAcquireDraftTokenMutation() {

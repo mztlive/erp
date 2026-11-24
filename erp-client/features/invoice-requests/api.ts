@@ -298,11 +298,13 @@ export async function getRequestSaveState(
 
 export type SalesOrderInvoiceCandidateLine = {
     id: string
+    skuId?: string
     lineNo: number
     content: string
     quantity: string
     unitPrice: string
     unit?: string
+    unitName?: string
     lineAmount: string | null
     isGift: boolean
     selectable: boolean
@@ -454,11 +456,15 @@ export async function getSalesOrderInvoiceLines(
                 lineAmount !== "0.00"
             return {
                 id,
+                skuId,
                 lineNo,
                 content,
                 quantity,
                 unitPrice,
                 unit,
+                unitName: isVoucher
+                    ? "张"
+                    : cleanSnapshotLabel(line.unit_name) || undefined,
                 lineAmount,
                 isGift,
                 selectable: hasPositiveAmount,

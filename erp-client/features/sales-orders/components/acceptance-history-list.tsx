@@ -311,17 +311,17 @@ function HistoryLineRow({
             <span className="num flex shrink-0 flex-wrap items-center gap-x-2 text-xs">
                 {hasPass ? (
                     <span className="font-medium text-success-soft-foreground">
-                        通过 {qtyWithUnit(line.acceptedQuantity, line.unitCode)}
+                        通过 {qtyWithUnit(line.acceptedQuantity, line.unitName)}
                     </span>
                 ) : null}
                 {hasShort ? (
                     <span className="font-medium text-warning-soft-foreground">
-                        短少 {qtyWithUnit(line.shortQuantity, line.unitCode)}
+                        短少 {qtyWithUnit(line.shortQuantity, line.unitName)}
                     </span>
                 ) : null}
                 {hasReject ? (
                     <span className="font-medium text-destructive">
-                        拒收 {qtyWithUnit(line.rejectedQuantity, line.unitCode)}
+                        拒收 {qtyWithUnit(line.rejectedQuantity, line.unitName)}
                     </span>
                 ) : null}
             </span>

@@ -64,7 +64,7 @@ export function PurchaseSourceUpdateLines({
                                     ) : (
                                         <QuantityValue
                                             value={line.quantity}
-                                            unit={line.unit}
+                                            unit={line.unitName}
                                             className="max-w-full flex-wrap wrap-anywhere"
                                         />
                                     )}

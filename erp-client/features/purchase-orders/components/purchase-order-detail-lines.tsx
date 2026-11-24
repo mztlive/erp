@@ -139,7 +139,7 @@ export function PurchaseOrderDetailLines({
                                                             value={
                                                                 quote.adopted_quantity
                                                             }
-                                                            unit={line.unit}
+                                                            unit={line.unitName}
                                                         />
                                                     </>
                                                 ) : null}
@@ -158,8 +158,8 @@ export function PurchaseOrderDetailLines({
                                                 >
                                                     <span className="num">
                                                         {allocation.quantity}
-                                                        {line.unit
-                                                            ? ` ${line.unit}`
+                                                        {line.unitName
+                                                            ? ` ${line.unitName}`
                                                             : ""}
                                                     </span>{" "}
                                                     → {allocation.recipient}
@@ -191,7 +191,7 @@ export function PurchaseOrderDetailLines({
                                 ) : (
                                     <QuantityValue
                                         value={line.quantity ?? "0"}
-                                        unit={line.unit}
+                                        unit={line.unitName}
                                         className="justify-end"
                                     />
                                 )}

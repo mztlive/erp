@@ -1,4 +1,6 @@
 "use client"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
+import { useStore } from "@tanstack/react-form"
 import {
     blockedChangeOrderSections,
     ChangeOrderBlockers,
@@ -30,9 +32,15 @@ export function SalesChangeDraftFields({
     disabled: boolean
     onError: (message: string) => void
 }) {
+    const lines = useStore(form.store, (state) => state.values.lines)
+    const { names } = useProductUnitNames(
+        lines.map((line) => line.source.goods?.sku_id),
+        lines.length > 0,
+    )
     return (
         <div className="space-y-6">
             <SalesChangeLineItems
+                unitNames={names}
                 form={form}
                 id={id}
                 draft={draft}
@@ -41,6 +49,7 @@ export function SalesChangeDraftFields({
                 onError={onError}
             />
             <SalesChangeDeliverySection
+                unitNames={names}
                 form={form}
                 id={id}
                 disabled={disabled}

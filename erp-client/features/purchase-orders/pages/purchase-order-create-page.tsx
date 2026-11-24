@@ -831,12 +831,13 @@ function PurchaseOrderCreateSurface({
                 (line) => line.salesOrderLineId === salesOrderLineId,
             )
             if (!product) return
-            const allocationCount = lines.filter(
+            const liveLines = form.state.values.lines
+            const allocationCount = liveLines.filter(
                 (line) => line.salesOrderLineId === salesOrderLineId,
             ).length
             if (!canSplitSourcingProduct(product, allocationCount)) return
             const used = new Set(
-                lines
+                liveLines
                     .filter(
                         (line) =>
                             line.salesOrderLineId === salesOrderLineId &&
@@ -856,10 +857,10 @@ function PurchaseOrderCreateSurface({
                 })
                 return
             }
-            const lastIndex = lines.findLastIndex(
+            const lastIndex = liveLines.findLastIndex(
                 (line) => line.salesOrderLineId === salesOrderLineId,
             )
-            const next = [...lines]
+            const next = [...liveLines]
             next.splice(lastIndex + 1, 0, {
                 rowKey: `${salesOrderLineId}:${crypto.randomUUID()}`,
                 salesOrderLineId,
@@ -872,7 +873,102 @@ function PurchaseOrderCreateSurface({
             })
             writeLines(next)
         },
-        [lines, selectedOrder, writeLines],
+        [form, selectedOrder, writeLines],
+    )
+
+    /** 按用户选定的精确履约方案新增拆分来源，智能带入剩余缺口或可用地址，返回新增 rowKey。 */
+    const addSplitLineWithOption = React.useCallback(
+        (salesOrderLineId: string, basisId: string): string | undefined => {
+            if (!selectedOrder) return undefined
+            const product = selectedOrder.lines.find(
+                (line) => line.salesOrderLineId === salesOrderLineId,
+            )
+            if (!product) return undefined
+            const liveLines = form.state.values.lines
+            const existingLines = liveLines.filter(
+                (line) => line.salesOrderLineId === salesOrderLineId,
+            )
+            if (!canSplitSourcingProduct(product, existingLines.length)) {
+                return undefined
+            }
+            if (existingLines.some((line) => line.basisId === basisId)) {
+                return undefined
+            }
+            const option = findSourcingOption(product, basisId)
+            if (!option) return undefined
+
+            let residualQty = product.remainingQuantity
+            try {
+                const allocated = sumFixed(
+                    existingLines
+                        .filter((line) => line.selected)
+                        .map((line) => line.quantity || "0"),
+                    { maxScale: 6, outputScale: 6 },
+                )
+                const diff = subtractFixed(
+                    product.remainingQuantity,
+                    allocated,
+                    { maxScale: 6, outputScale: 6 },
+                )
+                residualQty =
+                    compareDecimal(diff, "0", 6) > 0 ? compactFixed(diff) : "0"
+            } catch {
+                residualQty = "0"
+            }
+
+            const newRowKey = `${salesOrderLineId}:${crypto.randomUUID()}`
+            const draftLine: SourcingLineInput = {
+                rowKey: newRowKey,
+                salesOrderLineId,
+                selected: true,
+                quantity: "",
+                basisId: option.basisId,
+                targetWarehouseId: "",
+                targetWarehouseName: "",
+                expectedDeliveryDate: option.expectedDeliveryDate,
+            }
+
+            if (usesAddressQuantity(product, draftLine)) {
+                if (compareDecimal(residualQty, "0", 6) > 0) {
+                    const available = availableDeliveryRows(
+                        product,
+                        draftLine,
+                        liveLines,
+                    ).filter(
+                        (addr) =>
+                            compareDecimal(addr.quantity, "0", 6) > 0 &&
+                            addressDeliverable(option, addr.region_code),
+                    )
+                    draftLine.deliveryAllocations = available
+                    draftLine.quantity = deliveryQuantity(available)
+                } else {
+                    draftLine.deliveryAllocations = []
+                    draftLine.quantity = "0"
+                }
+            } else if (compareDecimal(residualQty, "0", 6) > 0) {
+                try {
+                    draftLine.quantity =
+                        compareDecimal(
+                            residualQty,
+                            option.maxCreateQuantity,
+                            6,
+                        ) <= 0
+                            ? residualQty
+                            : option.maxCreateQuantity
+                } catch {
+                    draftLine.quantity = option.maxCreateQuantity
+                }
+            }
+
+            const lastIndex = liveLines.findLastIndex(
+                (line) => line.salesOrderLineId === salesOrderLineId,
+            )
+            const next = [...liveLines]
+            next.splice(lastIndex + 1, 0, draftLine)
+            writeLines(next)
+            return newRowKey
+        },
+        [form, selectedOrder, writeLines],
     )
 
     /** 一键将剩余缺口（或指定/剩余未分配地址）拆给新来源，返回新增 rowKey。 */
@@ -1522,6 +1618,9 @@ function PurchaseOrderCreateSurface({
                                             }
                                             order={selectedOrder}
                                             onAddSplit={addSplitLine}
+                                            onAddSplitWithOption={
+                                                addSplitLineWithOption
+                                            }
                                             onAddResidualSplit={
                                                 addResidualSplitLine
                                             }

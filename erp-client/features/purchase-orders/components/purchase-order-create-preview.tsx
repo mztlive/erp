@@ -534,7 +534,8 @@ export function PurchaseOrderCreatePreviewDialog({
                                                                 row.remainingQuantity
                                                             }
                                                             unit={
-                                                                row.product.unit
+                                                                row.product
+                                                                    .unitName
                                                             }
                                                         />
                                                     </span>

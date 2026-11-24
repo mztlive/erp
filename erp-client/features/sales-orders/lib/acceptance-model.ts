@@ -50,6 +50,7 @@ export type AcceptanceLineProgress = {
     lineNo: number
     itemSnapshot: string
     unitCode: string
+    unitName?: string
     requiredQuantity: string
     deliveredQuantity: string
     acceptedQuantity: string
@@ -67,6 +68,7 @@ export type AcceptanceOrderProgress = {
     acceptedQuantity: string
     pendingQuantity: string
     unitCode: string | null
+    unitName?: string
     pendingFactCount: number
 }
 
@@ -116,9 +118,22 @@ function sumQty(values: readonly string[]): string {
     )
 }
 
-export function qtyWithUnit(quantity: string, unitCode: string): string {
+export function qtyWithUnit(quantity: string, unitName?: string): string {
     const qty = formatQty(quantity)
-    return unitCode ? `${qty} ${unitCode}` : qty
+    return unitName ? `${qty} ${unitName}` : qty
+}
+
+export function acceptanceFactUnit(
+    fact: AcceptanceEligibleFact,
+    line: Pick<AcceptanceSalesLineGroup, "unitCode" | "unitName">,
+    names: ReadonlyMap<string, string>,
+): AcceptanceEligibleFact {
+    return {
+        ...fact,
+        unitName:
+            names.get(fact.unitCode.trim()) ??
+            (fact.unitCode === line.unitCode ? line.unitName : undefined),
+    }
 }
 
 export function todayLocalDateTimeInput(): string {
@@ -308,7 +323,7 @@ export function collectValidationIssues(
             issues.push({
                 id: `qty-cap-${factId}`,
                 label: draft.fact.fulfillmentNo,
-                message: `不能超过待验 ${formatQty(draft.fact.eligibleQuantity)} ${draft.fact.unitCode}`,
+                message: `不能超过待验 ${qtyWithUnit(draft.fact.eligibleQuantity, draft.fact.unitName)}`,
                 targetId: `batch-qty-${factId}`,
             })
         }
@@ -440,6 +455,7 @@ export function buildLineProgress(
         lineNo: group.lineNo,
         itemSnapshot: group.itemSnapshot,
         unitCode: group.unitCode,
+        unitName: group.unitName,
         requiredQuantity: required,
         fulfillmentFacts: group.fulfillmentFacts,
         deliveredQuantity: delivered,
@@ -468,6 +484,10 @@ export function buildOrderProgress(
         acceptedQuantity: sum((line) => line.acceptedQuantity),
         pendingQuantity: sum((line) => line.pendingQuantity),
         unitCode,
+        unitName: unitCode
+            ? lines.find((line) => line.unitCode === unitCode && line.unitName)
+                  ?.unitName
+            : undefined,
         pendingFactCount: lines.reduce(
             (count, line) => count + line.pendingFacts.length,
             0,
@@ -643,7 +663,7 @@ function acceptanceConfirmResultTone(
 }
 
 function acceptanceConfirmResultText(draft: AcceptanceBatchDraft): string {
-    const unit = draft.fact.unitCode
+    const unit = draft.fact.unitName
     if (draft.result === "PASS") {
         return `通过 ${qtyWithUnit(passQuantity(draft), unit)}`
     }

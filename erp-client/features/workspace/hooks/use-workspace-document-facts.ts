@@ -1,11 +1,13 @@
 "use client"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { useQuery } from "@tanstack/react-query"
 
 import {
     fetchWorkspaceDocumentFacts,
     shouldLoadDocumentFacts,
+    withWorkspaceUnitNames,
     type WorkspaceDocumentFacts,
 } from "@/features/workspace/lib/document-facts"
 import type { WorkspaceWorkItem } from "@/features/workspace/types"
@@ -60,8 +62,19 @@ export function useWorkspaceDocumentFacts(item: WorkspaceWorkItem) {
           : query.isError
             ? null
             : (query.data ?? null)
+    const quantities =
+        facts?.lines.flatMap((line) =>
+            line.productQuantity ? [line.productQuantity] : [],
+        ) ?? []
+    const { names } = useProductUnitNames(
+        quantities.map((line) => line.skuId),
+        quantities.length > 0,
+    )
     return {
-        facts,
+        facts:
+            facts && quantities.length
+                ? withWorkspaceUnitNames(facts, names)
+                : facts,
         isPending: enabled && query.isPending,
         isError: enabled && query.isError,
         error: query.error,

@@ -146,7 +146,7 @@ export function PurchaseOrderPaperDocument({
                         ) : (
                             <QuantityValue
                                 value={row.quantity}
-                                unit={row.unit ?? ""}
+                                unit={row.unitName ?? ""}
                             />
                         ),
                 },
@@ -279,7 +279,10 @@ export function PurchaseOrderPaperDocument({
             }
             appendix={
                 <PurchaseDeliveryPlan
-                    lines={currentContent.lines}
+                    lines={currentContent.lines.map((line) => ({
+                        ...line,
+                        unit: line.unitName,
+                    }))}
                     warehouseName={header.targetWarehouseName}
                     warehouse={header.fulfillmentResponsibility === "WAREHOUSE"}
                     supplierName={header.supplierSnapshot}

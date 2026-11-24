@@ -17,6 +17,7 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog"
 import { FieldError } from "@/components/ui/field"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compareDecimal, subtractFixed, sumFixed } from "@/lib/fixed-decimal"
 import { useDeliveryCoverage } from "../hooks/use-delivery-coverage"
@@ -65,6 +66,8 @@ function DeliveryAllocationForm({
     onClose,
     prefix,
 }: Props & { onClose: () => void; prefix: string }) {
+    const { nameForUnit } = useProductUnitNames([line.sku], Boolean(line.sku))
+    const unitName = nameForUnit(line.unit, line.sku) ?? ""
     const sequence = useRef(0)
     const schema = z
         .object({
@@ -78,6 +81,7 @@ function DeliveryAllocationForm({
             if (!rows.length) return
             const summary = allocationSummary({
                 ...line,
+                unit: unitName,
                 deliveryAllocations: rows,
             })
             if (!summary.complete)
@@ -135,7 +139,7 @@ function DeliveryAllocationForm({
                     {line.name || "商品"}
                     {line.specification ? ` · ${line.specification}` : ""} ·
                     销售数量{" "}
-                    <QuantityValue value={line.quantity} unit={line.unit} />
+                    <QuantityValue value={line.quantity} unit={unitName} />
                 </DialogDescription>
             </DialogHeader>
             <form
@@ -151,6 +155,7 @@ function DeliveryAllocationForm({
                     {(rows) => {
                         const summary = allocationSummary({
                             ...line,
+                            unit: unitName,
                             deliveryAllocations: rows,
                         })
                         return (
@@ -281,7 +286,7 @@ function DeliveryAllocationForm({
                                             {(field) => (
                                                 <field.TextField
                                                     id={`${prefix}-${row.editKey}-quantity`}
-                                                    label={`分配数量（${line.unit || "基础单位"}）`}
+                                                    label={`分配数量（${unitName || "基础单位"}）`}
                                                     type="text"
                                                     inputMode="decimal"
                                                     inputClassName="num"

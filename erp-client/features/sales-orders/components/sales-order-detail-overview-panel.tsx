@@ -98,7 +98,7 @@ function CardLineItemsTable({ order }: { order: SalesOrderDetailView }) {
                                 </TableCell>
                             ) : null}
                             <TableCell data-align="end" className="num">
-                                {line.quantity} {line.unit}
+                                {line.quantity} {line.unitName}
                             </TableCell>
                             <TableCell data-align="end">
                                 <MoneyValue
@@ -152,6 +152,7 @@ export function OverviewPanel({
                     line.id,
                     {
                         unit: line.unit || undefined,
+                        unitName: line.unitName,
                         sku:
                             line.sku && line.sku !== "无规格"
                                 ? line.sku

@@ -231,6 +231,7 @@ export function mapWorkingCopyLines(
         const item: SalesOrderLineItem = {
             id: line.sales_order_line_id || line.id,
             name: line.item_name_snapshot,
+            skuId: skuId || undefined,
             isGift: line.pricing_mode === "GIFT",
             // 当前建单会把稳定 SKU id 同时写进 spec_snapshot；详情不得回显内部 id。
             sku:
@@ -244,6 +245,14 @@ export function mapWorkingCopyLines(
                 line.unit_snapshot ||
                 line.base_unit_code ||
                 (isVoucher ? "张" : ""),
+            unitName:
+                snapshotLabel(line.unit_name) ??
+                (isVoucher
+                    ? "张"
+                    : line.base_unit_code &&
+                        line.unit_snapshot !== line.base_unit_code
+                      ? snapshotLabel(line.unit_snapshot)
+                      : undefined),
             deliveryAllocations: line.delivery_allocations ?? [],
             unitPriceGross: line.unit_price_gross ?? "0.00",
             amountGross: line.gross_amount ?? line.transaction_amount ?? "0.00",
@@ -289,8 +298,12 @@ function snapshotLabel(value?: string | null): string | undefined {
 
 function mapRevisionLines(
     lines: BackendRevision["lines"],
+    commercialLines: BackendRevision["commercial_lines"],
 ): SalesOrderRevisionSnapshot["lines"] {
     if (!lines?.length) return []
+    const commercialByNo = new Map(
+        commercialLines?.map((line) => [line.line_no, line]),
+    )
     return [...lines]
         .sort((a, b) => a.line_no - b.line_no)
         .map((line) => ({
@@ -298,6 +311,10 @@ function mapRevisionLines(
             name: line.item_name,
             spec: snapshotLabel(line.spec),
             unit: snapshotLabel(line.unit),
+            unitName: snapshotLabel(
+                commercialByNo.get(line.line_no)?.unit_name,
+            ),
+            skuId: commercialByNo.get(line.line_no)?.sku_id ?? undefined,
             amountGross: line.gross_amount,
         }))
 }
@@ -320,7 +337,7 @@ export function mapRevisions(
         revisions.map((rev) => [rev.id, rev.revision_no]),
     )
     return revisions.map((rev) => {
-        const lines = mapRevisionLines(rev.lines)
+        const lines = mapRevisionLines(rev.lines, rev.commercial_lines)
         const previousFromList = rev.previous_revision_id
             ? revisionNoById.get(rev.previous_revision_id)
             : undefined

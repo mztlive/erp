@@ -25,7 +25,7 @@ export function sellableItemToPick(row: MasterDataListItem): SellableSkuPick {
         skuNo: row.stableNo,
         name: row.name,
         specificationLabel: item?.specificationLabel ?? "",
-        baseUnit: item?.baseUnit ?? "",
+        baseUnit: item?.baseUnitName ?? "",
         baseUnitCode: item?.baseUnitCode,
         salesVisiblePriceGross: item?.salesVisiblePriceGross ?? "",
         bulkPriceGross: item?.bulkPriceGross,

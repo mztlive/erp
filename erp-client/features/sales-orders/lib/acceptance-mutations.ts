@@ -100,17 +100,15 @@ export async function postCustomerAcceptanceWorkspace(
                 "验收单号未提供",
             acceptanceId: header.id,
             remainingEligibleCount: remainingFacts.length,
-            remainingEligibleQuantityLabel: Array.from(quantitiesByUnit)
-                .map(
-                    ([unit, quantities]) =>
-                        `${compactFixed(
-                            sumFixed(quantities, {
-                                maxScale: 6,
-                                outputScale: 6,
-                            }),
-                        )}${unit}`,
-                )
-                .join("、"),
+            remainingEligibleByUnit: Array.from(
+                quantitiesByUnit,
+                ([unitCode, quantities]) => ({
+                    unitCode,
+                    quantity: compactFixed(
+                        sumFixed(quantities, { maxScale: 6, outputScale: 6 }),
+                    ),
+                }),
+            ),
             overallResult: overall,
             factOnlyNotice: FACT_ONLY_NOTICE,
         }

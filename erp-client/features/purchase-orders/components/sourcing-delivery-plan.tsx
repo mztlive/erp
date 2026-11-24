@@ -101,7 +101,7 @@ export function SalesDeliveryRequirements({
                                 </span>
                                 <QuantityValue
                                     value={compactFixed(row.quantity)}
-                                    unit={product.unit}
+                                    unit={product.unitName ?? ""}
                                 />
                             </div>
                             <p className="mt-1 break-words text-muted-foreground">
@@ -164,14 +164,16 @@ export function SourcingDeliveryRequirementSection({
                                     <span className="text-right text-xs">
                                         <QuantityValue
                                             value={row.quantity}
-                                            unit={product.unit}
+                                            unit={product.unitName ?? ""}
                                         />
                                         {row.remaining !== row.quantity ? (
                                             <span className="block text-muted-foreground">
                                                 剩余{" "}
                                                 <QuantityValue
                                                     value={row.remaining}
-                                                    unit={product.unit}
+                                                    unit={
+                                                        product.unitName ?? ""
+                                                    }
                                                 />
                                             </span>
                                         ) : null}
@@ -316,7 +318,10 @@ export function SourcingDeliveryEditor({
                                                                 addressIndex
                                                             ]?.quantity ?? "0"
                                                         }
-                                                        unit={product.unit}
+                                                        unit={
+                                                            product.unitName ??
+                                                            ""
+                                                        }
                                                     />
                                                 </span>
                                             </label>
@@ -338,7 +343,7 @@ export function SourcingDeliveryEditor({
                                                     ) === "NOT_DELIVERABLE"
                                                 }
                                                 value={row.quantity}
-                                                aria-label={`${row.recipient}，${fullDeliveryAddress(row)}，本次交付数量（${product.unit}）`}
+                                                aria-label={`${row.recipient}，${fullDeliveryAddress(row)}，本次交付数量（${product.unitName ?? ""}）`}
                                                 onBlur={() => {
                                                     // 只聚焦未修改时不固定地址数量，仍跟随本次分配数量。
                                                     if (customized)
@@ -383,12 +388,12 @@ export function SourcingDeliveryEditor({
                                     合计{" "}
                                     <QuantityValue
                                         value={total}
-                                        unit={product.unit}
+                                        unit={product.unitName ?? ""}
                                     />{" "}
                                     / 本次分配{" "}
                                     <QuantityValue
                                         value={line.quantity || "0"}
-                                        unit={product.unit}
+                                        unit={product.unitName ?? ""}
                                     />
                                 </p>
                             </>
@@ -429,7 +434,9 @@ export function SourcingDeliveryEditor({
                                                 <QuantityValue
                                                     className="text-xs"
                                                     value={row.quantity}
-                                                    unit={product.unit}
+                                                    unit={
+                                                        product.unitName ?? ""
+                                                    }
                                                 />
                                             </li>
                                         ))}
@@ -483,7 +490,7 @@ function CompactDeliverySummary({
                     <span className="text-right text-xs">
                         <QuantityValue
                             value={row.quantity}
-                            unit={product.unit}
+                            unit={product.unitName ?? ""}
                         />
                         {row.remaining !== undefined &&
                         row.remaining !== row.quantity ? (
@@ -491,7 +498,7 @@ function CompactDeliverySummary({
                                 剩余{" "}
                                 <QuantityValue
                                     value={row.remaining}
-                                    unit={product.unit}
+                                    unit={product.unitName ?? ""}
                                 />
                             </span>
                         ) : null}

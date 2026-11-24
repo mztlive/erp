@@ -88,7 +88,7 @@ export function FulfillmentReceiptForm({
                         <p className="text-body-compact font-medium">
                             {lineItemTitle(src?.itemName, i)}
                             {displayText(src?.remainingQuantity)
-                                ? ` · 剩余可收 ${src?.remainingQuantity}${displayText(src?.unitCode)}`
+                                ? ` · 剩余可收 ${src?.remainingQuantity}${displayText(src?.unitName)}`
                                 : ""}
                         </p>
                         <div className="grid gap-3 sm:grid-cols-3">

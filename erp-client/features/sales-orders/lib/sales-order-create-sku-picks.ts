@@ -24,7 +24,7 @@ function lineFromPick(
         sku: pick.skuId,
         skuRevisionId: pick.skuRevisionId,
         specification: pick.specificationLabel,
-        unit: pick.baseUnit || base.unit,
+        unit: pick.baseUnit || pick.baseUnitCode || base.unit,
         unitPriceGross: base.unitPriceGross,
         pricingMode: "MANUAL",
         priceSource: undefined,

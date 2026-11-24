@@ -86,6 +86,7 @@ export type ApprovalPurchaseLine = {
     specification: string | null
     quantity: string | null
     unit: string | null
+    unitName?: string
     unit_cost_gross: string | null
     /** 行含税金额；费用行按此核对。 */
     gross_amount?: string
@@ -107,6 +108,7 @@ export type ApprovalPurchaseLine = {
         specification: string | null
         quantity: string
         unit: string
+        unitName?: string
         unit_price_gross: string
         /** 销售填写的采购供给价（含税单价）；未填写为空。 */
         procurement_supply_price_gross?: string | null
@@ -142,6 +144,7 @@ export type ApprovalSalesSubmission = {
         sku_id: string | null
         spec_snapshot: string | null
         unit_snapshot: string | null
+        base_unit_code?: string | null
         unit_name?: string
         welfare_scenario?: string | null
         pricing_mode?: "MANUAL" | "GIFT"

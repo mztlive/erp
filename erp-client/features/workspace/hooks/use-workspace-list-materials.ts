@@ -11,6 +11,7 @@ import {
     type ApprovalListMaterialReference,
 } from "@/features/approval-workflow/api/materials"
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { isApiError } from "@/lib/api/errors"
 import { displayName } from "@/lib/display-name"
 import { queryKeyRoots } from "@/lib/query-key-roots"
@@ -23,6 +24,7 @@ import {
     fetchWorkspaceDocumentFacts,
     WorkspaceMaterialReferenceMismatch,
     workspaceTaskListSource,
+    withWorkspaceUnitNames,
     type WorkspaceDocumentFacts,
     type WorkspaceTaskListMaterials,
 } from "../lib/document-facts"
@@ -184,6 +186,18 @@ export function useWorkspaceListMaterials(items: readonly WorkspaceWorkItem[]) {
         }),
     })
 
+    const quantities = documentQueries.flatMap(({ data }) =>
+        data && typeof data === "object"
+            ? data.lines.flatMap((line) =>
+                  line.productQuantity ? [line.productQuantity] : [],
+              )
+            : [],
+    )
+    const { names } = useProductUnitNames(
+        quantities.map((line) => line.skuId),
+        quantities.length > 0,
+    )
+
     return useMemo<ListMaterialRow[]>(() => {
         const approvalResults = new Map(
             approvals.map(([key], index) => [key, approvalData?.[index]]),
@@ -244,7 +258,11 @@ export function useWorkspaceListMaterials(items: readonly WorkspaceWorkItem[]) {
                         item,
                         materialNotice: "资料与任务不一致，请刷新任务",
                     }
-                if (query.data) return rowWithFacts(item, query.data)
+                if (query.data)
+                    return rowWithFacts(
+                        item,
+                        withWorkspaceUnitNames(query.data, names),
+                    )
             }
             if (
                 query.error instanceof WorkspaceMaterialReferenceMismatch ||
@@ -280,6 +298,7 @@ export function useWorkspaceListMaterials(items: readonly WorkspaceWorkItem[]) {
         approvals,
         documentQueries,
         documents,
+        names,
         profile,
         refetchApprovals,
         rows,

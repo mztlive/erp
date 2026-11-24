@@ -154,8 +154,7 @@ export function SalesDeliveryImportPreview({
                                                                 {addressText(
                                                                     before,
                                                                     regions,
-                                                                    group.line
-                                                                        .unit,
+                                                                    group.unitName,
                                                                 )}
                                                             </p>
                                                         )}
@@ -167,8 +166,7 @@ export function SalesDeliveryImportPreview({
                                                                 {addressText(
                                                                     after,
                                                                     regions,
-                                                                    group.line
-                                                                        .unit,
+                                                                    group.unitName,
                                                                 )}
                                                             </p>
                                                         )}

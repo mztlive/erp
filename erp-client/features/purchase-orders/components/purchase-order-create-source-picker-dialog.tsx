@@ -299,7 +299,7 @@ function SourcingSalesOrderPaper({ order }: { order: SourcingSalesOrder }) {
                     cell: (row) => (
                         <QuantityValue
                             value={row.salesQuantity}
-                            unit={row.unit}
+                            unit={row.unitName}
                         />
                     ),
                 },
@@ -311,7 +311,7 @@ function SourcingSalesOrderPaper({ order }: { order: SourcingSalesOrder }) {
                     cell: (row) => (
                         <QuantityValue
                             value={row.coveredQuantity}
-                            unit={row.unit}
+                            unit={row.unitName}
                         />
                     ),
                 },
@@ -323,7 +323,7 @@ function SourcingSalesOrderPaper({ order }: { order: SourcingSalesOrder }) {
                     cell: (row) => (
                         <QuantityValue
                             value={row.remainingQuantity}
-                            unit={row.unit}
+                            unit={row.unitName}
                         />
                     ),
                 },

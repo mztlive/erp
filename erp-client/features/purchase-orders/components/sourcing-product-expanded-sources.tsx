@@ -65,7 +65,7 @@ export function SourcingProductExpandedSources({
                                     {line.quantity ? (
                                         <QuantityValue
                                             value={line.quantity}
-                                            unit={row.product.unit}
+                                            unit={row.product.unitName ?? ""}
                                         />
                                     ) : (
                                         "待填写"

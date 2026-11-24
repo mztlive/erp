@@ -123,10 +123,12 @@ export type ProgressTrack = {
 export type SalesOrderLineItem = {
     id: string
     name: string
+    skuId?: string
     sku?: string
     /** 数量，十进制字符串 */
     quantity: string
     unit: string
+    unitName?: string
     /** 含税单价 */
     deliveryAllocations?: SalesDeliveryAllocation[]
     unitPriceGross: string
@@ -160,6 +162,7 @@ export type SalesOrderProcurementCoverageLine = {
     name: string
     specification?: string
     unit?: string
+    unitName?: string
     quantity: string
     coveredQuantity: string
     remainingQuantity: string
@@ -243,6 +246,8 @@ export type SalesOrderRevisionLineSnapshot = {
     name: string
     spec?: string
     unit?: string
+    unitName?: string
+    skuId?: string
     amountGross: string
 }
 

@@ -1,4 +1,6 @@
 "use client"
+
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { type ComponentProps, useEffect, useRef, useState } from "react"
 import { MapPinIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { FormValidationSummary, useAppForm } from "@/components/form"
@@ -199,6 +201,7 @@ function ArrangementEditor({
     onBusyChange: (busy: boolean) => void
 }) {
     const [data] = useState(incomingData)
+    const { names } = useProductUnitNames([], Boolean(data.lines.length))
     const mutation = useSaveArrangement(scope, objectId)
     useEffect(() => {
         onBusyChange(mutation.isPending)
@@ -325,7 +328,9 @@ function ArrangementEditor({
                         {lines.map((line, index) => {
                             const source = data.lines[index]
                             const displayUnit =
-                                unitLabels?.[source.line_id] || source.unit
+                                unitLabels?.[source.line_id] ??
+                                names.get(source.unit.trim()) ??
+                                ""
                             const linePrefix = `${prefix}-${toAutomationIdSegment(line.line_id)}`
                             return (
                                 <section

@@ -168,7 +168,7 @@ export function PurchaseComparisonRow({
                                 unit={
                                     line.unit === line.source.unit
                                         ? ""
-                                        : line.source.unit
+                                        : line.source.unitName
                                 }
                             />
                         ) : (
@@ -178,7 +178,7 @@ export function PurchaseComparisonRow({
                         {line.quantity != null ? (
                             <QuantityValue
                                 value={line.quantity}
-                                unit={line.unit ?? ""}
+                                unit={line.unitName}
                             />
                         ) : (
                             "—"

@@ -135,8 +135,10 @@ type PurchaseOrderLineView = Readonly<{
     inquiryQuoteSource?: PurchaseInquiryQuoteSource
     itemName: string
     itemSku?: string
+    skuId?: string
     quantity?: string
     unit?: string
+    unitName?: string
     unitCostGross: string
     inputTaxRate: string
     /** 服务端按行舍入到分后的金额 */
@@ -229,6 +231,7 @@ export type PurchaseSourceSalesOrderView = Readonly<{
         }[]
         quantity: string
         unit: string
+        unitName?: string
         unitPriceGross: string
         grossAmount: string
     }>[]
@@ -435,6 +438,7 @@ export type PurchaseOrderCenterView = Readonly<{
         lineId: string
         productName: string | null
         unit: string | null
+        unitName?: string
         orderedQuantity: string | null
         inboundQuantity: string | null
         shippedQuantity: string | null
@@ -531,6 +535,7 @@ export type PurchaseCreationBasis = Readonly<{
         remainingQuantity: string
         maxCreateQuantity: string
         unit: string
+        unitName?: string
         quantityScale?: number | null
         unitCostGross: string
         inputTaxRate: string

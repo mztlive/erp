@@ -384,13 +384,13 @@ export function salesChangePickedLine(
         line_type: "GOODS_SERVICE",
         item_name_snapshot: pick.name,
         spec_snapshot: pick.specificationLabel || null,
-        unit_snapshot: pick.baseUnit,
+        unit_snapshot: pick.baseUnit || pick.baseUnitCode || "",
         sales_tax_rate: template?.taxRate ?? "0.13",
         voucher: null,
         goods: {
             sku_id: pick.skuId,
             sku_revision_id: pick.skuRevisionId,
-            base_unit_code: pick.baseUnit,
+            base_unit_code: pick.baseUnit || pick.baseUnitCode || "",
             fulfillment_due_at: 0,
             welfare_scenario: template?.source.goods?.welfare_scenario ?? null,
             procurement_supply_price_gross: null,
@@ -412,4 +412,18 @@ export function salesChangePickedLine(
         faceValue: "1",
         cardCount: "1",
     }
+}
+
+/** 仅用于展示冻结的销售改单明细单位。 */
+export function salesChangeUnitName(
+    line: SalesChangeDraftLine,
+    names: ReadonlyMap<string, string>,
+) {
+    if (!line.goods) return "张"
+    const snapshot = line.unit_snapshot?.trim()
+    const code = line.goods.base_unit_code.trim()
+    return (
+        names.get(snapshot || code) ??
+        (snapshot && snapshot !== code ? snapshot : undefined)
+    )
 }

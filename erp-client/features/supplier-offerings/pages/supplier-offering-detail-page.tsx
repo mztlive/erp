@@ -221,6 +221,7 @@ export function SupplierOfferingDetailPage({
                 ) : (
                     <DetailWorkspaceSection>
                         <OfferingHistory
+                            skuId={offering.sku_id}
                             offeringId={offeringId}
                             canViewCosts={canViewCosts}
                         />

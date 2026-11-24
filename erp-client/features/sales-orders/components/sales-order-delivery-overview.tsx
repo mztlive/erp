@@ -220,8 +220,9 @@ export function SalesOrderDeliveryOverview({
                                                     采购超出{" "}
                                                     {qtyWithUnit(
                                                         procurementLine.excessQuantity,
-                                                        procurementLine.unit ??
-                                                            line.unit,
+                                                        procurementLine.unitName ??
+                                                            line.unitName ??
+                                                            "",
                                                     )}
                                                     ，待调减
                                                 </p>
@@ -231,8 +232,9 @@ export function SalesOrderDeliveryOverview({
                                                     尚余{" "}
                                                     {qtyWithUnit(
                                                         procurementLine.remainingQuantity,
-                                                        procurementLine.unit ??
-                                                            line.unit,
+                                                        procurementLine.unitName ??
+                                                            line.unitName ??
+                                                            "",
                                                     )}{" "}
                                                     待安排采购或出库
                                                 </p>
@@ -244,7 +246,7 @@ export function SalesOrderDeliveryOverview({
                                         >
                                             <QuantityValue
                                                 value={line.quantity}
-                                                unit={line.unit}
+                                                unit={line.unitName ?? ""}
                                             />
                                         </TableCell>
                                         <TableCell
@@ -281,7 +283,7 @@ export function SalesOrderDeliveryOverview({
                                             ) : progress ? (
                                                 <DeliveryLineProgressCell
                                                     progress={progress}
-                                                    unit={line.unit}
+                                                    unit={line.unitName ?? ""}
                                                 />
                                             ) : (
                                                 <span className="text-xs text-muted-foreground">
@@ -364,8 +366,9 @@ function DeliveryOverviewMetrics({
         isPositiveQty(line.pendingQuantity),
     ).length
 
-    const unit = progress.unitCode
-    const remainingQty = unit
+    const unit = progress.unitName
+    const singleUnit = Boolean(progress.unitCode)
+    const remainingQty = singleUnit
         ? clampZeroFixed(
               subtractFixed(
                   progress.requiredQuantity,
@@ -375,10 +378,10 @@ function DeliveryOverviewMetrics({
               { maxScale: 6, outputScale: 6 },
           )
         : "0"
-    const deliveredPct = unit
+    const deliveredPct = singleUnit
         ? progressPercent(progress.deliveredQuantity, progress.requiredQuantity)
         : linePercent(deliveredLines, totalLines)
-    const acceptedPct = unit
+    const acceptedPct = singleUnit
         ? progressPercent(progress.acceptedQuantity, progress.requiredQuantity)
         : linePercent(doneLines, totalLines)
     const hasPending = progress.pendingFactCount > 0
@@ -394,7 +397,7 @@ function DeliveryOverviewMetrics({
                     emphasis="primary"
                     label="已交付"
                     value={
-                        unit ? (
+                        singleUnit ? (
                             qtyWithUnit(progress.deliveredQuantity, unit)
                         ) : (
                             <span>
@@ -409,7 +412,7 @@ function DeliveryOverviewMetrics({
                                 acceptedPct={acceptedPct}
                             />
                             <span className="num block">
-                                {unit
+                                {singleUnit
                                     ? isPositiveQty(remainingQty)
                                         ? `销售 ${qtyWithUnit(progress.requiredQuantity, unit)} · 未交 ${qtyWithUnit(remainingQty, unit)}`
                                         : `共 ${qtyWithUnit(progress.requiredQuantity, unit)} · 已全部交付`
@@ -422,7 +425,7 @@ function DeliveryOverviewMetrics({
                     label="待客户验收"
                     value={
                         <span className={cn(hasPending && "text-primary")}>
-                            {unit
+                            {singleUnit
                                 ? qtyWithUnit(progress.pendingQuantity, unit)
                                 : `${progress.pendingFactCount} 批`}
                         </span>
@@ -441,7 +444,7 @@ function DeliveryOverviewMetrics({
                 <DetailWorkspaceMetricItem
                     label="已验收通过"
                     value={
-                        unit ? (
+                        singleUnit ? (
                             qtyWithUnit(progress.acceptedQuantity, unit)
                         ) : (
                             <span>

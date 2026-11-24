@@ -276,7 +276,7 @@ export async function centerProduct(
             bulkPriceGross: rev?.bulk_price_gross ?? undefined,
             bulkMinQuantity: rev?.bulk_min_quantity ?? undefined,
             marketPrice: rev?.market_price ?? undefined,
-            baseUnit: unit?.name ?? unit?.symbol,
+            baseUnit: unit?.name,
             listingStatus:
                 sku.listing_status === "listed" ? "LISTED" : "UNLISTED",
             lifecycleStatus: asLifecycle(sku.status),
@@ -296,7 +296,7 @@ export async function centerProduct(
         specification: currentRev?.specification ?? undefined,
         baseUnitId: primaryUnit?.id ?? "",
         baseUnitCode: primaryUnit?.unit_code ?? "",
-        baseUnit: primaryUnit?.name ?? primaryUnit?.symbol ?? "",
+        baseUnit: primaryUnit?.name ?? "",
         categoryId: currentRev?.category_id ?? "",
         category: category?.name ?? "",
         brandId: currentRev?.brand_id ?? "",

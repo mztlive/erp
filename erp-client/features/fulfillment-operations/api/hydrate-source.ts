@@ -16,7 +16,9 @@ type SalesOrderLineSnapshot = Readonly<{
     id?: string
     sales_order_line_id?: string
     item_name_snapshot?: string
+    sku_id?: string | null
     unit_snapshot?: string | null
+    unit_name?: string | null
     base_unit_code?: string | null
 }>
 
@@ -44,6 +46,7 @@ type SalesOrderDisplay = Readonly<{
 type PurchaseOrderLineSnapshot = Readonly<{
     line_id?: string
     product_name?: string | null
+    sku_id?: string | null
     base_unit_code?: string | null
     sales_order_line_id?: string | null
     procurement_confirmation_line_id?: string | null
@@ -108,10 +111,7 @@ function salesSnapshot(detail: SalesOrderDisplay):
         : detail.submissions?.[0]
 }
 
-function salesLineName(
-    detail: SalesOrderDisplay,
-    salesOrderLineId: string,
-): { itemName?: string; unitCode?: string } {
+function salesLineName(detail: SalesOrderDisplay, salesOrderLineId: string) {
     const lines = salesSnapshot(detail)?.lines ?? []
     const line = lines.find(
         (candidate) =>
@@ -124,13 +124,15 @@ function salesLineName(
             line?.item_name_snapshot,
         ),
         unitCode: firstText(line?.unit_snapshot, line?.base_unit_code),
+        unitName: firstText(line?.unit_name),
+        skuId: line?.sku_id ?? undefined,
     }
 }
 
 function purchaseLineName(
     detail: PurchaseOrderDisplay,
     line: FulfillmentSourceLine,
-): { itemName?: string; unitCode?: string } {
+) {
     const match = (detail.lines ?? []).find(
         (candidate) =>
             (line.purchaseRevisionLineId &&
@@ -146,6 +148,7 @@ function purchaseLineName(
             match?.product_name,
         ),
         unitCode: firstText(match?.base_unit_code),
+        skuId: match?.sku_id ?? undefined,
     }
 }
 
@@ -236,10 +239,16 @@ export async function enrichOperationDisplay(
     const lines = operation.lines.map((line) => {
         const fromPurchase = purchaseOrder
             ? purchaseLineName(purchaseOrder, line)
-            : {}
+            : undefined
         const fromSales = salesOrder
             ? salesLineName(salesOrder, line.salesOrderLineId)
-            : {}
+            : undefined
+        const unitCode =
+            firstText(
+                line.unitCode,
+                fromPurchase?.unitCode,
+                fromSales?.unitCode,
+            ) ?? ""
         return {
             ...line,
             itemName:
@@ -250,15 +259,16 @@ export async function enrichOperationDisplay(
                         line.purchaseRevisionLineId,
                     ],
                     line.itemName,
-                    fromPurchase.itemName,
-                    fromSales.itemName,
+                    fromPurchase?.itemName,
+                    fromSales?.itemName,
                 ) ?? "",
-            unitCode:
-                firstText(
-                    line.unitCode,
-                    fromPurchase.unitCode,
-                    fromSales.unitCode,
-                ) ?? "",
+            skuId: line.skuId ?? fromPurchase?.skuId ?? fromSales?.skuId,
+            unitCode,
+            unitName:
+                line.unitName ??
+                (unitCode === fromSales?.unitCode
+                    ? fromSales.unitName
+                    : undefined),
         }
     })
 

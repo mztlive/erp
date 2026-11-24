@@ -123,7 +123,7 @@ function DeliveryForm({
                     { maxScale: 6, outputScale: 6 },
                 ),
             ),
-            unit: displayText(source?.unitCode),
+            unit: displayText(source?.unitName),
             packages,
             pending: Boolean(
                 draft.pendingTrackingLineIds?.includes(salesOrderLineId),

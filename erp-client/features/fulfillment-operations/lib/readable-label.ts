@@ -18,7 +18,7 @@ export function displayText(
 type RemainingLine = Readonly<{
     itemName: string
     remainingQuantity: string
-    unitCode: string
+    unitName?: string
 }>
 
 /**
@@ -30,7 +30,7 @@ export function formatRemainingLines(lines: readonly RemainingLine[]): string {
             const name = displayName(line.itemName)
             const quantity = displayText(line.remainingQuantity)
             if (!name || name === "—" || !quantity) return ""
-            return `${name} ${quantity}${displayText(line.unitCode)}`
+            return `${name} ${quantity}${displayText(line.unitName)}`
         })
         .filter(Boolean)
         .join("；")

@@ -9,6 +9,7 @@
 import type { OwnerComboboxItem } from "@/components/business/entity-comboboxes"
 import { apiGet } from "@/lib/api"
 import type { Page } from "@/lib/api/paging"
+import { fetchCompleteList } from "@/lib/collect-pages"
 
 /** 选项类接口的单页条数上限（后端 1–100）。 */
 const OPTIONS_PAGE_SIZE = 100
@@ -90,6 +91,16 @@ export const fetchUnitOptions = async (): Promise<
     return units.map((u) => ({
         id: u.id,
         code: u.unit_code,
-        label: u.symbol || u.name,
+        label: u.name,
     }))
+}
+
+/** 包含停用单位，供历史单据按冻结的单位代码或 ID 展示。 */
+export async function fetchProductUnitDirectory() {
+    const page = await fetchCompleteList<UnitOfMeasureDto>(
+        "/admin/unit-of-measures",
+        { sort_by: "unit_code", sort_dir: "asc" },
+        (unit) => unit.id,
+    )
+    return page.items
 }

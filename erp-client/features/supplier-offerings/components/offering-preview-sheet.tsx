@@ -1,4 +1,5 @@
 "use client"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 
 import Link from "next/link"
 import { ArrowUpRightIcon } from "lucide-react"
@@ -25,6 +26,10 @@ export function OfferingPreviewSheet({
     onClosed: () => void
 }) {
     const { data } = useAccountProfileQuery()
+    const { namesBySkuId } = useProductUnitNames(
+        [offering?.sku_id],
+        Boolean(offering),
+    )
     return (
         <QuickPreviewSheet
             idPrefix="supplier-offering-preview"
@@ -101,6 +106,7 @@ export function OfferingPreviewSheet({
                 <div className="space-y-6">
                     <OfferingTerms
                         terms={offering}
+                        unitName={namesBySkuId.get(offering.sku_id)}
                         canViewCosts={hasPermission(
                             data?.permissions,
                             "supplier_offering_cost:detail",

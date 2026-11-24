@@ -203,6 +203,7 @@ export type BackendWorkingCopyLine = {
     item_name_snapshot: string
     spec_snapshot?: string | null
     unit_snapshot?: string | null
+    unit_name?: string | null
     sku_id?: string | null
     sku_revision_id?: string | null
     procurement_supply_price_gross?: string | null

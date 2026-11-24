@@ -1,6 +1,8 @@
 "use client"
 
 import { useAccountProfileQuery } from "@/features/auth/queries"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
+import { useMemo } from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import {
     downloadApprovalMaterial,
@@ -33,7 +35,30 @@ export const useApprovalMaterials = (
         retry: false,
         staleTime: 0,
     })
+    const raw = query.isError ? undefined : query.data
+    const { names } = useProductUnitNames(
+        [],
+        Boolean(raw?.purchase_lines?.length),
+    )
+    const data = useMemo(
+        () =>
+            raw?.purchase_lines
+                ? {
+                      ...raw,
+                      purchase_lines: raw.purchase_lines.map((line) => ({
+                          ...line,
+                          unitName: names.get(line.unit?.trim() ?? ""),
+                          source: line.source && {
+                              ...line.source,
+                              unitName: names.get(line.source.unit.trim()),
+                          },
+                      })),
+                  }
+                : raw,
+        [raw, names],
+    )
     if (query.isError) return { ...query, data: undefined }
+    if (query.isSuccess) return { ...query, data: data ?? query.data }
     return query
 }
 

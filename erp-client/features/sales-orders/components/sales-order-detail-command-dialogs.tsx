@@ -112,9 +112,9 @@ export function SalesOrderDetailSecondaryActions({
     if (!showArrangement && moreActionCount === 0) return null
 
     const unitLabels = Object.fromEntries(
-        order.lineItems
-            .filter((line) => Boolean(line.unit))
-            .map((line) => [line.id, line.unit]),
+        order.lineItems.flatMap((line) =>
+            line.unitName ? [[line.id, line.unitName] as const] : [],
+        ),
     )
 
     return (

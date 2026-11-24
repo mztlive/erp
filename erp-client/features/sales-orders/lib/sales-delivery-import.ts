@@ -48,6 +48,7 @@ export type DeliveryWorkbookContext = {
     scope: string
     customerId: string
     lines: SalesOrderDraftLineInput[]
+    unitNames?: ReadonlyMap<string, string>
 }
 
 export type DeliveryImportIssue = {
@@ -64,6 +65,7 @@ type DeliveryChange = {
 
 export type DeliveryImportGroup = {
     line: SalesOrderDraftLineInput
+    unitName: string
     label: string
     changes: DeliveryChange[]
     allocations: SalesDeliveryAllocation[]
@@ -241,6 +243,7 @@ export async function buildDeliveryImportPreview(
     lines: SalesOrderDraftLineInput[],
     regions: RegionIndex,
     fillOne: boolean,
+    unitNames?: ReadonlyMap<string, string>,
 ) {
     const issues: DeliveryImportIssue[] = []
     const buckets = new Map<string, DeliveryImportRow[]>()
@@ -311,13 +314,16 @@ export async function buildDeliveryImportPreview(
             })
         if (allocations.length > 100)
             issues.push({ ...rows[0], message: "每条商品最多分配 100 个地址" })
+        const unitName = unitNames?.get(line.unit.trim()) ?? ""
         groups.push({
             line,
+            unitName,
             label,
             changes,
             allocations,
             summary: allocationSummary({
                 ...line,
+                unit: unitName,
                 deliveryAllocations: allocations,
             }),
         })

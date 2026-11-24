@@ -1,4 +1,5 @@
 "use client"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 
 import Link from "next/link"
 import { ArrowUpRightIcon } from "lucide-react"
@@ -16,6 +17,7 @@ export function OfferingAvailability({
 }: {
     offering: SupplierOfferingView
 }) {
+    const { namesBySkuId } = useProductUnitNames([offering.sku_id])
     return (
         <section className="space-y-3 text-body-compact">
             <h3 className="font-medium">当前可供</h3>
@@ -40,7 +42,7 @@ export function OfferingAvailability({
                     {offering.available_quantity != null ? (
                         <QuantityValue
                             value={offering.available_quantity}
-                            unit=""
+                            unit={namesBySkuId.get(offering.sku_id)}
                         />
                     ) : (
                         "未提供"

@@ -42,7 +42,7 @@ const SALES_COLUMNS: ColumnDef<SalesLine>[] = [
                         key={index}
                         className="mt-2 text-xs text-muted-foreground"
                     >
-                        {allocation.quantity} {row.original.unit} →{" "}
+                        {allocation.quantity} {row.original.unitName} →{" "}
                         {allocation.recipient} · {allocation.phone}
                         <br />
                         {fullDeliveryAddress(allocation)}
@@ -70,7 +70,7 @@ const SALES_COLUMNS: ColumnDef<SalesLine>[] = [
         cell: ({ row }) => (
             <QuantityValue
                 value={row.original.quantity}
-                unit={row.original.unit}
+                unit={row.original.unitName}
             />
         ),
     },

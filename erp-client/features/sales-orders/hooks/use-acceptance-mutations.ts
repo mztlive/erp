@@ -21,12 +21,14 @@ import { resultText } from "@/lib/ui-text"
  */
 export function useAcceptanceMutations({
     salesOrderId,
+    unitNames,
     idempotencyKey,
     submittedOverallRef,
     onPostSucceeded,
     onReverseSucceeded,
 }: {
     salesOrderId: string
+    unitNames: ReadonlyMap<string, string>
     idempotencyKey: string
     submittedOverallRef: React.RefObject<AcceptanceOverallResult>
     onPostSucceeded: (payload: {
@@ -45,11 +47,21 @@ export function useAcceptanceMutations({
         onSuccess: async (result) => {
             if (result.status === "succeeded") {
                 const overall = submittedOverallRef.current
+                const quantities = result.remainingEligibleByUnit.flatMap(
+                    ({ unitCode, quantity }) => {
+                        const name = unitNames.get(unitCode.trim())
+                        return name ? [`${quantity} ${name}`] : []
+                    },
+                )
+                const quantityLabel =
+                    quantities.length === result.remainingEligibleByUnit.length
+                        ? quantities.join("、")
+                        : ""
                 const remaining =
                     result.remainingEligibleCount === 0
                         ? "本单待验已清零。"
-                        : result.remainingEligibleQuantityLabel
-                          ? `本单还有 ${result.remainingEligibleQuantityLabel} 待验。`
+                        : quantityLabel
+                          ? `本单还有 ${quantityLabel} 待验。`
                           : `本单还有 ${result.remainingEligibleCount} 批待验。`
                 const exceptionHint =
                     overall === "PASS"
@@ -73,7 +85,7 @@ export function useAcceptanceMutations({
                             value:
                                 result.remainingEligibleCount === 0
                                     ? "已清零"
-                                    : result.remainingEligibleQuantityLabel ||
+                                    : quantityLabel ||
                                       `${result.remainingEligibleCount} 批`,
                         },
                     ],

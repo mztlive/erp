@@ -52,6 +52,7 @@ export function PurchaseChangeLineItems({
     form,
     id,
     draft,
+    unitNames,
     options,
     disabled,
     occurredExpenseIds,
@@ -59,6 +60,7 @@ export function PurchaseChangeLineItems({
     form: PurchaseChangeDraftFormApi
     id: string
     draft: PurchaseChangeDraft
+    unitNames: ReadonlyMap<string, string>
     options: PurchaseChangeDeliveryOptions
     disabled: boolean
     /** 已确认发生的费用行身份；这些行在改单中只读。 */
@@ -120,6 +122,7 @@ export function PurchaseChangeLineItems({
                                         index={index}
                                         diff={diffs[index]}
                                         draft={draft}
+                                        unitNames={unitNames}
                                         options={options}
                                         disabled={disabled}
                                         occurredExpenseIds={occurredExpenseIds}
@@ -141,6 +144,7 @@ function PurchaseChangeLineRow({
     index,
     diff,
     draft,
+    unitNames,
     options,
     disabled: formDisabled,
     occurredExpenseIds,
@@ -151,6 +155,7 @@ function PurchaseChangeLineRow({
     index: number
     diff: PurchaseChangeLineDiff
     draft: PurchaseChangeDraft
+    unitNames: ReadonlyMap<string, string>
     options: PurchaseChangeDeliveryOptions
     disabled: boolean
     occurredExpenseIds: ReadonlySet<string>
@@ -226,7 +231,8 @@ function PurchaseChangeLineRow({
                     {item ? (
                         <p className="text-xs text-muted-foreground">
                             {line.specification ?? "无规格"} ·{" "}
-                            {line.base_unit_code ?? "—"}
+                            {unitNames.get(line.base_unit_code?.trim() ?? "") ??
+                                "—"}
                         </p>
                     ) : null}
                 </div>

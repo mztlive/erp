@@ -41,7 +41,8 @@ export function AcceptanceSummaryMetrics({
 }: {
     progress: AcceptanceOrderProgress
 }) {
-    const unit = progress.unitCode
+    const unit = progress.unitName
+    const singleUnit = Boolean(progress.unitCode)
     const totalLines = progress.lines.length
     const deliveredLines = progress.lines.filter(
         (line) =>
@@ -55,7 +56,7 @@ export function AcceptanceSummaryMetrics({
         isPositiveQty(line.pendingQuantity),
     ).length
     const hasPending = progress.pendingFactCount > 0
-    const acceptedPct = unit
+    const acceptedPct = singleUnit
         ? acceptancePercent(
               progress.acceptedQuantity,
               progress.requiredQuantity,
@@ -74,7 +75,7 @@ export function AcceptanceSummaryMetrics({
                     label="待验收数量"
                     value={
                         <span className={cn(hasPending && "text-primary")}>
-                            {unit
+                            {singleUnit
                                 ? qtyWithUnit(progress.pendingQuantity, unit)
                                 : `${progress.pendingFactCount} 批`}
                         </span>
@@ -93,12 +94,12 @@ export function AcceptanceSummaryMetrics({
                 <DetailWorkspaceMetricItem
                     label="已交付数量"
                     value={
-                        unit
+                        singleUnit
                             ? qtyWithUnit(progress.deliveredQuantity, unit)
                             : `${deliveredLines} / ${totalLines} 项`
                     }
                     detail={
-                        unit ? (
+                        singleUnit ? (
                             <>
                                 销售数量{" "}
                                 <span className="num font-medium text-foreground">
@@ -116,7 +117,7 @@ export function AcceptanceSummaryMetrics({
                 <DetailWorkspaceMetricItem
                     label="已通过验收"
                     value={
-                        unit
+                        singleUnit
                             ? qtyWithUnit(progress.acceptedQuantity, unit)
                             : `${doneLines} / ${totalLines} 项`
                     }
@@ -142,7 +143,7 @@ export function AcceptanceProgressTable({
     className?: string
     showSummary?: boolean
 }) {
-    const unit = progress.unitCode ?? ""
+    const unit = progress.unitName
     const summary = progress.unitCode
         ? `已通过 ${qtyWithUnit(progress.acceptedQuantity, unit)} · 已交付 ${qtyWithUnit(progress.deliveredQuantity, unit)} · 销售 ${qtyWithUnit(progress.requiredQuantity, unit)}`
         : "按明细分别统计；不同单位不合并。"
@@ -226,7 +227,7 @@ export function AcceptanceProgressTable({
 }
 
 function ProgressRow({ line }: { line: AcceptanceLineProgress }) {
-    const unit = line.unitCode
+    const unit = line.unitName
     const hasPending = isPositiveQty(line.pendingQuantity)
     return (
         <TableRow>
@@ -276,7 +277,7 @@ function StuckCell({ line }: { line: AcceptanceLineProgress }) {
             >
                 <StatusBadge
                     tone="info"
-                    label={`${FULFILLMENT_TYPE_LABEL[fact.fulfillmentFactType]} · 待验 ${qtyWithUnit(fact.eligibleQuantity, line.unitCode)}`}
+                    label={`${FULFILLMENT_TYPE_LABEL[fact.fulfillmentFactType]} · 待验 ${qtyWithUnit(fact.eligibleQuantity, fact.unitName)}`}
                 />
                 <span
                     className="num max-w-full truncate text-xs text-muted-foreground"

@@ -15,6 +15,7 @@ import { fetchOwnerOptions, fetchUnitOptions } from "@/lib/options"
 export const optionKeys = {
     owners: ["options", "owners"] as const,
     units: ["options", "units"] as const,
+    unitDirectory: ["options", "unit-directory"] as const,
 }
 
 /** 选项类数据缓存 5 分钟，避免列表/表单频繁触发请求。 */

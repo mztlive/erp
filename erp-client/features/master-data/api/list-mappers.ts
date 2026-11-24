@@ -203,7 +203,8 @@ export function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
                   .map((attribute) => `${attribute.name}：${attribute.value}`)
                   .join(" / ")
             : "无规格"
-    const baseUnit = dto.base_unit_name ?? dto.base_unit_code ?? "—"
+    const baseUnitName = dto.base_unit_name?.trim() || undefined
+    const baseUnit = baseUnitName ?? "—"
     return {
         objectType: "sellable-items",
         stableId: dto.sku_id,
@@ -245,11 +246,11 @@ export function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
                 label: "商品编号",
                 value: dto.product_no,
             },
-            ...(dto.base_unit_name || dto.base_unit_code
+            ...(baseUnitName
                 ? [
                       {
                           label: "基础单位",
-                          value: dto.base_unit_name ?? dto.base_unit_code!,
+                          value: baseUnitName,
                       },
                   ]
                 : []),
@@ -268,7 +269,7 @@ export function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
             barcode: dto.barcode ?? undefined,
             baseUnit,
             baseUnitCode: dto.base_unit_code ?? undefined,
-            baseUnitName: dto.base_unit_name ?? undefined,
+            baseUnitName,
             productKindLabel: kindLabel,
             salesVisiblePriceGross: dto.sales_visible_price_gross,
             bulkPriceGross: dto.bulk_price_gross ?? undefined,

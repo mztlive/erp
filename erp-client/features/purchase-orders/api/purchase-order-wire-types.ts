@@ -58,6 +58,7 @@ export type BackendLine = {
     specification?: string | null
     quantity?: string | null
     base_unit_code?: string | null
+    unit_name?: string | null
     unit_cost_gross?: string | null
     input_tax_rate?: string | null
     gross_amount: string

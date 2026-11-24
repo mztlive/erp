@@ -43,7 +43,7 @@ export function PurchaseOrderApiExecutions({
     const executions = order.apiExecutions ?? []
     const quantity = (
         value: string | null,
-        unit: string | null,
+        unit: string | null | undefined,
         applicable = true,
     ) =>
         !applicable ? (
@@ -97,13 +97,13 @@ export function PurchaseOrderApiExecutions({
                                         <TableCell data-align="end">
                                             {quantity(
                                                 line.orderedQuantity,
-                                                line.unit,
+                                                line.unitName,
                                             )}
                                         </TableCell>
                                         <TableCell data-align="end">
                                             {quantity(
                                                 line.inboundQuantity,
-                                                line.unit,
+                                                line.unitName,
                                                 order.header
                                                     .fulfillmentResponsibility ===
                                                     "WAREHOUSE",
@@ -112,7 +112,7 @@ export function PurchaseOrderApiExecutions({
                                         <TableCell data-align="end">
                                             {quantity(
                                                 line.shippedQuantity,
-                                                line.unit,
+                                                line.unitName,
                                                 order.header
                                                     .fulfillmentResponsibility ===
                                                     "SUPPLIER_DIRECT",
@@ -121,7 +121,7 @@ export function PurchaseOrderApiExecutions({
                                         <TableCell data-align="end">
                                             {quantity(
                                                 line.remainingQuantity,
-                                                line.unit,
+                                                line.unitName,
                                             )}
                                         </TableCell>
                                     </TableRow>

@@ -32,6 +32,13 @@ export type WorkspaceFactSection = Readonly<{
 export type WorkspaceFactLine = Readonly<{
     title: string
     quantity?: string
+    productQuantity?: {
+        value: string
+        unit: string
+        unitName?: string
+        skuId?: string
+        amount?: string
+    }
     dueLabel?: string
 }>
 
@@ -44,6 +51,27 @@ export type WorkspaceDocumentFacts = Readonly<{
     lines: readonly WorkspaceFactLine[]
     moreCount: number
 }>
+
+export function withWorkspaceUnitNames(
+    facts: WorkspaceDocumentFacts,
+    names: ReadonlyMap<string, string>,
+): WorkspaceDocumentFacts {
+    return {
+        ...facts,
+        lines: facts.lines.map((line) => {
+            const product = line.productQuantity
+            if (!product) return line
+            const unit = product.unitName ?? names.get(product.unit.trim())
+            const quantity = unit ? `${product.value} ${unit}` : product.value
+            return {
+                ...line,
+                quantity: product.amount
+                    ? `${quantity} · ${product.amount}`
+                    : quantity,
+            }
+        }),
+    }
+}
 
 const LINE_LIMIT = 3
 
@@ -252,7 +280,12 @@ async function loadInquiryFacts(
         title: [line.product_name, line.specification]
             .filter(Boolean)
             .join(" · "),
-        quantity: [line.quantity, line.unit_code].filter(Boolean).join(" "),
+        quantity: line.quantity,
+        productQuantity: {
+            value: line.quantity,
+            unit: line.unit_code,
+            skuId: line.sku_id,
+        },
     }))
     return {
         documentNumber: displayBusinessText(inquiry.inquiry_no, inquiry.id),
@@ -576,13 +609,20 @@ function mapLine(
     let quantity = amount
     if (line.card_count && line.card_count > 0) {
         quantity = `${line.card_count} 张 · ${amount}`
-    } else if (line.quantity) {
-        const unit = line.unit_snapshot || line.base_unit_code || ""
-        quantity = `${line.quantity}${unit ? ` ${unit}` : ""} · ${amount}`
-    }
+    } else if (line.quantity) quantity = `${line.quantity} · ${amount}`
     return {
         title: title || "未命名明细",
         quantity,
+        productQuantity:
+            !line.card_count && line.quantity
+                ? {
+                      value: line.quantity,
+                      unit: line.unit_snapshot || line.base_unit_code || "",
+                      unitName: displayName(line.unit_name),
+                      skuId: line.sku_id ?? undefined,
+                      amount,
+                  }
+                : undefined,
         dueLabel: line.fulfillment_due_at
             ? `${formatMonthDay(line.fulfillment_due_at)} 交`
             : undefined,

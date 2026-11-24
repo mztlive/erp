@@ -45,6 +45,7 @@ export type SourcingProductLine = Readonly<{
     itemName: string
     itemSku?: string
     unit: string
+    unitName?: string
     quantityScale?: number | null
     salesQuantity: string
     coveredQuantity: string

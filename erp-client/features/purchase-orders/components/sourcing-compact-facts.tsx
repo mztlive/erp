@@ -55,7 +55,7 @@ export function SourcingCompactFacts({
                             <QuantityValue
                                 className="font-medium text-foreground"
                                 value={available}
-                                unit={product.unit}
+                                unit={product.unitName ?? ""}
                             />
                         </span>
                     </>
@@ -169,7 +169,7 @@ export function SourcingCompactFacts({
                             集采起订量{" "}
                             <QuantityValue
                                 value={option.delivery.bulkMinimumOrderQuantity}
-                                unit={product.unit}
+                                unit={product.unitName ?? ""}
                                 tone="warning"
                             />
                         </span>

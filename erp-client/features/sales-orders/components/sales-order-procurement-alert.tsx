@@ -36,7 +36,7 @@ export function SalesOrderProcurementAlert({
                                     {singleExcess.name}超出{" "}
                                     <QuantityValue
                                         value={singleExcess.excessQuantity}
-                                        unit={singleExcess.unit}
+                                        unit={singleExcess.unitName}
                                         tone="warning"
                                     />
                                 </>

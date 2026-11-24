@@ -182,7 +182,7 @@ export function AcceptanceRegisterFormBody({
                                     销售{" "}
                                     {qtyWithUnit(
                                         activeLine.requiredQuantity,
-                                        activeLine.unitCode,
+                                        activeLine.unitName,
                                     )}
                                     {" · "}
                                     {pendingFactsOf([activeLine]).length} 批待验

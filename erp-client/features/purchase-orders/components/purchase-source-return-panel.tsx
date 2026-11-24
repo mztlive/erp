@@ -1,4 +1,5 @@
 "use client"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 
 import { ReturnSettlementDialog } from "./return-settlement-dialog"
 import { useState } from "react"
@@ -23,7 +24,14 @@ export function PurchaseSourceReturnPanel({
 }) {
     const progress = sourceReturnProgress(order)
     const { plan, physicalPending, refundPending, invoicePending } = progress
+    const { names } = useProductUnitNames(
+        [],
+        Boolean(plan && progress.blocksChange),
+    )
     if (!plan || !progress.blocksChange) return null
+    const units = new Map(
+        order.currentContent.lines.map((line) => [line.lineId, line.unitName]),
+    )
     const lines = plan.lines.filter(
         (line) => compareDecimal(line.required_return, "0", 6) > 0,
     )
@@ -67,7 +75,12 @@ export function PurchaseSourceReturnPanel({
                                         <dd className="num text-value-compact font-semibold tracking-tight">
                                             <QuantityValue
                                                 value={line.purchased_quantity}
-                                                unit={line.unit}
+                                                unit={
+                                                    units.get(
+                                                        line.purchase_line_id,
+                                                    ) ??
+                                                    names.get(line.unit.trim())
+                                                }
                                             />
                                         </dd>
                                     </div>
@@ -78,7 +91,12 @@ export function PurchaseSourceReturnPanel({
                                         <dd className="num text-value-compact font-semibold tracking-tight">
                                             <QuantityValue
                                                 value={line.target_quantity}
-                                                unit={line.unit}
+                                                unit={
+                                                    units.get(
+                                                        line.purchase_line_id,
+                                                    ) ??
+                                                    names.get(line.unit.trim())
+                                                }
                                             />
                                         </dd>
                                     </div>
@@ -89,7 +107,12 @@ export function PurchaseSourceReturnPanel({
                                         <dd className="num text-value-compact font-semibold tracking-tight">
                                             <QuantityValue
                                                 value={line.required_return}
-                                                unit={line.unit}
+                                                unit={
+                                                    units.get(
+                                                        line.purchase_line_id,
+                                                    ) ??
+                                                    names.get(line.unit.trim())
+                                                }
                                             />
                                         </dd>
                                     </div>
@@ -98,7 +121,10 @@ export function PurchaseSourceReturnPanel({
                                     已登记供应商收到退货：
                                     <QuantityValue
                                         value={line.returned_quantity}
-                                        unit={line.unit}
+                                        unit={
+                                            units.get(line.purchase_line_id) ??
+                                            names.get(line.unit.trim())
+                                        }
                                     />
                                 </p>
                             </article>
@@ -253,6 +279,14 @@ export function PurchaseSourceReturnAction({
                     purchaseOrderId={order.identity.purchaseOrderId}
                     version={order.identity.lockVersion}
                     plan={plan}
+                    unitNamesByLine={
+                        new Map(
+                            order.currentContent.lines.map((line) => [
+                                line.lineId,
+                                line.unitName,
+                            ]),
+                        )
+                    }
                     onClose={() => setOpen(false)}
                 />
             ) : null}

@@ -100,7 +100,7 @@ export function FulfillmentPackingForm({
         operation.lines.find((line) => line.lineId === id)?.itemName ||
         "商品名称未提供"
     const unit = (id: string) =>
-        operation.lines.find((line) => line.lineId === id)?.unitCode || ""
+        operation.lines.find((line) => line.lineId === id)?.unitName || ""
     const addressStates = useMemo(
         () =>
             new Map(

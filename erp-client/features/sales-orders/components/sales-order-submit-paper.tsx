@@ -33,7 +33,7 @@ function submitLineName(row: SalesOrderSubmitLineSnapshot) {
                 line={{
                     id: row.rowKey,
                     name,
-                    unit: row.unit,
+                    unitName: row.unit,
                     deliveryAllocations: row.deliveryAllocations,
                 }}
             />

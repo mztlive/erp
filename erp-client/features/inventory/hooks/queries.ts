@@ -1,8 +1,11 @@
 "use client"
 
+import { useMemo } from "react"
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { approvalKeys } from "@/features/approval-workflow/queries"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import {
     cancelStockAdjustmentApproval,
     createAdjustmentDraft,
@@ -34,11 +37,33 @@ export const inventoryKeys = {
  * 查询库存调整单详情（含只读审批绑定）。
  */
 export function useAdjustmentDetailQuery(stockAdjustmentId: string | null) {
-    return useQuery({
+    const result = useQuery({
         queryKey: inventoryKeys.adjustment(stockAdjustmentId ?? ""),
         queryFn: () => fetchAdjustmentDetail(stockAdjustmentId!),
         enabled: Boolean(stockAdjustmentId),
     })
+    const raw = result.data
+    const { namesBySkuId } = useProductUnitNames(
+        [raw?.adjustment.skuId],
+        Boolean(raw),
+    )
+    const data = useMemo(
+        () =>
+            raw && {
+                ...raw,
+                adjustment: withStockUnit(raw.adjustment, namesBySkuId),
+            },
+        [raw, namesBySkuId],
+    )
+    return { ...result, data }
+}
+
+function withStockUnit<T extends { skuId: string; baseUnit: string }>(
+    row: T,
+    namesBySkuId: ReadonlyMap<string, string>,
+): T {
+    const name = namesBySkuId.get(row.skuId)
+    return !row.baseUnit && name ? { ...row, baseUnit: name } : row
 }
 
 export function useInventoryListQuery(query: InventoryQuery, enabled = true) {
@@ -55,7 +80,7 @@ export function useInventoryListQuery(query: InventoryQuery, enabled = true) {
     const scopeVersion =
         query.scopeVersion ?? (page > 1 ? baseline?.scopeVersion : undefined)
     const scoped = { ...query, scopeVersion }
-    return useQuery({
+    const result = useQuery({
         queryKey: inventoryKeys.list(scoped),
         queryFn: async () => {
             if (page === 1 || scopeVersion) return fetchInventoryList(scoped)
@@ -70,14 +95,57 @@ export function useInventoryListQuery(query: InventoryQuery, enabled = true) {
         },
         enabled,
     })
+    const raw = result.data
+    const skuIds = raw
+        ? [
+              ...raw.balances,
+              ...raw.movements,
+              ...raw.reservations,
+              ...raw.adjustments,
+          ].map((row) => row.skuId)
+        : []
+    const { namesBySkuId } = useProductUnitNames(skuIds, skuIds.length > 0)
+    const data = useMemo(() => {
+        if (!raw) return raw
+        const withUnit = <T extends { skuId: string; baseUnit: string }>(
+            row: T,
+        ) => withStockUnit(row, namesBySkuId)
+        return {
+            ...raw,
+            balances: raw.balances.map(withUnit),
+            movements: raw.movements.map(withUnit),
+            reservations: raw.reservations.map(withUnit),
+            adjustments: raw.adjustments.map(withUnit),
+        }
+    }, [raw, namesBySkuId])
+    return { ...result, data }
 }
 
 export function useBalanceDetailQuery(balanceId: string | null) {
-    return useQuery({
+    const result = useQuery({
         queryKey: inventoryKeys.detail(balanceId ?? ""),
         queryFn: () => fetchBalanceDetail(balanceId!),
         enabled: Boolean(balanceId),
     })
+    const raw = result.data
+    const { namesBySkuId } = useProductUnitNames(
+        [raw?.balance.skuId],
+        Boolean(raw),
+    )
+    const data = useMemo(() => {
+        if (!raw) return raw
+        const withUnit = <T extends { skuId: string; baseUnit: string }>(
+            row: T,
+        ) => withStockUnit(row, namesBySkuId)
+        return {
+            ...raw,
+            balance: withUnit(raw.balance),
+            recentMovements: raw.recentMovements.map(withUnit),
+            reservations: raw.reservations.map(withUnit),
+            pendingAdjustments: raw.pendingAdjustments.map(withUnit),
+        }
+    }, [raw, namesBySkuId])
+    return { ...result, data }
 }
 
 export function useCreateAdjustmentDraftMutation() {

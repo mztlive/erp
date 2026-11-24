@@ -25,6 +25,7 @@ export type AcceptanceEligibleFact = {
     lineNo: number
     itemSnapshot: string
     unitCode: string
+    unitName?: string
     occurredAt: string
     /** 服务端扣除冲正后的有效履约数量 */
     netSuccessfulQuantity: string
@@ -53,6 +54,7 @@ type AcceptanceLineRecord = {
     lineNo: number
     itemSnapshot: string
     unitCode: string
+    unitName?: string
     acceptedQuantity: string
     shortQuantity: string
     rejectedQuantity: string
@@ -108,6 +110,8 @@ export type AcceptanceSalesLineGroup = {
     lineNo: number
     itemSnapshot: string
     unitCode: string
+    unitName?: string
+    skuId?: string
     requiredQuantity: string
     /** 服务端净已验收 */
     netAcceptedQuantity: string
@@ -176,7 +180,7 @@ export type PostAcceptanceResult =
           acceptanceNo: string
           acceptanceId: string
           remainingEligibleCount: number
-          remainingEligibleQuantityLabel: string
+          remainingEligibleByUnit: Array<{ unitCode: string; quantity: string }>
           overallResult: AcceptanceOverallResult
           factOnlyNotice: string
       }

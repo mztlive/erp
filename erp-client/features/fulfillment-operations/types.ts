@@ -131,7 +131,9 @@ export type FulfillmentSourceLine = Readonly<{
     purchaseRevisionLineId?: string
     itemName: string
     skuCode: string
+    skuId?: string
     unitCode: string
+    unitName?: string
     orderedQuantity: string
     remainingQuantity: string
     /** 仓发：有效预占 */

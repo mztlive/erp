@@ -42,7 +42,7 @@ export function SalesOrderDeliverySummary({
 }: {
     line: Pick<
         SalesOrderLineItem,
-        "id" | "name" | "sku" | "unit" | "deliveryAllocations"
+        "id" | "name" | "sku" | "unitName" | "deliveryAllocations"
     >
     variant?: "detail" | "submit"
 }) {
@@ -73,7 +73,7 @@ export function SalesOrderDeliverySummary({
             },
         ),
     )
-    const summary = `分送 ${allocations.length} 个地址 · 共 ${total} ${line.unit}`
+    const summary = `分送 ${allocations.length} 个地址 · 共 ${total} ${line.unitName ?? ""}`
     const singleAddress = allocations.length === 1
     const triggerText = isSubmit
         ? singleAddress
@@ -171,7 +171,8 @@ export function SalesOrderDeliverySummary({
                             <h3 className="font-medium">地址 {index + 1}</h3>
                             <span className="num text-body-compact">
                                 分配数量：
-                                {compactFixed(allocation.quantity)} {line.unit}
+                                {compactFixed(allocation.quantity)}{" "}
+                                {line.unitName ?? ""}
                             </span>
                         </div>
                         <dl className="grid grid-cols-[4rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-body-compact">

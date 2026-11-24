@@ -1,4 +1,5 @@
 "use client"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 
 import { MoneyValue, QuantityValue } from "@/components/business"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
@@ -30,6 +31,10 @@ function fulfillmentStatusTone(status?: string | null): StatusTone {
 
 /** 按提交时采购版本直接展示商品明细，多单保留各自申请金额与付款条件。 */
 export function RequestReviewOrders({ request }: { request: PaymentRequest }) {
+    const { names } = useProductUnitNames(
+        [],
+        Boolean(request.review_lines?.length),
+    )
     const multiple = request.lines.length > 1
     return (
         <section aria-label="采购明细" className="space-y-3">
@@ -131,7 +136,9 @@ export function RequestReviewOrders({ request }: { request: PaymentRequest }) {
                                             <TableCell data-align="end">
                                                 <QuantityValue
                                                     value={item.quantity}
-                                                    unit={item.unit ?? ""}
+                                                    unit={names.get(
+                                                        item.unit?.trim() ?? "",
+                                                    )}
                                                 />
                                             </TableCell>
                                             <TableCell data-align="end">

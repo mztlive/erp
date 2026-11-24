@@ -102,9 +102,7 @@ export async function fetchSupplierQuoteSource(
     const lines = demandLines.map((line) => {
         const product = details.get(line.sku_id)
         const unit =
-            product?.baseUnitCode === line.unit_code && product.baseUnit !== "—"
-                ? product.baseUnit
-                : ""
+            product?.baseUnitCode === line.unit_code ? product.baseUnitName : ""
         return supplierQuoteLine(line, unit ?? "", product?.mainImageAssetId)
     })
     return {

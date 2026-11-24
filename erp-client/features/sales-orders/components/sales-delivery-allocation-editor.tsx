@@ -29,6 +29,7 @@ export { allocationSummary } from "../lib/sales-delivery-allocation-summary"
 export function SalesDeliverySummaryBar({
     form,
     lines,
+    unitNames,
     draftId,
     inquiryLocked = false,
     coverageHint,
@@ -37,6 +38,7 @@ export function SalesDeliverySummaryBar({
 }: {
     form: SalesOrderCreateFormApi
     lines: SalesOrderDraftLineInput[]
+    unitNames: ReadonlyMap<string, string>
     draftId?: string
     inquiryLocked?: boolean
     coverageHint?: (sku: string, regionCode: string) => CoverageCode
@@ -216,6 +218,7 @@ export function SalesDeliverySummaryBar({
                         ) : null}
                     </Button>
                     <SalesDeliveryWorkbookActions
+                        unitNames={unitNames}
                         form={form}
                         lines={lines}
                         draftId={draftId}

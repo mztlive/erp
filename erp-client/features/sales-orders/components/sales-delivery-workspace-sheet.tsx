@@ -233,6 +233,7 @@ export function SalesDeliveryWorkspaceSheet({
                         {tab === "product" ? (
                             effectiveRowKey ? (
                                 <ProductDeliveryPane
+                                    unitNames={unitNames}
                                     form={form}
                                     lines={lines}
                                     activeRowKey={effectiveRowKey}
@@ -285,6 +286,7 @@ export function SalesDeliveryWorkspaceSheet({
 
 function ProductDeliveryPane({
     form,
+    unitNames,
     lines,
     activeRowKey,
     onSelectRowKey,
@@ -294,6 +296,7 @@ function ProductDeliveryPane({
     form: SalesOrderCreateFormApi
     lines: SalesOrderDraftLineInput[]
     activeRowKey: string
+    unitNames: ReadonlyMap<string, string>
     onSelectRowKey: (rowKey: string) => void
     addressPool: readonly DeliveryAddressGroup[]
     coverageHint: (sku: string, regionCode: string) => CoverageCode
@@ -347,16 +350,17 @@ function ProductDeliveryPane({
                 return {
                     value: item.rowKey,
                     label: `#${idx + 1} ${item.name || "未命名商品"}`,
-                    description: `${item.quantity} ${item.unit || ""} · ${tag}`,
+                    description: `${item.quantity} ${unitNames.get(item.unit.trim()) ?? ""} · ${tag}`,
                 }
             }),
-        [lines],
+        [lines, unitNames],
     )
 
     if (!line || lineIndex < 0) return null
 
+    const unitName = unitNames.get(line.unit.trim()) ?? ""
     const rows = line.deliveryAllocations ?? []
-    const summary = allocationSummary(line)
+    const summary = allocationSummary({ ...line, unit: unitName })
     const remaining = remainingQuantityForLine(line.quantity, rows)
     const pct = allocatedPercentForLine(line.quantity, rows)
     const prefix = `sales-delivery-${toAutomationIdSegment(line.rowKey)}`
@@ -517,7 +521,7 @@ function ProductDeliveryPane({
                             销售数量{" "}
                             <QuantityValue
                                 value={line.quantity}
-                                unit={line.unit}
+                                unit={unitName}
                                 className="font-medium text-foreground"
                             />
                         </span>
@@ -727,6 +731,7 @@ function ProductDeliveryPane({
             {/* 内联新增/编辑单个地址面板 */}
             {editingState ? (
                 <SingleAddressInlineForm
+                    unitName={unitName}
                     key={
                         editingState.mode === "edit"
                             ? `edit-${editingState.index}`
@@ -769,6 +774,7 @@ function ProductDeliveryPane({
             {/* 内联批量粘贴多行 Excel 地址（针对当前单个商品） */}
             {pastePanelOpen ? (
                 <SingleProductBulkPastePanel
+                    unitNames={unitNames}
                     prefix={prefix}
                     line={line}
                     form={form}
@@ -943,9 +949,9 @@ function ProductDeliveryPane({
                                                                 )
                                                             }}
                                                         />
-                                                        {line.unit ? (
+                                                        {unitName ? (
                                                             <span className="text-xs text-muted-foreground">
-                                                                {line.unit}
+                                                                {unitName}
                                                             </span>
                                                         ) : null}
                                                     </div>
@@ -1031,6 +1037,7 @@ function ProductDeliveryPane({
 }
 
 function SingleAddressInlineForm({
+    unitName,
     prefix,
     line,
     mode,
@@ -1039,6 +1046,7 @@ function SingleAddressInlineForm({
     onCancel,
     onSave,
 }: {
+    unitName: string
     prefix: string
     line: SalesOrderDraftLineInput
     mode: "add" | "edit"
@@ -1179,7 +1187,7 @@ function SingleAddressInlineForm({
                             <div className="space-y-1">
                                 <field.TextField
                                     id={`${formPrefix}-quantity`}
-                                    label={`分配数量（${line.unit || "单位"}）`}
+                                    label={`分配数量（${unitName || "单位"}）`}
                                     type="text"
                                     inputMode="decimal"
                                     inputClassName="num text-right"
@@ -1194,7 +1202,7 @@ function SingleAddressInlineForm({
                                             field.handleChange(remaining)
                                         }
                                     >
-                                        填入剩余 {remaining} {line.unit}
+                                        填入剩余 {remaining} {unitName}
                                     </button>
                                 ) : null}
                             </div>
@@ -1241,12 +1249,14 @@ function InlineCoverageHint({
 }
 
 function SingleProductBulkPastePanel({
+    unitNames,
     prefix,
     line,
     form,
     onClose,
     onApplied,
 }: {
+    unitNames: ReadonlyMap<string, string>
     prefix: string
     line: SalesOrderDraftLineInput
     form: SalesOrderCreateFormApi
@@ -1269,6 +1279,7 @@ function SingleProductBulkPastePanel({
         try {
             const context = {
                 scope: "single-product-paste",
+                unitNames,
                 customerId: form.getFieldValue("customerId"),
                 lines: form.getFieldValue("lineItems"),
             }
@@ -1281,6 +1292,7 @@ function SingleProductBulkPastePanel({
                 context.lines,
                 regions.data,
                 fillOne,
+                context.unitNames,
             )
             setPreview(result)
         } catch (reason) {

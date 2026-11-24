@@ -34,7 +34,7 @@ export function shipmentSummary(
             const unit =
                 operation.lines.find(
                     (line) => line.lineId === item.delivery_line_id,
-                )?.unitCode || ""
+                )?.unitName || ""
             groups.set(unit, [...(groups.get(unit) ?? []), item.quantity])
         }
         const quantity = groups.has("")

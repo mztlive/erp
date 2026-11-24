@@ -2,12 +2,15 @@
 
 import {
     keepPreviousData,
-    useQueries,
     useQuery,
     useQueryClient,
 } from "@tanstack/react-query"
 import { fetchInquiries, fetchInquiry } from "../api"
-import { listSellableItemsPage } from "@/features/master-data/api"
+import {
+    indexProductUnitNames,
+    useProductUnitDirectoryQuery,
+    useSkuPresentationQueries,
+} from "@/hooks/use-product-unit-names"
 import type { InquiryListQuery } from "../types"
 
 export const inquiryKeys = {
@@ -18,8 +21,6 @@ export const inquiryKeys = {
         [...inquiryKeys.all, "list", procurement, query] as const,
     detail: (id: string, procurement: boolean, taskId?: string) =>
         [...inquiryKeys.all, "detail", procurement, id, taskId] as const,
-    skuDetails: (skuIds: readonly string[]) =>
-        [...inquiryKeys.all, "sku-details", skuIds] as const,
 }
 
 /** 统计当前可见范围内已发布、尚待销售处理的询价单，不受列表分页和筛选影响。 */
@@ -57,50 +58,21 @@ export function useProcurementInquiryCountQuery(enabled = true) {
     })
 }
 
-/** 批量复用可售商品的主图与单位名称，询价无需读取单位管理目录。 */
+/** 批量读取可售商品主图和单位名称，历史单位由有权读取的目录补齐。 */
 export function useInquirySkuDetailsQuery(skuIds: readonly string[]) {
-    const ids = [...new Set(skuIds.filter(Boolean))].sort()
-    const batches: string[][] = []
-    for (let offset = 0; offset < ids.length; offset += 50) {
-        batches.push(ids.slice(offset, offset + 50))
-    }
-    const queries = useQueries({
-        queries: batches.map((batch) => ({
-            queryKey: inquiryKeys.skuDetails(batch),
-            queryFn: () =>
-                listSellableItemsPage({
-                    resource: "sellable-items",
-                    skuIds: batch,
-                    page: 1,
-                    pageSize: 50,
-                }),
-            staleTime: 5 * 60 * 1000,
-        })),
-    })
+    const { rows, ...queryState } = useSkuPresentationQueries(skuIds)
+    const directory = useProductUnitDirectoryQuery(skuIds.length > 0)
     const images = new Map(
-        queries.flatMap((query) =>
-            (query.data?.rows ?? []).map(
-                (row) =>
-                    [row.stableId, row.sellableItem?.mainImageAssetId] as const,
-            ),
+        rows.map(
+            (row) =>
+                [row.sku_id, row.main_image_asset_id ?? undefined] as const,
         ),
     )
-    const units = new Map<string, string>()
-    for (const query of queries) {
-        for (const row of query.data?.rows ?? []) {
-            const item = row.sellableItem
-            if (item?.baseUnitCode && item.baseUnit && item.baseUnit !== "—") {
-                units.set(item.baseUnitCode, item.baseUnit)
-            }
-        }
-    }
+    const { names: units } = indexProductUnitNames(rows, directory)
     return {
         images,
         units,
-        isPending: queries.some((query) => query.isPending),
-        isFetching: queries.some((query) => query.isFetching),
-        error: queries.find((query) => query.isError)?.error,
-        refetch: () => Promise.all(queries.map((query) => query.refetch())),
+        ...queryState,
     }
 }
 

@@ -1,5 +1,7 @@
 "use client"
 
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
+
 import { SalesLinePriceComparison } from "@/components/business/sales-line-price-comparison"
 
 import {
@@ -41,6 +43,10 @@ export function ApprovalSalesOrderPaper({
         ? submission.business_type === "VOUCHER"
         : !!submission.voucher_category_sku_id
     const lines = isSubmission ? submission.lines : submission.commercial_lines
+    const { names } = useProductUnitNames(
+        lines.map((line) => line.sku_id),
+        !isCard && lines.length > 0,
+    )
     return (
         <PaperDocument<ApprovalSalesSubmission["lines"][number]>
             frame="borderless"
@@ -200,7 +206,7 @@ export function ApprovalSalesOrderPaper({
                     cell: (row) => (
                         <QuantityValue
                             value={row.quantity ?? String(row.card_count ?? 0)}
-                            unit={approvalSalesUnit(row, isCard)}
+                            unit={approvalSalesUnit(row, isCard, names)}
                         />
                     ),
                 },
@@ -257,7 +263,11 @@ export function ApprovalSalesOrderPaper({
                                   <SalesLinePriceComparison
                                       prices={row}
                                       showSalesPrice={false}
-                                      unit={approvalSalesUnit(row, isCard)}
+                                      unit={approvalSalesUnit(
+                                          row,
+                                          isCard,
+                                          names,
+                                      )}
                                   />
                               ),
                           },

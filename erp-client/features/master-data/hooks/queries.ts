@@ -307,6 +307,7 @@ async function invalidateMasterDataCaches(
             queryKey: ["supplier-offerings", "company-skus"],
         }),
         queryClient.invalidateQueries({ queryKey: optionKeys.units }),
+        queryClient.invalidateQueries({ queryKey: optionKeys.unitDirectory }),
     ])
 }
 

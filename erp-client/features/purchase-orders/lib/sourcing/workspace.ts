@@ -133,6 +133,7 @@ function productFromBasisLine(
         itemSku: line.itemSku,
         salesPrices: line.salesPrices,
         unit: line.unit,
+        unitName: line.unitName,
         quantityScale: line.quantityScale,
         salesQuantity: line.salesQuantity,
         coveredQuantity: line.coveredQuantity,

@@ -4,9 +4,14 @@ import {
     divideFixed,
     multiplyFixed,
     subtractFixed,
+    sumFixed,
 } from "@/lib/fixed-decimal"
 import { salesLinePriceComparison } from "@/lib/sales-line-prices"
 import type { PurchaseOrderCreateFormApi } from "../purchase-order-create-form-types"
+import {
+    buildFillDirectShortfallPatches,
+    isPositiveQuantity,
+} from "./address-grouping"
 import { findSourcingOption } from "./options"
 import type { SourcingEditorRow } from "./editor-rows"
 import type {
@@ -196,7 +201,7 @@ export function earliestOrderDeliveryDeadline(
     return dates[0]
 }
 
-/** 统一应用来源切换联动：更新 basisId、交期、目标仓、默认数量与地址重置。 */
+/** 统一应用来源切换联动：更新 basisId、交期、目标仓、默认数量与地址同步。 */
 export function applySourcingOptionToLine(
     form: PurchaseOrderCreateFormApi,
     product: SourcingProductLine,
@@ -208,40 +213,137 @@ export function applySourcingOptionToLine(
     if (!current) return
     const previousBasisId = current.basisId
 
-    form.setFieldValue(`lines[${index}].basisId`, option.basisId)
-
-    const currentQty = current.quantity?.trim() ?? ""
-    if (!currentQty || currentQty === product.remainingQuantity) {
-        form.setFieldValue(`lines[${index}].quantity`, option.maxCreateQuantity)
-    } else {
+    const otherSelectedQty = lines
+        .filter(
+            (entry, entryIndex) =>
+                entryIndex !== index &&
+                entry.salesOrderLineId === product.salesOrderLineId &&
+                entry.selected &&
+                isPositiveQuantity(entry.quantity || "0"),
+        )
+        .map((entry) => compactFixed(entry.quantity.trim()))
+    let residualDemand = product.remainingQuantity
+    if (otherSelectedQty.length > 0) {
         try {
-            if (compareDecimal(currentQty, option.maxCreateQuantity, 6) > 0) {
-                form.setFieldValue(
-                    `lines[${index}].quantity`,
-                    option.maxCreateQuantity,
-                )
-            }
+            const used = sumFixed(otherSelectedQty, {
+                maxScale: 6,
+                outputScale: 6,
+            })
+            const diff = subtractFixed(product.remainingQuantity, used, {
+                maxScale: 6,
+                outputScale: 6,
+            })
+            residualDemand =
+                compareDecimal(diff, "0", 6) > 0 ? compactFixed(diff) : "0"
         } catch {
-            form.setFieldValue(
-                `lines[${index}].quantity`,
-                option.maxCreateQuantity,
-            )
+            residualDemand = product.remainingQuantity
         }
     }
 
+    const isDirectWithAddresses =
+        option.sourceType === "PURCHASE" &&
+        option.fulfillmentResponsibility === "SUPPLIER_DIRECT" &&
+        product.deliveryAllocations.length > 0
+
+    const currentQty = current.quantity?.trim() ?? ""
+    let nextQty = currentQty
+    if (!currentQty || currentQty === product.remainingQuantity) {
+        if (otherSelectedQty.length > 0) {
+            if (isPositiveQuantity(residualDemand)) {
+                try {
+                    nextQty =
+                        compareDecimal(
+                            residualDemand,
+                            option.maxCreateQuantity,
+                            6,
+                        ) <= 0
+                            ? residualDemand
+                            : option.maxCreateQuantity
+                } catch {
+                    nextQty = option.maxCreateQuantity
+                }
+            } else {
+                nextQty = isDirectWithAddresses ? "0" : ""
+            }
+        } else {
+            nextQty = option.maxCreateQuantity
+        }
+    } else {
+        try {
+            if (compareDecimal(currentQty, option.maxCreateQuantity, 6) > 0) {
+                nextQty = option.maxCreateQuantity
+            }
+        } catch {
+            nextQty = option.maxCreateQuantity
+        }
+    }
+
+    const needsWarehouse =
+        option.sourceType === "PURCHASE" &&
+        option.fulfillmentResponsibility === "WAREHOUSE"
+
+    const updatedLine = {
+        ...current,
+        basisId: option.basisId,
+        quantity: nextQty,
+        expectedDeliveryDate: option.expectedDeliveryDate,
+        targetWarehouseId: needsWarehouse ? current.targetWarehouseId : "",
+        targetWarehouseName: needsWarehouse ? current.targetWarehouseName : "",
+        deliveryAllocations:
+            previousBasisId !== option.basisId
+                ? undefined
+                : current.deliveryAllocations,
+    }
+
+    // 切到带地址直发且并非单源全量默认覆盖时，自动按目标量分配可用地址，避免地址合计与数量脱节
+    if (
+        previousBasisId !== option.basisId &&
+        isDirectWithAddresses &&
+        (otherSelectedQty.length > 0 ||
+            (nextQty !== "" && nextQty !== product.remainingQuantity))
+    ) {
+        const probeLines = lines.map((entry, entryIndex) =>
+            entryIndex === index
+                ? {
+                      ...updatedLine,
+                      deliveryAllocations: [],
+                      quantity: "0",
+                  }
+                : entry,
+        )
+        if (isPositiveQuantity(nextQty)) {
+            const filled = buildFillDirectShortfallPatches(
+                product,
+                probeLines,
+                current.rowKey,
+                nextQty,
+            )
+            const targetPatch = filled.patches.find(
+                (patch) => patch.index === index,
+            )
+            if (targetPatch) {
+                form.setFieldValue(`lines[${index}]`, targetPatch.nextLine)
+                return
+            }
+        }
+        form.setFieldValue(`lines[${index}]`, {
+            ...updatedLine,
+            deliveryAllocations: [],
+            quantity: "0",
+        })
+        return
+    }
+
+    form.setFieldValue(`lines[${index}].basisId`, updatedLine.basisId)
+    form.setFieldValue(`lines[${index}].quantity`, updatedLine.quantity)
     form.setFieldValue(
         `lines[${index}].expectedDeliveryDate`,
-        option.expectedDeliveryDate,
+        updatedLine.expectedDeliveryDate,
     )
-
-    if (
-        option.sourceType !== "PURCHASE" ||
-        option.fulfillmentResponsibility !== "WAREHOUSE"
-    ) {
+    if (!needsWarehouse) {
         form.setFieldValue(`lines[${index}].targetWarehouseId`, "")
         form.setFieldValue(`lines[${index}].targetWarehouseName`, "")
     }
-
     if (previousBasisId !== option.basisId) {
         form.setFieldValue(`lines[${index}].deliveryAllocations`, undefined)
     }

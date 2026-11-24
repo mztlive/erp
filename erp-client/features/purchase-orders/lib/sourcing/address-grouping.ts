@@ -20,7 +20,11 @@ import {
     selectedDeliveryRows,
     usesAddressQuantity,
 } from "./delivery-editor"
-import { addressDeliverable, addressDeliveryTerm } from "./delivery-terms"
+import {
+    addressDeliverable,
+    addressDeliveryTerm,
+    sourcingRouteLabel,
+} from "./delivery-terms"
 import { findSourcingOption } from "./options"
 import { formatQuantityUnits, minimumUnits, quantityUnits } from "./quantity"
 import type {
@@ -78,12 +82,28 @@ export type DirectSourceInfo = Readonly<{
     line: SourcingLineInput
     option: SourcingSupplierOption
     supplierName: string
+    routeLabel: string
     shortLabel: string
     selected: boolean
     assignedAddressCount: number
     assignedTotalQty: string
     notDeliverableCount: number
     freightExtraCount: number
+}>
+
+export type NonDirectSourceInfo = Readonly<{
+    index: number
+    sourceNumber: number
+    rowKey: string
+    line: SourcingLineInput
+    option: SourcingSupplierOption
+    name: string
+    routeLabel: string
+    shortLabel: string
+    selected: boolean
+    isStock: boolean
+    quantity: string
+    maxCreateQuantity: string
 }>
 
 export type AddressAllocationSlice = Readonly<{
@@ -138,11 +158,18 @@ export type RegionFacetGroup = Readonly<{
 
 export type GlobalAddressState = Readonly<{
     directSources: readonly DirectSourceInfo[]
+    nonDirectSources: readonly NonDirectSourceInfo[]
     primaryDirectSource?: DirectSourceInfo
     nonDirectTotalQty: string
     hasNonDirectSources: boolean
     directTargetQty: string
     directAssignedTotalQty: string
+    /** 供应商直发已分总量超出直发额度（总需求 - 仓库/库存承担量）的部分；未超出时为 "0"。 */
+    directOverTargetQty: string
+    /** 供应商直发尚可分配的缺口额度；已满或超出时为 "0"。 */
+    directShortfallQty: string
+    /** 直发已分总量是否恰好等于直发目标额度（含混合仓发场景）。 */
+    directBalanced: boolean
     entries: readonly GlobalAddressEntry[]
     regionFacets: RegionFacetGroup
     counts: Readonly<{
@@ -208,6 +235,41 @@ export function computeGlobalAddressState(
 
     const multiSource = productAllocations.length > 1
 
+    const nonDirectSources: NonDirectSourceInfo[] = productAllocations.flatMap(
+        ({ line, index }, pos) => {
+            if (usesAddressQuantity(product, line)) return []
+            const option = findSourcingOption(product, line.basisId)
+            if (!option) return []
+            const isStock = option.sourceType === "EXISTING_STOCK"
+            const name = isStock
+                ? option.warehouseName || option.supplierName
+                : option.supplierName
+            const routeLabel = sourcingRouteLabel(option)
+            const shortLabel = multiSource
+                ? `源${pos + 1} · ${name}（${routeLabel}）`
+                : `${name}（${routeLabel}）`
+            return [
+                {
+                    index,
+                    sourceNumber: pos + 1,
+                    rowKey: line.rowKey,
+                    line,
+                    option,
+                    name,
+                    routeLabel,
+                    shortLabel,
+                    selected: line.selected,
+                    isStock,
+                    quantity: line.quantity?.trim() || "0",
+                    maxCreateQuantity: isStock
+                        ? (option.sourceAvailableQuantity ??
+                          option.maxCreateQuantity)
+                        : option.maxCreateQuantity,
+                },
+            ]
+        },
+    )
+
     const nonDirectSelected = productAllocations.filter(
         ({ line }) => line.selected && !usesAddressQuantity(product, line),
     )
@@ -263,6 +325,7 @@ export function computeGlobalAddressState(
             else if (term === "FREIGHT_EXTRA") freightExtraCount += 1
         }
 
+        const routeLabel = sourcingRouteLabel(item.option)
         const shortLabel = multiSource
             ? `源${item.sourceNumber} · ${item.option.supplierName}`
             : item.option.supplierName
@@ -274,6 +337,7 @@ export function computeGlobalAddressState(
             line: item.line,
             option: item.option,
             supplierName: item.option.supplierName,
+            routeLabel,
             shortLabel,
             selected: item.line.selected,
             assignedAddressCount,
@@ -369,7 +433,7 @@ export function computeGlobalAddressState(
                   slice.selected && slice.positive && !slice.error
                       ? {
                             ...slice,
-                            error: `该地址各来源合计 ${assignedTotal} ${product.unit}，超过需求 ${demandQty} ${product.unit}`,
+                            error: `该地址各来源合计 ${assignedTotal} ${product.unitName ?? ""}，超过需求 ${demandQty} ${product.unitName ?? ""}`,
                         }
                       : slice,
               )
@@ -452,14 +516,29 @@ export function computeGlobalAddressState(
             .filter((src) => src.selected)
             .map((src) => src.assignedTotalQty),
     )
+    const directOverTargetQty = safePositiveDiff(
+        directAssignedTotalQty,
+        directTargetQty,
+    )
+    const directShortfallQty = safePositiveDiff(
+        directTargetQty,
+        directAssignedTotalQty,
+    )
+    const directBalanced =
+        !isPositiveQuantity(directOverTargetQty) &&
+        !isPositiveQuantity(directShortfallQty)
 
     return {
         directSources,
+        nonDirectSources,
         primaryDirectSource,
         nonDirectTotalQty,
         hasNonDirectSources,
         directTargetQty,
         directAssignedTotalQty,
+        directOverTargetQty,
+        directShortfallQty,
+        directBalanced,
         entries,
         regionFacets,
         counts: {
@@ -770,7 +849,9 @@ export type QuotaAllocationPreview = Readonly<{
 
 /**
  * 按目标总量自动为指定来源凑单分配（面向 100+ 同城/大批量地址快速按量拆分）：
- * - 作用域内先释放该来源原有分配（绝不抢占其他来源已分地址），再按目标总量从头贪心分配；
+ * - 作用域内先释放该来源原有分配，优先从尚未分配的地址中按目标总量贪心凑单；
+ * - 当开启 `allowReallocateFromOtherDirect` 且未分配余量不足时，按序从同商品其他直发来源调拨可配地址，
+ *   并同步更新被调拨来源的明细（确保多直发来源之间总量守恒、零超分）；
  * - 优先选择包邮/普通配送地址，其次选择运费另计地址，自动跳过不配送地址；
  * - 严格使用六位定点单位与最小计量步长，整件商品绝不拆出小数。
  */
@@ -782,6 +863,7 @@ export function computeQuotaAutoAllocation(
     options: {
         scopeAddressKeys?: ReadonlySet<string>
         preferFreightIncluded: boolean
+        allowReallocateFromOtherDirect?: boolean
     },
 ): QuotaAllocationPreview {
     const trimmed = rawTargetQty.trim()
@@ -839,20 +921,29 @@ export function computeQuotaAutoAllocation(
         }
     }
 
-    // 统计同商品其他已启用直发来源对每个地址的占用
+    // 统计同商品其他已启用直发来源对每个地址的占用，并保留可变快照用于按需调拨
+    const otherDirectStates: Array<{
+        index: number
+        line: SourcingLineInput
+        rows: Map<string, PurchaseDeliveryAllocation>
+        dirty: boolean
+    }> = []
     const usedByOthers = new Map<string, bigint>()
-    for (const line of allLines) {
+    allLines.forEach((line, index) => {
         if (
             !line.selected ||
             line.rowKey === targetRowKey ||
             line.salesOrderLineId !== product.salesOrderLineId ||
             !supplierDeliveryRequired(product, line)
         ) {
-            continue
+            return
         }
-        for (const row of normalizeRowsForLine(product, line)) {
-            if (!isPositiveQuantity(row.quantity)) continue
+        const rows = normalizeRowsForLine(product, line)
+        const map = new Map<string, PurchaseDeliveryAllocation>()
+        for (const row of rows) {
             const key = deliveryKey(row)
+            map.set(key, { ...row })
+            if (!isPositiveQuantity(row.quantity)) continue
             try {
                 const units = quantityUnits(compactFixed(row.quantity.trim()))
                 usedByOthers.set(
@@ -863,7 +954,8 @@ export function computeQuotaAutoAllocation(
                 // 跳过非法值
             }
         }
-    }
+        otherDirectStates.push({ index, line, rows: map, dirty: false })
+    })
 
     const baseRemaining = remainingDeliveryAllocations(product).filter((row) =>
         isPositiveQuantity(row.quantity),
@@ -880,7 +972,15 @@ export function computeQuotaAutoAllocation(
         }
     }
 
-    const candidates = baseRemaining
+    type Candidate = {
+        row: PurchaseDeliveryAllocation
+        key: string
+        freeUnits: bigint
+        stealableUnits: bigint
+        isFreightExtra: boolean
+    }
+
+    const candidates: Candidate[] = baseRemaining
         .map((row) => {
             const key = deliveryKey(row)
             if (
@@ -894,18 +994,22 @@ export function computeQuotaAutoAllocation(
             }
             const demandUnits = quantityUnits(compactFixed(row.quantity))
             const others = usedByOthers.get(key) ?? BigInt(0)
-            const availableUnits =
+            const freeUnits =
                 demandUnits > others ? demandUnits - others : BigInt(0)
-            if (availableUnits < stepUnits) return null
+            const stealableUnits = options.allowReallocateFromOtherDirect
+                ? minimumUnits(demandUnits, others)
+                : BigInt(0)
+            if (freeUnits + stealableUnits < stepUnits) return null
             const term = addressDeliveryTerm(targetOption, row.region_code)
             return {
                 row,
                 key,
-                availableUnits,
+                freeUnits,
+                stealableUnits,
                 isFreightExtra: term === "FREIGHT_EXTRA",
             }
         })
-        .filter((item): item is NonNullable<typeof item> => item !== null)
+        .filter((item): item is Candidate => item !== null)
 
     if (options.preferFreightIncluded) {
         candidates.sort((a, b) => {
@@ -918,30 +1022,555 @@ export function computeQuotaAutoAllocation(
 
     let remainingQuota = targetUnits
     let allocatedUnits = BigInt(0)
-    const allocatedInScope: PurchaseDeliveryAllocation[] = []
+    const allocatedByKey = new Map<
+        string,
+        { row: PurchaseDeliveryAllocation; units: bigint }
+    >()
 
-    for (const candidate of candidates) {
-        if (remainingQuota < stepUnits) break
-        const rawTake = minimumUnits(candidate.availableUnits, remainingQuota)
-        // 对齐最小计量单位步长，确保不会出现半件
-        const take = (rawTake / stepUnits) * stepUnits
-        if (take <= BigInt(0)) continue
-        allocatedInScope.push({
-            ...candidate.row,
-            quantity: formatQuantityUnits(take),
+    const recordAllocation = (
+        row: PurchaseDeliveryAllocation,
+        key: string,
+        units: bigint,
+    ) => {
+        if (units <= BigInt(0)) return
+        const current = allocatedByKey.get(key)
+        allocatedByKey.set(key, {
+            row,
+            units: (current?.units ?? BigInt(0)) + units,
         })
-        allocatedUnits += take
-        remainingQuota -= take
+        allocatedUnits += units
+        remainingQuota -= units
     }
 
+    // 第一轮：优先消化未分配余量，不改动其他来源
+    for (const candidate of candidates) {
+        if (remainingQuota < stepUnits) break
+        if (candidate.freeUnits < stepUnits) continue
+        const rawTake = minimumUnits(candidate.freeUnits, remainingQuota)
+        const take = (rawTake / stepUnits) * stepUnits
+        recordAllocation(candidate.row, candidate.key, take)
+    }
+
+    // 第二轮：若允许跨直发源调拨且仍有目标余量，则从其他直发源扣减可配地址
+    if (options.allowReallocateFromOtherDirect && remainingQuota >= stepUnits) {
+        for (const candidate of candidates) {
+            if (remainingQuota < stepUnits) break
+            if (candidate.stealableUnits < stepUnits) continue
+            let need =
+                (minimumUnits(candidate.stealableUnits, remainingQuota) /
+                    stepUnits) *
+                stepUnits
+            if (need <= BigInt(0)) continue
+
+            let stolen = BigInt(0)
+            for (const other of otherDirectStates) {
+                if (need < stepUnits) break
+                const otherRow = other.rows.get(candidate.key)
+                if (!otherRow || !isPositiveQuantity(otherRow.quantity))
+                    continue
+                let otherUnits = BigInt(0)
+                try {
+                    otherUnits = quantityUnits(
+                        compactFixed(otherRow.quantity.trim()),
+                    )
+                } catch {
+                    continue
+                }
+                const takeFromOther =
+                    (minimumUnits(otherUnits, need) / stepUnits) * stepUnits
+                if (takeFromOther <= BigInt(0)) continue
+                const leftUnits = otherUnits - takeFromOther
+                if (leftUnits <= BigInt(0)) {
+                    other.rows.delete(candidate.key)
+                } else {
+                    other.rows.set(candidate.key, {
+                        ...otherRow,
+                        quantity: formatQuantityUnits(leftUnits),
+                    })
+                }
+                other.dirty = true
+                stolen += takeFromOther
+                need -= takeFromOther
+            }
+            recordAllocation(candidate.row, candidate.key, stolen)
+        }
+    }
+
+    const allocatedInScope: PurchaseDeliveryAllocation[] = [
+        ...allocatedByKey.values(),
+    ].map(({ row, units }) => ({
+        ...row,
+        quantity: formatQuantityUnits(units),
+    }))
+
     const nextRows = [...preservedOutsideScope, ...allocatedInScope]
-    const patch = buildLinePatch(targetIndex, targetLine, nextRows)
+    const patches: LineUpdatePatch[] = [
+        buildLinePatch(targetIndex, targetLine, nextRows),
+    ]
+    for (const other of otherDirectStates) {
+        if (!other.dirty) continue
+        patches.push(
+            buildLinePatch(other.index, other.line, [...other.rows.values()]),
+        )
+    }
 
     return {
-        patches: [patch],
+        patches,
         allocatedQty: formatQuantityUnits(allocatedUnits),
         allocatedAddressCount: allocatedInScope.length,
         shortfallQty: formatQuantityUnits(remainingQuota),
         valid: true,
+    }
+}
+
+/**
+ * 一键缩减直发超出额度的地址分配（典型场景：仓库/集采入仓承担了部分量，需从直发地址释放多余数量）：
+ * - 优先释放「不配送」与「运费另计」的地址，再按倒序释放普通地址，保留前序已配地址的稳定性；
+ * - 严格遵守商品最小计量步长。
+ */
+export function buildTrimDirectExcessPatches(
+    product: SourcingProductLine,
+    allLines: readonly SourcingLineInput[],
+    rawExcessQty: string,
+    onlyRowKey?: string,
+): {
+    patches: LineUpdatePatch[]
+    trimmedQty: string
+    releasedAddressCount: number
+} {
+    if (!isPositiveQuantity(rawExcessQty)) {
+        return { patches: [], trimmedQty: "0", releasedAddressCount: 0 }
+    }
+    const stepStr = sourcingQuantityStep(product.quantityScale) ?? "1"
+    const stepUnits = quantityUnits(stepStr)
+    let remainingToTrim = quantityUnits(compactFixed(rawExcessQty.trim()))
+
+    const states = allLines.flatMap((line, index) => {
+        if (
+            !line.selected ||
+            line.salesOrderLineId !== product.salesOrderLineId ||
+            !supplierDeliveryRequired(product, line)
+        ) {
+            return []
+        }
+        if (onlyRowKey && line.rowKey !== onlyRowKey) return []
+        const option = findSourcingOption(product, line.basisId)
+        if (!option) return []
+        const rows = normalizeRowsForLine(product, line)
+        return [
+            {
+                index,
+                line,
+                option,
+                rows: new Map(rows.map((r) => [deliveryKey(r), { ...r }])),
+                dirty: false,
+            },
+        ]
+    })
+
+    type TrimCandidate = {
+        stateIndex: number
+        key: string
+        priority: number
+        orderIndex: number
+        units: bigint
+    }
+
+    const candidates: TrimCandidate[] = []
+    states.forEach((state, stateIndex) => {
+        let orderIndex = 0
+        for (const [key, row] of state.rows.entries()) {
+            orderIndex += 1
+            if (!isPositiveQuantity(row.quantity)) continue
+            let units = BigInt(0)
+            try {
+                units = quantityUnits(compactFixed(row.quantity.trim()))
+            } catch {
+                continue
+            }
+            const term = addressDeliveryTerm(state.option, row.region_code)
+            // 优先裁掉不配送(0) -> 运费另计(1) -> 普通配送(2)，同类倒序裁切保留前序稳定
+            const priority =
+                term === "NOT_DELIVERABLE"
+                    ? 0
+                    : term === "FREIGHT_EXTRA"
+                      ? 1
+                      : 2
+            candidates.push({
+                stateIndex,
+                key,
+                priority,
+                orderIndex,
+                units,
+            })
+        }
+    })
+
+    candidates.sort((a, b) => {
+        if (a.priority !== b.priority) return a.priority - b.priority
+        if (b.stateIndex !== a.stateIndex) return b.stateIndex - a.stateIndex
+        return b.orderIndex - a.orderIndex
+    })
+
+    let trimmedUnits = BigInt(0)
+    let releasedAddressCount = 0
+
+    for (const candidate of candidates) {
+        if (remainingToTrim < stepUnits) break
+        const state = states[candidate.stateIndex]!
+        const row = state.rows.get(candidate.key)
+        if (!row) continue
+        const rawTake = minimumUnits(candidate.units, remainingToTrim)
+        const take = (rawTake / stepUnits) * stepUnits
+        if (take <= BigInt(0)) continue
+        const left = candidate.units - take
+        if (left <= BigInt(0)) {
+            state.rows.delete(candidate.key)
+            releasedAddressCount += 1
+        } else {
+            state.rows.set(candidate.key, {
+                ...row,
+                quantity: formatQuantityUnits(left),
+            })
+        }
+        state.dirty = true
+        trimmedUnits += take
+        remainingToTrim -= take
+    }
+
+    const patches = states
+        .filter((state) => state.dirty)
+        .map((state) =>
+            buildLinePatch(state.index, state.line, [...state.rows.values()]),
+        )
+
+    return {
+        patches,
+        trimmedQty: formatQuantityUnits(trimmedUnits),
+        releasedAddressCount,
+    }
+}
+
+/**
+ * 保留指定直发来源已有地址分配，仅将尚未分配的可配送地址按缺口额度增量补齐。
+ */
+export function buildFillDirectShortfallPatches(
+    product: SourcingProductLine,
+    allLines: readonly SourcingLineInput[],
+    targetRowKey: string,
+    rawShortfallQty: string,
+): {
+    patches: LineUpdatePatch[]
+    addedQty: string
+    addedAddressCount: number
+} {
+    if (!isPositiveQuantity(rawShortfallQty)) {
+        return { patches: [], addedQty: "0", addedAddressCount: 0 }
+    }
+    const targetIndex = allLines.findIndex(
+        (line) => line.rowKey === targetRowKey,
+    )
+    if (targetIndex < 0) {
+        return { patches: [], addedQty: "0", addedAddressCount: 0 }
+    }
+    const targetLine = allLines[targetIndex]!
+    const targetOption = findSourcingOption(product, targetLine.basisId)
+    if (!targetOption) {
+        return { patches: [], addedQty: "0", addedAddressCount: 0 }
+    }
+
+    const stepStr = sourcingQuantityStep(product.quantityScale) ?? "1"
+    const stepUnits = quantityUnits(stepStr)
+    let remainingNeed = quantityUnits(compactFixed(rawShortfallQty.trim()))
+
+    const usedAllDirect = new Map<string, bigint>()
+    for (const line of allLines) {
+        if (
+            !line.selected ||
+            line.salesOrderLineId !== product.salesOrderLineId ||
+            !supplierDeliveryRequired(product, line)
+        ) {
+            continue
+        }
+        for (const row of normalizeRowsForLine(product, line)) {
+            if (!isPositiveQuantity(row.quantity)) continue
+            const key = deliveryKey(row)
+            try {
+                const units = quantityUnits(compactFixed(row.quantity.trim()))
+                usedAllDirect.set(
+                    key,
+                    (usedAllDirect.get(key) ?? BigInt(0)) + units,
+                )
+            } catch {
+                // 忽略非法值
+            }
+        }
+    }
+
+    const targetRows = new Map(
+        normalizeRowsForLine(product, targetLine).map((r) => [
+            deliveryKey(r),
+            { ...r },
+        ]),
+    )
+
+    const baseRemaining = remainingDeliveryAllocations(product).filter((row) =>
+        isPositiveQuantity(row.quantity),
+    )
+
+    const candidates = baseRemaining
+        .map((row) => {
+            const key = deliveryKey(row)
+            if (!addressDeliverable(targetOption, row.region_code)) return null
+            const demandUnits = quantityUnits(compactFixed(row.quantity))
+            const used = usedAllDirect.get(key) ?? BigInt(0)
+            const freeUnits =
+                demandUnits > used ? demandUnits - used : BigInt(0)
+            if (freeUnits < stepUnits) return null
+            const term = addressDeliveryTerm(targetOption, row.region_code)
+            return {
+                row,
+                key,
+                freeUnits,
+                isFreightExtra: term === "FREIGHT_EXTRA",
+            }
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null)
+        .sort((a, b) =>
+            a.isFreightExtra === b.isFreightExtra
+                ? 0
+                : a.isFreightExtra
+                  ? 1
+                  : -1,
+        )
+
+    let addedUnits = BigInt(0)
+    let addedAddressCount = 0
+
+    for (const candidate of candidates) {
+        if (remainingNeed < stepUnits) break
+        const rawTake = minimumUnits(candidate.freeUnits, remainingNeed)
+        const take = (rawTake / stepUnits) * stepUnits
+        if (take <= BigInt(0)) continue
+        const existing = targetRows.get(candidate.key)
+        let prevUnits = BigInt(0)
+        if (existing && isPositiveQuantity(existing.quantity)) {
+            try {
+                prevUnits = quantityUnits(
+                    compactFixed(existing.quantity.trim()),
+                )
+            } catch {
+                prevUnits = BigInt(0)
+            }
+        }
+        targetRows.set(candidate.key, {
+            ...candidate.row,
+            quantity: formatQuantityUnits(prevUnits + take),
+        })
+        if (prevUnits === BigInt(0)) addedAddressCount += 1
+        addedUnits += take
+        remainingNeed -= take
+    }
+
+    if (addedUnits <= BigInt(0)) {
+        return { patches: [], addedQty: "0", addedAddressCount: 0 }
+    }
+
+    return {
+        patches: [
+            buildLinePatch(targetIndex, targetLine, [...targetRows.values()]),
+        ],
+        addedQty: formatQuantityUnits(addedUnits),
+        addedAddressCount,
+    }
+}
+
+/**
+ * 混合履约跨模式转交：将选中地址从供应商直发来源释放，并把对应数量原子划入指定仓库/库存来源，
+ * 同时受该来源可用上限与商品剩余总需求约束，避免超配。
+ */
+export function buildTransferAddressesToNonDirectPatches(
+    product: SourcingProductLine,
+    allLines: readonly SourcingLineInput[],
+    targetNonDirectRowKey: string,
+    addressKeys: ReadonlySet<string>,
+): {
+    patches: LineUpdatePatch[]
+    releasedCount: number
+    transferredQty: string
+    cappedByMax: boolean
+} {
+    const targetIndex = allLines.findIndex(
+        (line) => line.rowKey === targetNonDirectRowKey,
+    )
+    if (targetIndex < 0 || addressKeys.size === 0) {
+        return {
+            patches: [],
+            releasedCount: 0,
+            transferredQty: "0",
+            cappedByMax: false,
+        }
+    }
+    const targetLine = allLines[targetIndex]!
+    const targetOption = findSourcingOption(product, targetLine.basisId)
+    if (!targetOption || usesAddressQuantity(product, targetLine)) {
+        return {
+            patches: [],
+            releasedCount: 0,
+            transferredQty: "0",
+            cappedByMax: false,
+        }
+    }
+
+    const remainingMap = new Map(
+        remainingDeliveryAllocations(product).map((row) => [
+            deliveryKey(row),
+            row,
+        ]),
+    )
+
+    const directStates = allLines.flatMap((line, index) => {
+        if (
+            line.salesOrderLineId !== product.salesOrderLineId ||
+            !supplierDeliveryRequired(product, line)
+        ) {
+            return []
+        }
+        const rows = normalizeRowsForLine(product, line)
+        return [
+            {
+                index,
+                line,
+                rows: new Map(rows.map((r) => [deliveryKey(r), { ...r }])),
+                dirty: false,
+            },
+        ]
+    })
+
+    let releasedDirectUnits = BigInt(0)
+    let unassignedDemandUnits = BigInt(0)
+    let releasedCount = 0
+
+    for (const key of addressKeys) {
+        const base = remainingMap.get(key)
+        let releasedForAddr = BigInt(0)
+        for (const state of directStates) {
+            const row = state.rows.get(key)
+            if (!row) continue
+            if (state.line.selected && isPositiveQuantity(row.quantity)) {
+                try {
+                    releasedForAddr += quantityUnits(
+                        compactFixed(row.quantity.trim()),
+                    )
+                } catch {
+                    // 忽略非法值
+                }
+            }
+            state.rows.delete(key)
+            state.dirty = true
+        }
+        if (releasedForAddr > BigInt(0)) {
+            releasedDirectUnits += releasedForAddr
+            releasedCount += 1
+        } else if (base && isPositiveQuantity(base.quantity)) {
+            unassignedDemandUnits += quantityUnits(compactFixed(base.quantity))
+            releasedCount += 1
+        }
+    }
+
+    const desiredAddUnits = releasedDirectUnits + unassignedDemandUnits
+
+    // 计算释放直发后，该商品还剩多少总需求空间可供目标仓库/库存承接
+    const productDemandUnits = quantityUnits(product.remainingQuantity)
+    let otherAllocatedUnits = BigInt(0)
+    allLines.forEach((line, index) => {
+        if (
+            !line.selected ||
+            index === targetIndex ||
+            line.salesOrderLineId !== product.salesOrderLineId
+        ) {
+            return
+        }
+        const directMatch = directStates.find((s) => s.index === index)
+        if (directMatch) {
+            for (const row of directMatch.rows.values()) {
+                if (!isPositiveQuantity(row.quantity)) continue
+                try {
+                    otherAllocatedUnits += quantityUnits(
+                        compactFixed(row.quantity.trim()),
+                    )
+                } catch {
+                    // 忽略非法值
+                }
+            }
+            return
+        }
+        if (isPositiveQuantity(line.quantity || "0")) {
+            try {
+                otherAllocatedUnits += quantityUnits(
+                    compactFixed(line.quantity.trim()),
+                )
+            } catch {
+                // 忽略非法值
+            }
+        }
+    })
+
+    let currentTargetUnits = BigInt(0)
+    if (isPositiveQuantity(targetLine.quantity || "0")) {
+        try {
+            currentTargetUnits = quantityUnits(
+                compactFixed(targetLine.quantity.trim()),
+            )
+        } catch {
+            currentTargetUnits = BigInt(0)
+        }
+    }
+
+    const maxQtyStr =
+        targetOption.sourceType === "EXISTING_STOCK"
+            ? (targetOption.sourceAvailableQuantity ??
+              targetOption.maxCreateQuantity)
+            : targetOption.maxCreateQuantity
+    const optionCapUnits = quantityUnits(maxQtyStr)
+    const demandCapUnits =
+        productDemandUnits > otherAllocatedUnits
+            ? productDemandUnits - otherAllocatedUnits
+            : BigInt(0)
+    const effectiveMaxTargetUnits = minimumUnits(optionCapUnits, demandCapUnits)
+    const headroom =
+        effectiveMaxTargetUnits > currentTargetUnits
+            ? effectiveMaxTargetUnits - currentTargetUnits
+            : BigInt(0)
+
+    const actualAddUnits = minimumUnits(desiredAddUnits, headroom)
+    const nextTargetUnits = currentTargetUnits + actualAddUnits
+    const cappedByMax = actualAddUnits < desiredAddUnits
+
+    const patches: LineUpdatePatch[] = directStates
+        .filter((state) => state.dirty)
+        .map((state) =>
+            buildLinePatch(state.index, state.line, [...state.rows.values()]),
+        )
+
+    if (actualAddUnits > BigInt(0) || !targetLine.selected) {
+        patches.push({
+            index: targetIndex,
+            nextLine: {
+                ...targetLine,
+                selected: true,
+                quantity:
+                    nextTargetUnits > BigInt(0)
+                        ? formatQuantityUnits(nextTargetUnits)
+                        : targetLine.quantity,
+            },
+        })
+    }
+
+    return {
+        patches,
+        releasedCount,
+        transferredQty: formatQuantityUnits(actualAddUnits),
+        cappedByMax,
     }
 }
