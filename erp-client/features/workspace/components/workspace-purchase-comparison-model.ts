@@ -816,6 +816,9 @@ export type ParsedPurchaseExtraSections = Readonly<{
             actor?: string | null
         }>
     }> | null
+    purchaseType?: string
+    businessCategory?: string
+    fulfillmentResponsibility?: string
     staticFacts: readonly Readonly<{
         label: string
         value: string
@@ -837,6 +840,9 @@ export function parsePurchaseExtraSections(
     let diffBaseline: string | undefined
     let diffSummary: string | undefined
     let origin: string | undefined
+    let purchaseType: string | undefined
+    let businessCategory: string | undefined
+    let fulfillmentResponsibility: string | undefined
 
     for (const section of extraSections) {
         const value = section.value.trim()
@@ -870,9 +876,23 @@ export function parsePurchaseExtraSections(
             }
         }
         if (PURCHASE_EXCLUDED_STATIC_LABELS.has(section.label)) continue
+        const resolvedValue =
+            section.object_id?.trim() === value ? "未记录名称" : value
+        if (section.label === "采购类型") {
+            purchaseType = resolvedValue
+            continue
+        }
+        if (section.label === "经营类目") {
+            businessCategory = resolvedValue
+            continue
+        }
+        if (section.label === "履约责任") {
+            fulfillmentResponsibility = resolvedValue
+            continue
+        }
         staticFacts.push({
             label: section.label,
-            value: section.object_id?.trim() === value ? "未记录名称" : value,
+            value: resolvedValue,
             numeric: section.numeric,
         })
     }
@@ -908,6 +928,9 @@ export function parsePurchaseExtraSections(
                   previousRejection,
               }
             : null,
+        purchaseType,
+        businessCategory,
+        fulfillmentResponsibility,
         staticFacts,
     }
 }

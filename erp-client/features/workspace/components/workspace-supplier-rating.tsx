@@ -22,40 +22,47 @@ export function WorkspaceSupplierRating({
 
     if (compact) {
         const ratingVariant = rating.rating_label ? "info" : "neutral"
-        const scoreParts = [
-            rating.current_score != null
-                ? `合作中 ${rating.current_score}/100`
-                : null,
-            rating.initial_score != null
-                ? `期初 ${rating.initial_score}/100`
-                : null,
-        ].filter(Boolean)
 
         return (
-            <div
-                data-slot="supplier-rating-compact"
-                className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
-            >
-                <Badge variant={ratingVariant}>
-                    评级：{rating.rating_label ?? "未评级"}
-                </Badge>
-                {scoreParts.length > 0 ? (
-                    <span className="num text-muted-foreground">
-                        {scoreParts.join(" · ")}
-                    </span>
-                ) : (
-                    <span className="text-muted-foreground">未评分</span>
-                )}
-                {rating.valid_from ? (
-                    <span className="num text-muted-foreground">
-                        · 有效期 {rating.valid_from} 至{" "}
-                        {rating.valid_to ?? "长期"}
-                    </span>
-                ) : (
-                    <span className="text-muted-foreground">
-                        · 尚未登记评估
-                    </span>
-                )}
+            <div data-slot="supplier-rating-compact" className="space-y-0.5">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <Badge variant={ratingVariant}>
+                        评级：{rating.rating_label ?? "未评级"}
+                    </Badge>
+                    {rating.current_score != null ? (
+                        <>
+                            <span className="num text-body-compact font-medium text-foreground">
+                                合作中 {rating.current_score}/100
+                            </span>
+                            {rating.initial_score != null ? (
+                                <>
+                                    <span
+                                        aria-hidden="true"
+                                        className="text-xs text-muted-foreground/60"
+                                    >
+                                        ·
+                                    </span>
+                                    <span className="num text-xs font-normal text-muted-foreground">
+                                        期初 {rating.initial_score}/100
+                                    </span>
+                                </>
+                            ) : null}
+                        </>
+                    ) : rating.initial_score != null ? (
+                        <span className="num text-body-compact font-medium text-foreground">
+                            期初 {rating.initial_score}/100
+                        </span>
+                    ) : (
+                        <span className="text-xs font-normal text-muted-foreground">
+                            未评分
+                        </span>
+                    )}
+                </div>
+                <p className="num text-xs font-normal text-muted-foreground">
+                    {rating.valid_from
+                        ? `有效期 ${rating.valid_from} 至 ${rating.valid_to ?? "长期"}`
+                        : "尚未登记评估"}
+                </p>
             </div>
         )
     }

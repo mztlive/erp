@@ -25,7 +25,6 @@ import {
     BusinessFailureState,
     DetailWorkspaceSection,
     MoneyValue,
-    WorkspaceFactGrid,
     WorkspaceFactItem,
     detailWorkspaceStyles,
 } from "@/components/business"
@@ -104,7 +103,7 @@ export function WorkspacePurchaseApprovalSources({
         )
     }
     return (
-        <ul className="space-y-2 text-body-compact font-normal">
+        <ul className="divide-y divide-border/50 text-body-compact font-normal">
             {sources.map((sales) => {
                 const documentNo =
                     displayBusinessText(sales.document_no, sales.document_id) ||
@@ -127,118 +126,172 @@ export function WorkspacePurchaseApprovalSources({
                 const contractNotices = sales.source.extra_sections.filter(
                     (field) => field.label === "合同或凭证",
                 )
+                const ownershipParts = [
+                    comparison?.projectName
+                        ? `项目 ${comparison.projectName}`
+                        : null,
+                    comparison?.settlementPartyName
+                        ? `结算 ${comparison.settlementPartyName}`
+                        : null,
+                ].filter((part): part is string => Boolean(part))
+                const hasTax = Boolean(
+                    taxCheck && taxCheck.compactSalesValue !== "未记录",
+                )
+                const hasLedgerCoverage = Boolean(
+                    ledger &&
+                    !ledger.isExpenseOrder &&
+                    ledger.totalSalesLineCount > 0,
+                )
+                const hasSecondaryMeta =
+                    ownershipParts.length > 0 || hasTax || hasLedgerCoverage
+
                 return (
-                    <li key={sales.revision_id} className="space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span className="num font-medium text-foreground">
-                                {documentNo}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                                {displayName(sales.source.customer) ||
-                                    "未记录客户名称"}
-                                {comparison?.projectName
-                                    ? ` · ${comparison.projectName}`
-                                    : ""}
-                                {comparison?.settlementPartyName
-                                    ? ` · ${comparison.settlementPartyName}`
-                                    : ""}
-                                {" · "}V{sales.revision_no}
-                            </span>
-                            {comparison?.hasFullOrder ? (
-                                comparison.contractNo ? (
-                                    <span className="num inline-flex items-center gap-1 text-xs text-muted-foreground">
-                                        <FileCheck2Icon
-                                            aria-hidden="true"
-                                            className="size-3 shrink-0"
-                                        />
-                                        {comparison.contractNo}
+                    <li
+                        key={sales.revision_id}
+                        className="space-y-2 py-2.5 first:pt-0 last:pb-0"
+                    >
+                        <div className="flex flex-col gap-2 @[640px]/purchase-lines:flex-row @[640px]/purchase-lines:items-start @[640px]/purchase-lines:justify-between @[640px]/purchase-lines:gap-4">
+                            <div className="min-w-0 flex-1 space-y-1">
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                    <span className="num select-all text-body-compact font-semibold text-foreground">
+                                        {documentNo}
                                     </span>
-                                ) : (
-                                    <Badge variant="neutral">无合同</Badge>
-                                )
-                            ) : null}
-                            {taxCheck &&
-                            taxCheck.compactSalesValue !== "未记录" ? (
-                                <span className="num text-xs text-muted-foreground">
-                                    {taxCheck.compactSalesValue}
-                                </span>
-                            ) : null}
-                            {ledger &&
-                            !ledger.isExpenseOrder &&
-                            ledger.totalSalesLineCount > 0 ? (
-                                ledger.excessCount > 0 ? (
-                                    <span className="num text-xs font-medium text-destructive-soft-foreground">
-                                        超需求 {ledger.excessCount} 项
-                                    </span>
-                                ) : (
                                     <span className="num text-xs text-muted-foreground">
-                                        {ledger.isFullOrderCovered
-                                            ? "全量覆盖"
-                                            : `覆盖 ${ledger.coveredLineCount}/${ledger.totalSalesLineCount} 行`}
-                                        {ledger.salesCoveragePercent
-                                            ? ` · 占额 ${ledger.salesCoveragePercent}%`
-                                            : ""}
+                                        V{sales.revision_no}
                                     </span>
-                                )
-                            ) : null}
-                            {orderRiskChecks.map((check) => (
-                                <Badge
-                                    key={check.id}
-                                    variant={
-                                        check.status === "severe"
-                                            ? "destructive"
-                                            : "warning"
-                                    }
-                                >
-                                    {check.badge}
-                                </Badge>
-                            ))}
-                            {onCompareSource ? (
+                                    <span
+                                        aria-hidden="true"
+                                        className="text-xs text-muted-foreground/60"
+                                    >
+                                        ·
+                                    </span>
+                                    <span className="text-body-compact font-medium text-foreground">
+                                        {displayName(sales.source.customer) ||
+                                            "未记录客户名称"}
+                                    </span>
+                                    {comparison?.hasFullOrder ? (
+                                        comparison.contractNo ? (
+                                            <span className="num inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                                <FileCheck2Icon
+                                                    aria-hidden="true"
+                                                    className="size-3 shrink-0"
+                                                />
+                                                {comparison.contractNo}
+                                            </span>
+                                        ) : (
+                                            <Badge variant="neutral">
+                                                无合同
+                                            </Badge>
+                                        )
+                                    ) : null}
+                                    {orderRiskChecks.map((check) => (
+                                        <Badge
+                                            key={check.id}
+                                            variant={
+                                                check.status === "severe"
+                                                    ? "destructive"
+                                                    : "warning"
+                                            }
+                                        >
+                                            {check.badge}
+                                        </Badge>
+                                    ))}
+                                    {contractNotices.map((field) => (
+                                        <span
+                                            key={`${field.label}-${field.value}`}
+                                            className="text-xs text-warning-soft-foreground"
+                                        >
+                                            （{field.value}）
+                                        </span>
+                                    ))}
+                                </div>
+
+                                {hasSecondaryMeta ? (
+                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                                        {ownershipParts.length > 0 ? (
+                                            <span>
+                                                {ownershipParts.join(" · ")}
+                                            </span>
+                                        ) : null}
+                                        {ownershipParts.length > 0 &&
+                                        (hasTax || hasLedgerCoverage) ? (
+                                            <span
+                                                aria-hidden="true"
+                                                className="h-3 w-px bg-border/80"
+                                            />
+                                        ) : null}
+                                        {hasTax ? (
+                                            <span className="num">
+                                                {taxCheck!.compactSalesValue}
+                                            </span>
+                                        ) : null}
+                                        {hasTax && hasLedgerCoverage ? (
+                                            <span aria-hidden="true">·</span>
+                                        ) : null}
+                                        {hasLedgerCoverage && ledger ? (
+                                            ledger.excessCount > 0 ? (
+                                                <span className="num font-medium text-destructive-soft-foreground">
+                                                    超需求 {ledger.excessCount}{" "}
+                                                    项
+                                                </span>
+                                            ) : (
+                                                <span className="num">
+                                                    {ledger.isFullOrderCovered
+                                                        ? "全量覆盖"
+                                                        : `覆盖 ${ledger.coveredLineCount}/${ledger.totalSalesLineCount} 行`}
+                                                    {ledger.salesCoveragePercent
+                                                        ? `（占额 ${ledger.salesCoveragePercent}%）`
+                                                        : ""}
+                                                </span>
+                                            )
+                                        ) : null}
+                                    </div>
+                                ) : null}
+                            </div>
+
+                            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                                {onCompareSource ? (
+                                    <Button
+                                        id={`${purchaseApprovalPrefix(instanceId)}-source-compare-${toAutomationIdSegment(sales.revision_id)}`}
+                                        type="button"
+                                        variant="ghost"
+                                        size="xs"
+                                        className={
+                                            detailWorkspaceStyles.inlineLinkButton
+                                        }
+                                        onClick={() =>
+                                            onCompareSource({
+                                                revisionId: sales.revision_id,
+                                            })
+                                        }
+                                    >
+                                        <Columns2Icon aria-hidden="true" />
+                                        采销对照
+                                    </Button>
+                                ) : null}
                                 <Button
-                                    id={`${purchaseApprovalPrefix(instanceId)}-source-compare-${toAutomationIdSegment(sales.revision_id)}`}
+                                    id={`${purchaseApprovalPrefix(instanceId)}-source-${toAutomationIdSegment(sales.revision_id)}`}
                                     type="button"
                                     variant="ghost"
                                     size="xs"
                                     className={
-                                        detailWorkspaceStyles.inlineLinkButton
+                                        detailWorkspaceStyles.subtleButton
                                     }
                                     onClick={() =>
-                                        onCompareSource({
-                                            revisionId: sales.revision_id,
+                                        onPreview({
+                                            kind: "approval_snapshot",
+                                            objectId: instanceId,
+                                            materialsView: "source-sales",
+                                            sourceRevisionId: sales.revision_id,
                                         })
                                     }
                                 >
-                                    <Columns2Icon aria-hidden="true" />
-                                    采销对照
+                                    <FileTextIcon aria-hidden="true" />
+                                    预览销售单
                                 </Button>
-                            ) : null}
-                            <Button
-                                id={`${purchaseApprovalPrefix(instanceId)}-source-${toAutomationIdSegment(sales.revision_id)}`}
-                                type="button"
-                                variant="ghost"
-                                size="xs"
-                                className={detailWorkspaceStyles.subtleButton}
-                                onClick={() =>
-                                    onPreview({
-                                        kind: "approval_snapshot",
-                                        objectId: instanceId,
-                                        materialsView: "source-sales",
-                                        sourceRevisionId: sales.revision_id,
-                                    })
-                                }
-                            >
-                                <FileTextIcon aria-hidden="true" />
-                                预览销售单
-                            </Button>
-                            {contractNotices.map((field) => (
-                                <span
-                                    key={`${field.label}-${field.value}`}
-                                    className="text-xs text-warning-soft-foreground"
-                                >
-                                    （{field.value}）
-                                </span>
-                            ))}
+                            </div>
                         </div>
+
                         {comparison?.businessRemark ? (
                             <div className="flex items-start gap-2 rounded-r-md border-l-2 border-info bg-info-soft/30 px-2.5 py-1.5 text-xs">
                                 <MessageSquareTextIcon
@@ -1454,78 +1507,162 @@ export function WorkspacePurchaseApproval({
                 {submission ? (
                     <section
                         aria-label="采购单商业与来源信息"
-                        className="space-y-3 pt-3.5 pb-1"
+                        className="divide-y divide-border/60 border-b border-border/60"
                     >
-                        <WorkspaceFactGrid columns={3}>
-                            <WorkspaceFactItem label="供应商评估">
-                                <WorkspaceSupplierRating
-                                    rating={submission.latest_supplier_rating}
-                                    compact
-                                />
-                            </WorkspaceFactItem>
-                            {parsedExtras.staticFacts.map((fact) => (
+                        <div className="py-3.5">
+                            <dl
+                                aria-label="单据与供应商概况"
+                                className="grid grid-cols-1 gap-x-6 gap-y-3 @[480px]/purchase-lines:grid-cols-2 @[840px]/purchase-lines:grid-cols-4"
+                            >
                                 <WorkspaceFactItem
-                                    key={fact.label}
-                                    label={fact.label}
-                                    value={fact.value}
-                                    numeric={fact.numeric}
-                                    span={
-                                        fact.value.length > 30 ||
-                                        fact.value.includes("\n") ||
-                                        /(?:说明|备注|地址)/.test(fact.label)
-                                            ? "full"
-                                            : 1
-                                    }
-                                />
-                            ))}
-                            {submitter ? (
+                                    label="供应商评估"
+                                    className="@[480px]/purchase-lines:col-span-2"
+                                >
+                                    <WorkspaceSupplierRating
+                                        rating={
+                                            submission.latest_supplier_rating
+                                        }
+                                        compact
+                                    />
+                                </WorkspaceFactItem>
+                                {(() => {
+                                    const primaryPurchaseType =
+                                        parsedExtras.purchaseType ||
+                                        (!fulfillmentModeLabel
+                                            ? parsedExtras.fulfillmentResponsibility
+                                            : undefined)
+                                    const purchaseAttributeDetails = [
+                                        parsedExtras.businessCategory
+                                            ? `类目：${parsedExtras.businessCategory}`
+                                            : null,
+                                        !fulfillmentModeLabel &&
+                                        parsedExtras.purchaseType &&
+                                        parsedExtras.fulfillmentResponsibility
+                                            ? parsedExtras.fulfillmentResponsibility
+                                            : null,
+                                    ].filter((part): part is string =>
+                                        Boolean(part),
+                                    )
+                                    return (
+                                        <WorkspaceFactItem
+                                            label="采购类型"
+                                            tone={
+                                                primaryPurchaseType
+                                                    ? "default"
+                                                    : "muted"
+                                            }
+                                        >
+                                            {primaryPurchaseType ||
+                                            purchaseAttributeDetails.length >
+                                                0 ? (
+                                                <div className="space-y-0.5">
+                                                    <div>
+                                                        {primaryPurchaseType ??
+                                                            "—"}
+                                                    </div>
+                                                    {purchaseAttributeDetails.length >
+                                                    0 ? (
+                                                        <p className="text-xs font-normal text-muted-foreground">
+                                                            {purchaseAttributeDetails.join(
+                                                                " · ",
+                                                            )}
+                                                        </p>
+                                                    ) : null}
+                                                </div>
+                                            ) : null}
+                                        </WorkspaceFactItem>
+                                    )
+                                })()}
                                 <WorkspaceFactItem
-                                    label="申请人"
-                                    value={submitter}
-                                />
-                            ) : null}
-                            {item.enteredAtLabel ? (
-                                <WorkspaceFactItem
-                                    label="进入时间"
-                                    value={item.enteredAtLabel}
-                                    numeric
-                                />
-                            ) : null}
-                            <WorkspaceFactItem label="来源销售单" span="full">
-                                <WorkspacePurchaseApprovalSources
-                                    instanceId={instanceId}
-                                    sources={sources}
-                                    orderComparisons={sourceComparison?.orders}
-                                    onPreview={onPreview}
-                                    onCompareSource={onCompareSource}
-                                />
-                            </WorkspaceFactItem>
-                        </WorkspaceFactGrid>
+                                    label="提交信息"
+                                    tone={submitter ? "default" : "muted"}
+                                >
+                                    {submitter ||
+                                    (item.enteredAtLabel &&
+                                        item.enteredAtLabel !== "—") ? (
+                                        <div className="space-y-0.5">
+                                            <div>{submitter || "—"}</div>
+                                            {item.enteredAtLabel &&
+                                            item.enteredAtLabel !== "—" ? (
+                                                <p className="num text-xs font-normal text-muted-foreground">
+                                                    {item.enteredAtLabel}{" "}
+                                                    进入待办
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                    ) : null}
+                                </WorkspaceFactItem>
+                                {parsedExtras.staticFacts.map((fact) => (
+                                    <WorkspaceFactItem
+                                        key={fact.label}
+                                        label={fact.label}
+                                        value={fact.value}
+                                        numeric={fact.numeric}
+                                        className={
+                                            fact.value.length > 30 ||
+                                            fact.value.includes("\n") ||
+                                            /(?:说明|备注|地址)/.test(
+                                                fact.label,
+                                            )
+                                                ? "col-span-full"
+                                                : undefined
+                                        }
+                                    />
+                                ))}
+                            </dl>
+                        </div>
 
-                        {extraCost && metrics.goodsLineCount > 0 ? (
-                            <div className="flex items-center gap-2 rounded-md bg-info-soft/45 px-3 py-1.5 text-xs text-info-soft-foreground">
-                                <InfoIcon
-                                    aria-hidden="true"
-                                    className="size-3.5 shrink-0"
-                                />
-                                <span>
-                                    来源销售单已有附加费用（本次提交之外）：已发生{" "}
-                                    <MoneyValue
-                                        display="exact"
-                                        value={extraCost.occurred_gross_total}
-                                        inheritColor
-                                        className="font-medium"
-                                    />
-                                    {" · 待发生 "}
-                                    <MoneyValue
-                                        display="exact"
-                                        value={extraCost.pending_gross_total}
-                                        inheritColor
-                                        className="font-medium"
-                                    />
-                                </span>
+                        <div
+                            aria-label="来源销售单"
+                            className="space-y-2 py-3.5"
+                        >
+                            <div className="flex items-center justify-between gap-2">
+                                <h3 className="text-xs font-medium text-muted-foreground">
+                                    来源销售单
+                                </h3>
+                                {sources.length > 1 ? (
+                                    <span className="num text-xs text-muted-foreground">
+                                        共 {sources.length} 笔
+                                    </span>
+                                ) : null}
                             </div>
-                        ) : null}
+                            <WorkspacePurchaseApprovalSources
+                                instanceId={instanceId}
+                                sources={sources}
+                                orderComparisons={sourceComparison?.orders}
+                                onPreview={onPreview}
+                                onCompareSource={onCompareSource}
+                            />
+
+                            {extraCost && metrics.goodsLineCount > 0 ? (
+                                <div className="flex items-center gap-2 rounded-md bg-info-soft/45 px-3 py-1.5 text-xs text-info-soft-foreground">
+                                    <InfoIcon
+                                        aria-hidden="true"
+                                        className="size-3.5 shrink-0"
+                                    />
+                                    <span>
+                                        来源销售单已有附加费用（本次提交之外）：已发生{" "}
+                                        <MoneyValue
+                                            display="exact"
+                                            value={
+                                                extraCost.occurred_gross_total
+                                            }
+                                            inheritColor
+                                            className="font-medium"
+                                        />
+                                        {" · 待发生 "}
+                                        <MoneyValue
+                                            display="exact"
+                                            value={
+                                                extraCost.pending_gross_total
+                                            }
+                                            inheritColor
+                                            className="font-medium"
+                                        />
+                                    </span>
+                                </div>
+                            ) : null}
+                        </div>
                     </section>
                 ) : null}
 
