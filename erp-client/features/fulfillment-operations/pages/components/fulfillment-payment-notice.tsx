@@ -54,7 +54,7 @@ export function FulfillmentPaymentNotice({
             className="border-t border-border/50 pt-3 text-xs text-muted-foreground"
         >
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <p className="flex min-w-0 items-center gap-2 leading-6 text-foreground">
+                <p className="flex min-w-0 items-center gap-2 text-foreground">
                     <InfoIcon
                         aria-hidden="true"
                         className="size-4 shrink-0 text-muted-foreground"
@@ -84,7 +84,7 @@ export function FulfillmentPaymentNotice({
             </div>
             {showAmounts && (
                 <CollapsibleContent>
-                    <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pt-2 pl-6 leading-6">
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pt-2 pl-6">
                         {operation.gate.requiredAmount != null && (
                             <span>
                                 约定预付{" "}

@@ -1,6 +1,5 @@
 "use client"
 import { BanIcon, CheckIcon, XIcon } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import {
     StatusBadge,
     statusToneMarkerClass,
@@ -180,9 +179,10 @@ function TimelineEventList({
                                 <span>第 {approval.round_no} 轮</span>
                             )}
                             {event.after_submission && (
-                                <Badge variant="warning">
-                                    本次提交后新动态
-                                </Badge>
+                                <StatusBadge
+                                    tone="warning"
+                                    label="本次提交后新动态"
+                                />
                             )}
                         </div>
                         {!isCurrentDocument && (

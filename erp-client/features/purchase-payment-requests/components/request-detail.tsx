@@ -12,11 +12,15 @@ import { useStore } from "@tanstack/react-form"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import {
+    DecisionKpiBar,
+    DecisionKpiCell,
     FormalActionConfirmDialog,
     MoneyValue,
+    OptionCombobox,
     QuantityValue,
     RateValue,
     SensitiveValue,
+    TaskRiskSummaryBar,
     WorkspaceFactGrid,
     WorkspaceFactGroup,
     WorkspaceFactItem,
@@ -31,13 +35,6 @@ import {
 } from "@/components/business/unified-material-viewer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
 import { toast } from "@/components/ui/toast"
 import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
@@ -70,18 +67,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
-import {
-    AlertTriangleIcon,
-    ChevronRightIcon,
-    SearchIcon,
-    XIcon,
-} from "lucide-react"
+import { ChevronRightIcon, SearchIcon, XIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { isCommandOutcomeUnknown } from "@/lib/formal-command"
 import { hasPermission } from "@/lib/permissions"
@@ -1012,63 +998,6 @@ function buildPaymentReview(request: PaymentRequest, historical = false) {
     return { basis, rows, risks }
 }
 
-function PaymentKpi({
-    label,
-    basis,
-    id,
-    explanation,
-    highlighted = false,
-    children,
-}: {
-    label: string
-    basis?: string
-    id?: string
-    explanation?: string
-    highlighted?: boolean
-    children: ReactNode
-}) {
-    return (
-        <div
-            id={id}
-            tabIndex={id ? -1 : undefined}
-            className={cn(
-                "min-w-0 space-y-1 scroll-mt-16 rounded-md px-1.5 py-1 -mx-1.5 -my-1 transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-ring",
-                highlighted &&
-                    "bg-info-soft/40 ring-1 ring-info-border motion-safe:animate-pulse",
-            )}
-        >
-            <dt className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                <span>{label}</span>
-                {basis ? (
-                    <span className="text-tiny font-normal text-muted-foreground/80">
-                        {basis}
-                    </span>
-                ) : null}
-                {id && explanation ? (
-                    <Tooltip>
-                        <TooltipTrigger
-                            id={`${id}-formula`}
-                            aria-label={`${label}计算口径`}
-                            render={
-                                <Button
-                                    variant="ghost"
-                                    size="icon-xs"
-                                    type="button"
-                                    className="size-4 rounded-full border border-border/80 text-tiny text-muted-foreground hover:bg-card hover:text-foreground"
-                                />
-                            }
-                        >
-                            <span aria-hidden="true">?</span>
-                        </TooltipTrigger>
-                        <TooltipContent>{explanation}</TooltipContent>
-                    </Tooltip>
-                ) : null}
-            </dt>
-            <dd className="min-w-0 space-y-1">{children}</dd>
-        </div>
-    )
-}
-
 const LOCATE_HIGHLIGHT_MS = 2200
 
 export function PaymentRequestTaskReview({
@@ -1246,93 +1175,76 @@ export function PaymentRequestTaskReview({
                 : null}
 
             {risks.length > 0 && (
-                <section
+                <TaskRiskSummaryBar
                     aria-label="付款风险"
-                    className={cn(
-                        "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-r-md border-l-2 px-3 py-2 text-xs",
-                        hasSevereRisk
-                            ? "border-l-destructive bg-destructive-soft/65 text-destructive-soft-foreground"
-                            : "border-l-warning bg-warning-soft/75 text-warning-soft-foreground",
-                    )}
-                >
-                    <span className="inline-flex items-center gap-1.5 font-medium">
-                        <AlertTriangleIcon
-                            aria-hidden="true"
-                            className="size-3.5 shrink-0"
-                        />
-                        付款风险
-                    </span>
-                    {risks.map((risk) => (
-                        <Button
-                            key={risk.id}
-                            id={`${idPrefix}-risk-${risk.id}`}
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            className={cn(
-                                "h-control-xs text-xs font-medium",
-                                hasSevereRisk
-                                    ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                    : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
-                            )}
-                            onClick={() => focusTarget(risk.target, risk.id)}
-                        >
-                            {risk.label}
-                            <ChevronRightIcon aria-hidden="true" />
-                        </Button>
-                    ))}
-                    {riskRows.length > 0 && (
-                        <Button
-                            id={`${idPrefix}-risk-all`}
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            className={cn(
-                                "ml-auto h-control-xs text-xs font-medium",
-                                hasSevereRisk
-                                    ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                    : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
-                            )}
-                            onClick={() => focusTarget("sources")}
-                        >
-                            仅看风险项（
-                            <span className="num">{riskRows.length}</span>）
-                            <ChevronRightIcon aria-hidden="true" />
-                        </Button>
-                    )}
-                </section>
+                    severity={hasSevereRisk ? "destructive" : "warning"}
+                    leadLabel="付款风险"
+                    items={risks.map((risk) => ({
+                        id: risk.id,
+                        buttonId: `${idPrefix}-risk-${risk.id}`,
+                        label: risk.label,
+                        onClick: () => focusTarget(risk.target, risk.id),
+                    }))}
+                    actions={
+                        riskRows.length > 0
+                            ? [
+                                  {
+                                      id: "risk-all",
+                                      buttonId: `${idPrefix}-risk-all`,
+                                      label: "仅看风险项",
+                                      count: riskRows.length,
+                                      onClick: () => focusTarget("sources"),
+                                  },
+                              ]
+                            : undefined
+                    }
+                />
             )}
 
-            <TooltipProvider>
-                <dl className="grid min-w-0 grid-cols-1 gap-x-5 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/payment-request:grid-cols-2 @[480px]/payment-request:[&>*:last-child]:col-span-2 @[760px]/payment-request:grid-cols-3 @[760px]/payment-request:[&>*:last-child]:col-span-1">
-                    <PaymentKpi
-                        id={`${idPrefix}-amount`}
-                        label="本次申请付款金额"
-                        basis="含税"
-                        explanation="本次申请各采购单分配金额之和，按本次提交的申请口径展示。"
-                        highlighted={locatedId === `${idPrefix}-amount`}
-                    >
+            <DecisionKpiBar columns={3} ariaLabel="付款申请关键指标">
+                <DecisionKpiCell
+                    id={`${idPrefix}-amount`}
+                    label="本次申请付款金额"
+                    basis="含税"
+                    emphasis="primary"
+                    value={
                         <MoneyValue
                             value={request.total_amount}
                             size="section"
                             display="exact"
                         />
-                        <p className="text-tiny text-muted-foreground">
+                    }
+                    formulaTooltip="本次申请各采购单分配金额之和，按本次提交的申请口径展示。"
+                    formulaTooltipId={`${idPrefix}-amount-formula`}
+                    formulaTooltipLabel="本次申请付款金额计算口径"
+                    footnote={
+                        <>
                             含税 · <span className="num">{rows.length}</span>{" "}
                             张采购单
-                        </p>
-                    </PaymentKpi>
-                    <PaymentKpi
-                        id={`${idPrefix}-available`}
-                        label="可申请余额"
-                        basis="采购未结 − 占用"
-                        explanation="采购未结余额减去其他申请占用。付款进度按采购已结算额除以采购总额计算。"
-                    >
+                        </>
+                    }
+                    className={cn(
+                        "scroll-mt-16 rounded-md px-1.5 py-1 -mx-1.5 -my-1 transition-colors",
+                        locatedId === `${idPrefix}-amount` &&
+                            "bg-info-soft/40 ring-1 ring-info-border motion-safe:animate-pulse",
+                    )}
+                />
+                <DecisionKpiCell
+                    id={`${idPrefix}-available`}
+                    label="可申请余额"
+                    basis="采购未结 − 占用"
+                    emphasis="secondary"
+                    value={
                         <MoneyValue
                             value={basis.available}
+                            size="compact"
                             display="exact"
-                            className="num text-value-compact font-semibold"
                         />
+                    }
+                    formulaTooltip="采购未结余额减去其他申请占用。付款进度按采购已结算额除以采购总额计算。"
+                    formulaTooltipId={`${idPrefix}-available-formula`}
+                    formulaTooltipLabel="可申请余额计算口径"
+                    extra={
                         <div
                             aria-hidden="true"
                             className="h-1.5 overflow-hidden rounded-full bg-muted"
@@ -1344,7 +1256,9 @@ export function PaymentRequestTaskReview({
                                 }}
                             />
                         </div>
-                        <p className="text-tiny text-muted-foreground">
+                    }
+                    footnote={
+                        <>
                             {basis.current ? "当前" : "提交时"} · 采购总额{" "}
                             <MoneyValue value={basis.total} display="exact" /> ·
                             已结算{" "}
@@ -1353,20 +1267,27 @@ export function PaymentRequestTaskReview({
                                 precision={1}
                                 className="text-muted-foreground"
                             />
-                        </p>
-                    </PaymentKpi>
-                    <PaymentKpi
-                        id={`${idPrefix}-unpaid`}
-                        label="本申请剩余待付"
-                        basis="申请 − 已结"
-                        explanation="申请金额减去已结算金额与已关闭金额。"
-                    >
+                        </>
+                    }
+                />
+                <DecisionKpiCell
+                    id={`${idPrefix}-unpaid`}
+                    label="本申请剩余待付"
+                    basis="申请 − 已结"
+                    emphasis="secondary"
+                    fillThreeColMidRow
+                    value={
                         <MoneyValue
                             value={request.unpaid_amount}
+                            size="compact"
                             display="exact"
-                            className="num text-value-compact font-semibold"
                         />
-                        <p className="text-tiny text-muted-foreground">
+                    }
+                    formulaTooltip="申请金额减去已结算金额与已关闭金额。"
+                    formulaTooltipId={`${idPrefix}-unpaid-formula`}
+                    formulaTooltipLabel="本申请剩余待付计算口径"
+                    footnote={
+                        <>
                             已结算{" "}
                             <MoneyValue
                                 value={request.paid_amount}
@@ -1383,10 +1304,10 @@ export function PaymentRequestTaskReview({
                                     />
                                 </>
                             )}
-                        </p>
-                    </PaymentKpi>
-                </dl>
-            </TooltipProvider>
+                        </>
+                    }
+                />
+            </DecisionKpiBar>
 
             <WorkspaceFactGroup
                 id={`${idPrefix}-account`}
@@ -1608,6 +1529,7 @@ export function PaymentRequestTaskReview({
                             />
                             <Input
                                 id={`${sourceId}-search`}
+                                size="sm"
                                 value={search}
                                 onChange={(event) => {
                                     setSearch(event.target.value)
@@ -1615,7 +1537,7 @@ export function PaymentRequestTaskReview({
                                 }}
                                 placeholder="搜索采购单号、商品或付款条件"
                                 aria-label="搜索来源采购单"
-                                className="h-control-sm pr-8 pl-8 text-xs"
+                                className="pr-8 pl-8"
                             />
                             {search ? (
                                 <Button
@@ -1899,40 +1821,26 @@ export function PaymentRequestTaskReview({
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                         <div className="flex items-center gap-2 text-muted-foreground">
                             <span id={`${sourceId}-page-size-label`}>每页</span>
-                            <Select
+                            <OptionCombobox
+                                id={`${sourceId}-page-size`}
+                                size="sm"
+                                allowClear={false}
+                                aria-label="每页显示条数"
+                                className="w-24"
                                 value={String(pageSize)}
+                                options={[
+                                    { value: "20", label: "20 项" },
+                                    { value: "50", label: "50 项" },
+                                ]}
+                                getOptionId={(value) =>
+                                    `${sourceId}-page-size-${value}`
+                                }
                                 onValueChange={(next) => {
                                     if (!next) return
                                     setPageSize(next === "50" ? 50 : 20)
                                     setPage(0)
                                 }}
-                            >
-                                <SelectTrigger
-                                    id={`${sourceId}-page-size`}
-                                    size="sm"
-                                    aria-labelledby={`${sourceId}-page-size-label`}
-                                    className="w-24"
-                                >
-                                    <SelectValue>{pageSize} 项</SelectValue>
-                                </SelectTrigger>
-                                <SelectContent
-                                    align="start"
-                                    alignItemWithTrigger={false}
-                                >
-                                    <SelectItem
-                                        id={`${sourceId}-page-size-20`}
-                                        value="20"
-                                    >
-                                        20 项
-                                    </SelectItem>
-                                    <SelectItem
-                                        id={`${sourceId}-page-size-50`}
-                                        value="50"
-                                    >
-                                        50 项
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
+                            />
                             <span className="num">
                                 第 {resolvedPage + 1} / {pageCount} 页 · 共{" "}
                                 {filtered.length} 项
@@ -2154,10 +2062,11 @@ function PaymentEvidenceTable({
                         />
                         <Input
                             id={`${idPrefix}-search`}
+                            size="sm"
                             value={search}
                             placeholder="搜索凭据或付款单号"
                             aria-label="搜索凭据"
-                            className="h-control-sm pr-8 pl-8 text-xs"
+                            className="pr-8 pl-8"
                             onChange={(event) => {
                                 setSearch(event.target.value)
                                 setPage(0)
@@ -2284,40 +2193,26 @@ function PaymentEvidenceTable({
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-2 text-muted-foreground">
                         <span id={`${idPrefix}-page-size-label`}>每页</span>
-                        <Select
+                        <OptionCombobox
+                            id={`${idPrefix}-page-size`}
+                            size="sm"
+                            allowClear={false}
+                            aria-label="每页显示条数"
+                            className="w-24"
                             value={String(pageSize)}
+                            options={[
+                                { value: "20", label: "20 项" },
+                                { value: "50", label: "50 项" },
+                            ]}
+                            getOptionId={(value) =>
+                                `${idPrefix}-page-size-${value}`
+                            }
                             onValueChange={(next) => {
                                 if (!next) return
                                 setPageSize(next === "50" ? 50 : 20)
                                 setPage(0)
                             }}
-                        >
-                            <SelectTrigger
-                                id={`${idPrefix}-page-size`}
-                                size="sm"
-                                aria-labelledby={`${idPrefix}-page-size-label`}
-                                className="w-24"
-                            >
-                                <SelectValue>{pageSize} 项</SelectValue>
-                            </SelectTrigger>
-                            <SelectContent
-                                align="start"
-                                alignItemWithTrigger={false}
-                            >
-                                <SelectItem
-                                    id={`${idPrefix}-page-size-20`}
-                                    value="20"
-                                >
-                                    20 项
-                                </SelectItem>
-                                <SelectItem
-                                    id={`${idPrefix}-page-size-50`}
-                                    value="50"
-                                >
-                                    50 项
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
+                        />
                         <span className="num">
                             第 {resolvedPage + 1} / {pageCount} 页 · 共{" "}
                             {filtered.length} 份

@@ -346,9 +346,9 @@ export function PurchaseOrderCreatePreviewDialog({
                                     采购含税合计
                                 </div>
                                 <MoneyValue
+                                    size="compact"
                                     display="exact"
                                     value={totalPurchaseGross}
-                                    className="text-value-compact font-semibold tracking-tight text-foreground"
                                 />
                             </div>
                         ) : null}
@@ -488,7 +488,6 @@ export function PurchaseOrderCreatePreviewDialog({
                                                                             .totals
                                                                             .gross
                                                                     }
-                                                                    className="font-semibold text-foreground"
                                                                 />
                                                             </div>
                                                         </button>
@@ -924,7 +923,6 @@ export function PurchaseOrderCreatePreviewDialog({
                                                                                 .totals
                                                                                 .gross
                                                                         }
-                                                                        className="font-semibold"
                                                                     />
                                                                 </TableCell>
                                                                 <TableCell data-align="end">
@@ -980,7 +978,6 @@ export function PurchaseOrderCreatePreviewDialog({
                                                             value={
                                                                 totalPurchaseGross
                                                             }
-                                                            className="font-semibold text-foreground"
                                                         />
                                                     </TableCell>
                                                     <TableCell />

@@ -178,7 +178,7 @@ export function useProductListColumns({
                                           label={`资料更新待确认 · ${item.sourceDiffCount} 项`}
                                           className="num"
                                       />
-                                      <span className="line-clamp-2 w-full text-xs leading-4 whitespace-normal text-muted-foreground">
+                                      <span className="line-clamp-2 w-full text-xs whitespace-normal text-muted-foreground">
                                           {[
                                               ...new Set(
                                                   item.sourceDiffFields ?? [],
@@ -442,7 +442,7 @@ export function useProductListColumns({
                         <div className="inline-flex items-center gap-1.5">
                             {switchWithHint}
                             <span
-                                className="inline-flex items-center rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny leading-4 font-medium text-warning-soft-foreground"
+                                className="inline-flex items-center rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny font-medium text-warning-soft-foreground"
                                 title="部分 SKU 已上架，开启开关可补齐全部启用 SKU 上架"
                             >
                                 部分

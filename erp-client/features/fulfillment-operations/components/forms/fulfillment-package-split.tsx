@@ -164,7 +164,7 @@ export function FulfillmentPackageSplit({
                                                                     id={id}
                                                                     aria-label={`${itemName(item.delivery_line_id)}拆出数量`}
                                                                     inputMode="decimal"
-                                                                    className="h-8 w-24"
+                                                                    className="w-24"
                                                                     value={
                                                                         field
                                                                             .state

@@ -397,7 +397,7 @@ export function ExpensePurchaseCreateDialog({
                                             aria-label="有待确认结果"
                                         />
                                     ) : inquiry.availableCount > 0 ? (
-                                        <span className="num rounded-sm bg-sidebar-accent px-1.5 py-0.5 text-tiny leading-none font-medium text-sidebar-accent-foreground">
+                                        <span className="num rounded-sm bg-sidebar-accent px-1.5 py-0.5 text-tiny font-medium text-sidebar-accent-foreground">
                                             {inquiry.availableCount}
                                         </span>
                                     ) : inquiry.candidates.length > 0 ? (
@@ -574,7 +574,6 @@ export function ExpensePurchaseCreateDialog({
                                                                                     breakdown.net
                                                                                 }
                                                                                 display="exact"
-                                                                                className="text-foreground"
                                                                             />{" "}
                                                                             ·
                                                                             税额{" "}
@@ -793,7 +792,6 @@ export function ExpensePurchaseCreateDialog({
                                                     <MoneyValue
                                                         value={summary.gross}
                                                         display="exact"
-                                                        className="font-semibold text-foreground"
                                                     />
                                                 ) : (
                                                     <span className="num text-muted-foreground">

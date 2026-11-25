@@ -68,7 +68,7 @@ export function SourceText({
     if (!value) return <p className="text-xs text-muted-foreground">（空）</p>
     const parts = changedText(value, other ?? "")
     return (
-        <p className="whitespace-pre-wrap break-words text-body-compact leading-relaxed">
+        <p className="whitespace-pre-wrap break-words text-body-compact">
             {parts.before}
             {parts.changed ? (
                 incoming ? (

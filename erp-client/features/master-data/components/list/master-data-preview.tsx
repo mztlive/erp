@@ -3,6 +3,7 @@
 import { BusinessStatusBadge } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
     PreviewBlockedSection,
@@ -75,15 +76,14 @@ export function MasterDataPreviewPanel({
                                 {masterDataCopy.colVersionState}
                             </dt>
                             <dd>
-                                <Badge
-                                    variant={
+                                <StatusBadge
+                                    tone={
                                         row.revisionTiming === "FUTURE"
                                             ? "warning"
-                                            : "secondary"
+                                            : "neutral"
                                     }
-                                >
-                                    {row.revisionTimingLabel}
-                                </Badge>
+                                    label={row.revisionTimingLabel}
+                                />
                                 <span className="ml-2 num text-muted-foreground">
                                     v{row.revisionNo}
                                 </span>

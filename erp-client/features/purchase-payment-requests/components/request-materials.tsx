@@ -340,13 +340,13 @@ export function RequestMaterials({
                                             : "销售含税总额"}
                                     </div>
                                     <MoneyValue
+                                        size="compact"
                                         display="exact"
                                         value={
                                             preview.kind === "purchase"
                                                 ? preview.snapshot.total_amount
                                                 : preview.snapshot.totals.gross
                                         }
-                                        className="text-value-compact font-semibold tracking-tight text-foreground"
                                     />
                                 </div>
                             ) : null}

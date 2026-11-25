@@ -119,9 +119,9 @@ export function PurchaseOrderCreateSourcePickerDialog({
                                     推荐采购含税估算
                                 </div>
                                 <MoneyValue
+                                    size="compact"
                                     display="exact"
                                     value={draftSummary.minEstimatedGross}
-                                    className="text-value-compact font-semibold tracking-tight text-foreground"
                                 />
                             </div>
                         ) : null}
@@ -143,9 +143,10 @@ export function PurchaseOrderCreateSourcePickerDialog({
                                         />
                                         <Input
                                             id="procurement-orders-create-source-picker-search"
+                                            size="sm"
                                             aria-label="搜索待分配销售单"
                                             placeholder="搜索单号、客户或合同"
-                                            className="h-control-sm border-transparent bg-surface-sunken pr-7 pl-8 text-xs shadow-none hover:bg-muted/70 focus-visible:border-primary focus-visible:bg-card"
+                                            className="border-transparent bg-surface-sunken pr-7 pl-8 shadow-none hover:bg-muted/70 focus-visible:border-primary focus-visible:bg-card"
                                             value={query}
                                             onChange={(event) =>
                                                 setQuery(event.target.value)

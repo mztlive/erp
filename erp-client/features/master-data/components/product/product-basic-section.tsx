@@ -6,6 +6,7 @@ import { LockIcon } from "lucide-react"
 import {
     BrandCombobox,
     CategoryCombobox,
+    DetailFormGrid,
     DetailWorkspaceSection,
     OptionCombobox,
     detailWorkspaceStyles,
@@ -103,10 +104,7 @@ function ProductBasicSection({
                     >
                         基础信息
                     </h2>
-                    <div
-                        data-slot="detail-form-grid"
-                        className="grid gap-x-5 gap-y-4 sm:grid-cols-12"
-                    >
+                    <DetailFormGrid>
                         <div className="space-y-1.5 sm:col-span-8">
                             <Label htmlFor={`${prefix}-name`}>
                                 商品名称
@@ -322,7 +320,7 @@ function ProductBasicSection({
                                 rows={3}
                             />
                         </div>
-                    </div>
+                    </DetailFormGrid>
                 </fieldset>
 
                 {/* 右侧媒体速览栏：首屏即可看图、换首图、拖排序与直达详情长图 */}

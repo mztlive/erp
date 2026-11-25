@@ -23,8 +23,11 @@ import {
     Trash2Icon,
 } from "lucide-react"
 import {
+    DecisionKpiBar,
+    DecisionKpiCell,
     FormalActionConfirmDialog,
     MoneyValue,
+    OptionCombobox,
     QuantityValue,
     RateValue,
     ReasonTextareaField,
@@ -42,13 +45,6 @@ import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { FileUpload } from "@/components/ui/file-upload"
 import { Input } from "@/components/ui/input"
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
-import {
     Table,
     TableBody,
     TableCell,
@@ -59,12 +55,6 @@ import {
 } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { SubmissionRouteConfirmation } from "@/features/approval-workflow/components/submission-route-confirmation"
 import { mapDocumentApprovalViewDto } from "@/features/approval-workflow/types"
 import { uploadEvidenceFileAsset } from "@/features/file-assets/api/file-assets"
@@ -1335,7 +1325,6 @@ function RequestReworkWorkspaceInner({
                                       <MoneyValue
                                           value={liveSourceTotal}
                                           display="exact"
-                                          className="font-medium text-foreground"
                                       />{" "}
                                       · 已结算{" "}
                                       <RateValue
@@ -1392,100 +1381,79 @@ function RequestReworkWorkspaceInner({
             />
 
             {/* 2. 核心资金指标带（仅保留 2 格高价值金额与余额指标，消除低价值凑数格） */}
-            <TooltipProvider>
-                <dl className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/payment-request:grid-cols-2">
-                    <div className="min-w-0 space-y-1">
-                        <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <span>本次申请付款金额</span>
-                            <span className="text-tiny text-muted-foreground/80">
-                                含税
-                            </span>
-                        </dt>
-                        <dd className="min-w-0 space-y-1">
-                            <MoneyValue
-                                value={liveTotalAmount}
-                                size="section"
-                                display="exact"
-                            />
-                            <p className="text-tiny text-muted-foreground">
-                                {amountChanged ? (
-                                    <>
-                                        原提交{" "}
-                                        <span className="num line-through">
-                                            {formatMoney(request.total_amount)}
-                                        </span>{" "}
-                                        ·{" "}
-                                    </>
-                                ) : null}
-                                <span className="num">{lines.length}</span>{" "}
-                                张采购单
-                            </p>
-                        </dd>
-                    </div>
-
-                    <div className="min-w-0 space-y-1">
-                        <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <span>来源可申请余额</span>
-                            <span className="text-tiny text-muted-foreground/80">
-                                采购未结 − 占用
-                            </span>
-                            <Tooltip>
-                                <TooltipTrigger
-                                    id={`${idPrefix}-available-formula`}
-                                    aria-label="来源可申请余额口径"
-                                    render={
-                                        <Button
-                                            variant="ghost"
-                                            size="icon-xs"
-                                            type="button"
-                                            className="size-4 rounded-full border border-border/80 text-tiny text-muted-foreground hover:bg-card hover:text-foreground"
-                                        />
-                                    }
-                                >
-                                    <span aria-hidden="true">?</span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    已驳回申请不占用采购余额。当前展示所选采购单的最新可申请额度。
-                                </TooltipContent>
-                            </Tooltip>
-                        </dt>
-                        <dd className="min-w-0 space-y-1">
-                            <MoneyValue
-                                value={liveAvailableTotal}
-                                display="exact"
-                                className={cn(
-                                    "num text-value-compact font-semibold",
-                                    hasBalanceBlock && "text-destructive",
-                                )}
-                            />
+            <DecisionKpiBar columns={2} ariaLabel="核心资金指标">
+                <DecisionKpiCell
+                    label="本次申请付款金额"
+                    basis="含税"
+                    emphasis="primary"
+                    value={
+                        <MoneyValue
+                            value={liveTotalAmount}
+                            size="section"
+                            display="exact"
+                        />
+                    }
+                    footnote={
+                        <>
+                            {amountChanged ? (
+                                <>
+                                    原提交{" "}
+                                    <span className="num line-through">
+                                        {formatMoney(request.total_amount)}
+                                    </span>{" "}
+                                    ·{" "}
+                                </>
+                            ) : null}
+                            <span className="num">{lines.length}</span> 张采购单
+                        </>
+                    }
+                />
+                <DecisionKpiCell
+                    label="来源可申请余额"
+                    basis="采购未结 − 占用"
+                    emphasis="secondary"
+                    tone={hasBalanceBlock ? "destructive" : "default"}
+                    value={
+                        <MoneyValue
+                            value={liveAvailableTotal}
+                            size="compact"
+                            display="exact"
+                            inheritColor={hasBalanceBlock}
+                        />
+                    }
+                    formulaTooltip="已驳回申请不占用采购余额。当前展示所选采购单的最新可申请额度。"
+                    formulaTooltipId={`${idPrefix}-available-formula`}
+                    formulaTooltipLabel="来源可申请余额口径"
+                    extra={
+                        <div
+                            aria-hidden="true"
+                            className="h-1.5 overflow-hidden rounded-full bg-muted"
+                        >
                             <div
-                                aria-hidden="true"
-                                className="h-1.5 overflow-hidden rounded-full bg-muted"
-                            >
-                                <div
-                                    className="h-full rounded-full bg-primary"
-                                    style={{
-                                        width: `${minFixed(paidRate, "100", { maxScale: 1, outputScale: 1 })}%`,
-                                    }}
-                                />
-                            </div>
-                            <p className="text-tiny text-muted-foreground">
-                                采购总额{" "}
-                                <MoneyValue
-                                    value={liveSourceTotal}
-                                    display="exact"
-                                />{" "}
-                                · 已结算{" "}
-                                <RateValue
-                                    value={paidRate}
-                                    precision={1}
-                                    className="text-muted-foreground"
-                                />
-                            </p>
-                        </dd>
-                    </div>
-                </dl>
-            </TooltipProvider>
+                                className="h-full rounded-full bg-primary"
+                                style={{
+                                    width: `${minFixed(paidRate, "100", { maxScale: 1, outputScale: 1 })}%`,
+                                }}
+                            />
+                        </div>
+                    }
+                    footnote={
+                        <>
+                            采购总额{" "}
+                            <MoneyValue
+                                value={liveSourceTotal}
+                                display="exact"
+                            />{" "}
+                            · 已结算{" "}
+                            <RateValue
+                                value={paidRate}
+                                precision={1}
+                                className="text-muted-foreground"
+                            />
+                        </>
+                    }
+                />
+            </DecisionKpiBar>
 
             <fieldset
                 disabled={busy || submitUnknown || !canEdit}
@@ -1701,8 +1669,30 @@ function RequestReworkWorkspaceInner({
                                             *
                                         </span>
                                     </FieldLabel>
-                                    <Select
+                                    <OptionCombobox
+                                        id={`${idPrefix}-execution-method`}
+                                        allowClear={false}
+                                        disabled={
+                                            busy || submitUnknown || !canEdit
+                                        }
+                                        aria-label="付款方式"
+                                        inputClassName="bg-card"
                                         value={executionMethod}
+                                        options={[
+                                            {
+                                                value: "bank_transfer",
+                                                label: "银行付款",
+                                            },
+                                            {
+                                                value: "supplier_deposit",
+                                                label: "供应商预存款",
+                                            },
+                                        ]}
+                                        getOptionId={(value) =>
+                                            value === "bank_transfer"
+                                                ? `${idPrefix}-method-bank`
+                                                : `${idPrefix}-method-deposit`
+                                        }
                                         onValueChange={(next) => {
                                             if (
                                                 next !== "bank_transfer" &&
@@ -1731,33 +1721,7 @@ function RequestReworkWorkspaceInner({
                                                 )
                                             }
                                         }}
-                                    >
-                                        <SelectTrigger
-                                            id={`${idPrefix}-execution-method`}
-                                            className="w-full bg-card"
-                                        >
-                                            <SelectValue>
-                                                {executionMethod ===
-                                                "supplier_deposit"
-                                                    ? "供应商预存款"
-                                                    : "银行付款"}
-                                            </SelectValue>
-                                        </SelectTrigger>
-                                        <SelectContent align="start">
-                                            <SelectItem
-                                                id={`${idPrefix}-method-bank`}
-                                                value="bank_transfer"
-                                            >
-                                                银行付款
-                                            </SelectItem>
-                                            <SelectItem
-                                                id={`${idPrefix}-method-deposit`}
-                                                value="supplier_deposit"
-                                            >
-                                                供应商预存款
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                    />
                                 </Field>
 
                                 <Field
@@ -1808,54 +1772,36 @@ function RequestReworkWorkspaceInner({
                                                     *
                                                 </span>
                                             </FieldLabel>
-                                            <Select
-                                                value={bankAccountId}
+                                            <OptionCombobox
+                                                id={`${idPrefix}-bank-account-select`}
+                                                allowClear={false}
+                                                disabled={
+                                                    busy ||
+                                                    submitUnknown ||
+                                                    !canEdit
+                                                }
+                                                aria-label="收款账户"
+                                                placeholder="选择供应商收款账户"
+                                                inputClassName="bg-card"
+                                                value={bankAccountId || null}
+                                                options={supplierBankAccounts.map(
+                                                    (account) => ({
+                                                        value: account.bank_account_id,
+                                                        label: `${account.account_name} · ${bankDisplayLabel(account)} · ${account.account_number_masked}${
+                                                            account.bank_routing_number
+                                                                ? ` · 联行号 ${account.bank_routing_number}`
+                                                                : " · 未填联行号"
+                                                        }`,
+                                                    }),
+                                                )}
+                                                getOptionId={(value) =>
+                                                    `${idPrefix}-bank-option-${toAutomationIdSegment(value)}`
+                                                }
                                                 onValueChange={(next) => {
                                                     if (next)
                                                         setBankAccountId(next)
                                                 }}
-                                            >
-                                                <SelectTrigger
-                                                    id={`${idPrefix}-bank-account-select`}
-                                                    className="w-full bg-card"
-                                                >
-                                                    <SelectValue placeholder="选择供应商收款账户">
-                                                        {displayedBankAccount
-                                                            ? `${displayedBankAccount.account_name} · ${bankDisplayLabel(displayedBankAccount)} · ${displayedBankAccount.account_number_masked}`
-                                                            : "选择供应商收款账户"}
-                                                    </SelectValue>
-                                                </SelectTrigger>
-                                                <SelectContent align="start">
-                                                    {supplierBankAccounts.map(
-                                                        (account) => (
-                                                            <SelectItem
-                                                                key={
-                                                                    account.bank_account_id
-                                                                }
-                                                                id={`${idPrefix}-bank-option-${toAutomationIdSegment(account.bank_account_id)}`}
-                                                                value={
-                                                                    account.bank_account_id
-                                                                }
-                                                            >
-                                                                {
-                                                                    account.account_name
-                                                                }{" "}
-                                                                ·{" "}
-                                                                {bankDisplayLabel(
-                                                                    account,
-                                                                )}{" "}
-                                                                ·{" "}
-                                                                {
-                                                                    account.account_number_masked
-                                                                }
-                                                                {account.bank_routing_number
-                                                                    ? ` · 联行号 ${account.bank_routing_number}`
-                                                                    : " · 未填联行号"}
-                                                            </SelectItem>
-                                                        ),
-                                                    )}
-                                                </SelectContent>
-                                            </Select>
+                                            />
                                         </Field>
                                     )}
 
@@ -1934,32 +1880,29 @@ function RequestReworkWorkspaceInner({
                                             *
                                         </span>
                                     </FieldLabel>
-                                    <Select
-                                        value={depositAccountId}
+                                    <OptionCombobox
+                                        id={`${idPrefix}-deposit-account`}
+                                        allowClear={false}
+                                        disabled={
+                                            busy || submitUnknown || !canEdit
+                                        }
+                                        aria-label="预存款账户"
+                                        placeholder="选择同付款主体、同供应商预存款账户"
+                                        inputClassName="bg-card"
+                                        value={depositAccountId || null}
+                                        options={depositAccounts.map(
+                                            (account) => ({
+                                                value: account.id,
+                                                label: account.label,
+                                            }),
+                                        )}
+                                        getOptionId={(value) =>
+                                            `${idPrefix}-deposit-${toAutomationIdSegment(value)}`
+                                        }
                                         onValueChange={(next) => {
                                             if (next) setDepositAccountId(next)
                                         }}
-                                    >
-                                        <SelectTrigger
-                                            id={`${idPrefix}-deposit-account`}
-                                            className="w-full bg-card"
-                                        >
-                                            <SelectValue placeholder="选择同付款主体、同供应商预存款账户">
-                                                {currentDepositLabel}
-                                            </SelectValue>
-                                        </SelectTrigger>
-                                        <SelectContent align="start">
-                                            {depositAccounts.map((account) => (
-                                                <SelectItem
-                                                    key={account.id}
-                                                    id={`${idPrefix}-deposit-${toAutomationIdSegment(account.id)}`}
-                                                    value={account.id}
-                                                >
-                                                    {account.label}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    />
                                     {touchedSubmit && accountError ? (
                                         <FieldError
                                             errors={[{ message: accountError }]}
@@ -1989,8 +1932,24 @@ function RequestReworkWorkspaceInner({
                             {editingSections.lines &&
                                 addableCandidates.length > 0 &&
                                 canEdit && (
-                                    <Select
-                                        value=""
+                                    <OptionCombobox
+                                        id={`${idPrefix}-add-po`}
+                                        size="sm"
+                                        allowClear={false}
+                                        disabled={busy || submitUnknown}
+                                        aria-label="添加同供应商采购单"
+                                        placeholder="添加同供应商采购单"
+                                        className="min-w-44"
+                                        value={null}
+                                        options={addableCandidates.map(
+                                            (candidate: PaymentCandidate) => ({
+                                                value: candidate.payable_account_id,
+                                                label: `${candidate.purchase_order_no} · 可申请 ${formatMoney(candidate.available_amount)}`,
+                                            }),
+                                        )}
+                                        getOptionId={(value) =>
+                                            `${idPrefix}-add-po-${toAutomationIdSegment(value)}`
+                                        }
                                         onValueChange={(payableId) => {
                                             if (!payableId) return
                                             const candidate =
@@ -2006,44 +1965,7 @@ function RequestReworkWorkspaceInner({
                                                 },
                                             ])
                                         }}
-                                    >
-                                        <SelectTrigger
-                                            id={`${idPrefix}-add-po`}
-                                            size="sm"
-                                            className="w-auto min-w-36 text-xs"
-                                        >
-                                            <PlusIcon
-                                                aria-hidden="true"
-                                                className="size-3.5"
-                                            />
-                                            <SelectValue placeholder="添加同供应商采购单" />
-                                        </SelectTrigger>
-                                        <SelectContent align="end">
-                                            {addableCandidates.map(
-                                                (
-                                                    candidate: PaymentCandidate,
-                                                ) => (
-                                                    <SelectItem
-                                                        key={
-                                                            candidate.payable_account_id
-                                                        }
-                                                        id={`${idPrefix}-add-po-${toAutomationIdSegment(candidate.payable_account_id)}`}
-                                                        value={
-                                                            candidate.payable_account_id
-                                                        }
-                                                    >
-                                                        {
-                                                            candidate.purchase_order_no
-                                                        }{" "}
-                                                        · 可申请{" "}
-                                                        {formatMoney(
-                                                            candidate.available_amount,
-                                                        )}
-                                                    </SelectItem>
-                                                ),
-                                            )}
-                                        </SelectContent>
-                                    </Select>
+                                    />
                                 )}
                             {canEdit && (
                                 <Button
@@ -2184,19 +2106,27 @@ function RequestReworkWorkspaceInner({
                                                 </span>
                                             </TableHead>
                                             <TableCell className="px-2.5 py-2.5 text-right whitespace-normal">
-                                                <MoneyValue
-                                                    display="exact"
-                                                    value={row.available}
-                                                    className={cn(
-                                                        row.noBalance &&
-                                                            "text-destructive",
-                                                    )}
-                                                />
+                                                <span
+                                                    className={
+                                                        row.noBalance
+                                                            ? "text-destructive"
+                                                            : undefined
+                                                    }
+                                                >
+                                                    <MoneyValue
+                                                        display="exact"
+                                                        value={row.available}
+                                                        inheritColor={
+                                                            row.noBalance
+                                                        }
+                                                    />
+                                                </span>
                                             </TableCell>
                                             <TableCell className="px-2.5 py-2 text-right">
                                                 {editingSections.lines ? (
                                                     <Input
                                                         id={`${idPrefix}-line-amount-${seg}`}
+                                                        size="sm"
                                                         aria-label={`${row.purchaseOrderNo} 本次申请金额`}
                                                         type="number"
                                                         inputMode="decimal"
@@ -2212,7 +2142,7 @@ function RequestReworkWorkspaceInner({
                                                             showInlineError ||
                                                             undefined
                                                         }
-                                                        className="num h-control-sm text-right"
+                                                        className="num text-right"
                                                         onChange={(event) => {
                                                             const nextValue =
                                                                 event.target
@@ -2237,7 +2167,6 @@ function RequestReworkWorkspaceInner({
                                                     <MoneyValue
                                                         display="exact"
                                                         value={row.entry.amount}
-                                                        className="font-medium text-foreground"
                                                     />
                                                 )}
                                             </TableCell>
@@ -3110,7 +3039,6 @@ function RequestReworkWorkspaceInner({
                             <MoneyValue
                                 value={liveTotalAmount}
                                 display="exact"
-                                className="font-medium text-foreground"
                             />
                             {changedFormSectionCount > 0
                                 ? ` · 已修改 ${changedFormSectionCount} 个分区`

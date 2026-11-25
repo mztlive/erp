@@ -53,7 +53,7 @@ export function PurchaseSourceReturnPanel({
             </h3>
             {physicalPending ? (
                 <>
-                    <p className="text-body-compact leading-relaxed">
+                    <p className="text-body-compact">
                         {canRegister
                             ? "请与销售及供应商核实客户退回商品的接收结果，再登记供应商实际收到的数量和收货凭据。"
                             : "请核对商品原发货来源，并按对应退货流程办理。当前没有可在此登记的供应商直发数量。"}
@@ -131,7 +131,7 @@ export function PurchaseSourceReturnPanel({
                         ))}
                     </div>
                     {canRegister ? (
-                        <div className="space-y-2 border-t pt-3 text-body-compact leading-relaxed">
+                        <div className="space-y-2 border-t pt-3 text-body-compact">
                             <p>
                                 供应商尚未收到退货时，暂不登记，本待办继续保留。支持分批登记，按本次实际收到的数量填写。
                             </p>

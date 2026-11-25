@@ -398,6 +398,7 @@ export function sourcingProductColumns({
                             <>
                                 <Input
                                     id={`sourcing-inline-${toAutomationIdSegment(single.line.rowKey)}-quantity`}
+                                    size="sm"
                                     type="number"
                                     inputMode="decimal"
                                     min="0"
@@ -407,7 +408,7 @@ export function sourcingProductColumns({
                                         ) ?? "1"
                                     }
                                     aria-label={`行内修改 ${row.product.itemName} 分配数量（${row.product.unitName ?? ""}）`}
-                                    className="num h-control-sm w-16 shrink-0 bg-surface-sunken text-right hover:bg-card focus-visible:bg-card"
+                                    className="num w-16 shrink-0 bg-surface-sunken text-right hover:bg-card focus-visible:bg-card"
                                     value={single.line.quantity}
                                     onChange={(event) =>
                                         form.setFieldValue(
@@ -473,15 +474,19 @@ export function sourcingProductColumns({
                         <div className="flex flex-wrap items-center justify-end gap-1.5">
                             {pricing.kind === "purchase" &&
                             pricing.unitCostGross ? (
-                                <MoneyValue
-                                    display="exact"
-                                    value={pricing.unitCostGross}
-                                    className={cn(
-                                        "text-body-compact font-semibold",
-                                        pricing.hasInvertedSource &&
-                                            "text-destructive",
-                                    )}
-                                />
+                                <span
+                                    className={
+                                        pricing.hasInvertedSource
+                                            ? "text-destructive"
+                                            : undefined
+                                    }
+                                >
+                                    <MoneyValue
+                                        display="exact"
+                                        value={pricing.unitCostGross}
+                                        inheritColor={pricing.hasInvertedSource}
+                                    />
+                                </span>
                             ) : pricing.kind === "stock" ? (
                                 <span className="text-xs font-medium text-info-soft-foreground">
                                     库存核算
@@ -497,15 +502,15 @@ export function sourcingProductColumns({
                             )}
 
                             {pricing.hasInvertedSource ? (
-                                <Badge
-                                    variant="destructive"
+                                <StatusBadge
+                                    tone="destructive"
+                                    label={
+                                        pricing.margin?.marginRateText
+                                            ? `倒挂 ${pricing.margin.marginRateText}`
+                                            : "倒挂"
+                                    }
                                     className="h-4.5 px-1.5 text-tiny"
-                                >
-                                    倒挂
-                                    {pricing.margin?.marginRateText
-                                        ? ` ${pricing.margin.marginRateText}`
-                                        : ""}
-                                </Badge>
+                                />
                             ) : pricing.margin?.marginRateText ? (
                                 <span className="num text-tiny font-medium text-success-soft-foreground">
                                     {pricing.margin.marginRateText}
@@ -520,7 +525,7 @@ export function sourcingProductColumns({
                                     <MoneyValue
                                         display="exact"
                                         value={pricing.salesUnitPriceGross}
-                                        className="text-xs font-normal [&_[data-slot=money-value-number]]:text-muted-foreground"
+                                        inheritColor
                                     />
                                 </span>
                             ) : null}
@@ -569,17 +574,23 @@ export function sourcingProductColumns({
                                                     <span className="font-medium">
                                                         本次选用采购价
                                                     </span>
-                                                    <MoneyValue
-                                                        display="exact"
-                                                        value={
-                                                            pricing.unitCostGross
+                                                    <span
+                                                        className={
+                                                            pricing.hasInvertedSource
+                                                                ? "text-destructive"
+                                                                : undefined
                                                         }
-                                                        className={cn(
-                                                            "font-semibold",
-                                                            pricing.hasInvertedSource &&
-                                                                "text-destructive",
-                                                        )}
-                                                    />
+                                                    >
+                                                        <MoneyValue
+                                                            display="exact"
+                                                            value={
+                                                                pricing.unitCostGross
+                                                            }
+                                                            inheritColor={
+                                                                pricing.hasInvertedSource
+                                                            }
+                                                        />
+                                                    </span>
                                                 </div>
                                             ) : null}
                                             <SalesLinePriceComparison

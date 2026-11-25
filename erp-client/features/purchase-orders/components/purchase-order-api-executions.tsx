@@ -3,6 +3,7 @@
 import Link from "next/link"
 import {
     BusinessStatusBadge,
+    DetailInlineTable,
     QuantityValue,
     detailWorkspaceStyles,
 } from "@/components/business"
@@ -60,10 +61,7 @@ export function PurchaseOrderApiExecutions({
                     width="full"
                     title="实际入库与发货进度"
                 >
-                    <div
-                        data-slot="detail-inline-table"
-                        className={detailWorkspaceStyles.dataTableWrapper}
-                    >
+                    <DetailInlineTable frame="scroll">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -128,7 +126,7 @@ export function PurchaseOrderApiExecutions({
                                 ))}
                             </TableBody>
                         </Table>
-                    </div>
+                    </DetailInlineTable>
                     <p className="text-xs text-muted-foreground">
                         仅统计已确认的入库或发货数量（供应商接单及物流状态不计入实际交付）。
                     </p>

@@ -11,7 +11,7 @@ import {
     TableIdentityCell,
     TableTextCell,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { SellableItemThumbnail } from "@/features/master-data/components/list/sellable-item-thumbnail"
 import type { MasterDataListItem } from "@/features/master-data/types"
 import { compareDecimal } from "@/lib/fixed-decimal"
@@ -67,13 +67,12 @@ export function useSellableListColumns() {
                                 className="flex-1"
                             />
                             {sellable?.deliveryFreightExtra ? (
-                                <Badge
-                                    variant="warning"
+                                <StatusBadge
+                                    tone="warning"
+                                    label="需另付运费"
                                     className="shrink-0"
                                     title="所选地区内有地方只能集采并另付运费"
-                                >
-                                    需另付运费
-                                </Badge>
+                                />
                             ) : null}
                         </div>
                     )

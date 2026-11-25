@@ -2,26 +2,22 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { TriangleAlertIcon } from "lucide-react"
 import {
     useWorkspaceTaskNavigation,
     useWorkspaceTaskPage,
 } from "@/components/business/workspace-task-pane"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { isWorkspaceFrameActive } from "@/lib/workspace-hotkeys"
 import { RequestDepositExecution } from "./request-deposit-execution"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
 import {
+    DecisionKpiBar,
+    DecisionKpiCell,
     MoneyValue,
     RateValue,
     SensitiveValue,
+    TaskRiskSummaryBar,
     WorkspaceFactGrid,
     WorkspaceFactGroup,
     WorkspaceFactItem,
@@ -332,121 +328,63 @@ function BankRequestPaymentForm({
             className="@container/payment-request min-w-0 space-y-4 bg-card pb-4 pt-3"
         >
             {fullPage && (
-                <TooltipProvider>
-                    <section
-                        aria-label="付款任务摘要"
-                        className="grid min-w-0 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/payment-request:grid-cols-2 @[840px]/payment-request:grid-cols-4"
-                    >
-                        <div className="min-w-0">
-                            <span className="text-xs text-muted-foreground">
-                                本申请剩余待付
-                            </span>
-                            <span className="ml-1.5 text-tiny text-muted-foreground/80">
-                                申请 − 已结
-                            </span>
-                            <Tooltip>
-                                <TooltipTrigger
-                                    id={`${id}-unpaid-formula`}
-                                    aria-label="本申请剩余待付计算口径"
-                                    render={
-                                        <Button
-                                            variant="ghost"
-                                            size="icon-xs"
-                                            type="button"
-                                            className="ml-1 size-4 rounded-full border border-border/80 align-middle text-tiny text-muted-foreground hover:bg-card hover:text-foreground"
-                                        />
-                                    }
-                                >
-                                    <span aria-hidden="true">?</span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    申请总额减去已结算金额与已关闭金额。
-                                </TooltipContent>
-                            </Tooltip>
-                            <div className="mt-1 min-w-0">
-                                <MoneyValue
-                                    value={request.unpaid_amount}
-                                    size="section"
-                                    display="exact"
-                                />
-                            </div>
-                        </div>
-                        <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                                <span>申请总额</span>
-                                <span className="text-tiny text-muted-foreground/80">
-                                    含税
-                                </span>
-                                <Tooltip>
-                                    <TooltipTrigger
-                                        id={`${id}-total-formula`}
-                                        aria-label="申请总额计算口径"
-                                        render={
-                                            <Button
-                                                variant="ghost"
-                                                size="icon-xs"
-                                                type="button"
-                                                className="size-4 rounded-full border border-border/80 text-tiny text-muted-foreground hover:bg-card hover:text-foreground"
-                                            />
-                                        }
-                                    >
-                                        <span aria-hidden="true">?</span>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        本次付款申请审批通过的含税申请总额。
-                                    </TooltipContent>
-                                </Tooltip>
-                            </div>
-                            <div className="mt-1 min-w-0">
-                                <MoneyValue
-                                    value={request.total_amount}
-                                    display="exact"
-                                    className="num text-value-compact font-semibold"
-                                />
-                            </div>
-                            <p className="mt-0.5 text-tiny text-muted-foreground">
+                <DecisionKpiBar columns={4} ariaLabel="付款任务摘要">
+                    <DecisionKpiCell
+                        label="本申请剩余待付"
+                        basis="申请 − 已结"
+                        emphasis="primary"
+                        value={
+                            <MoneyValue
+                                value={request.unpaid_amount}
+                                size="section"
+                                display="exact"
+                            />
+                        }
+                        formulaTooltip="申请总额减去已结算金额与已关闭金额。"
+                        formulaTooltipId={`${id}-unpaid-formula`}
+                        formulaTooltipLabel="本申请剩余待付计算口径"
+                    />
+                    <DecisionKpiCell
+                        label="申请总额"
+                        basis="含税"
+                        emphasis="secondary"
+                        value={
+                            <MoneyValue
+                                value={request.total_amount}
+                                size="compact"
+                                display="exact"
+                            />
+                        }
+                        formulaTooltip="本次付款申请审批通过的含税申请总额。"
+                        formulaTooltipId={`${id}-total-formula`}
+                        formulaTooltipLabel="申请总额计算口径"
+                        footnote={
+                            <>
                                 <span className="num">
                                     {request.lines.length}
                                 </span>{" "}
                                 张采购单
-                            </p>
-                        </div>
-                        <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                                <span>本申请已结算</span>
-                                <span className="text-tiny text-muted-foreground/80">
-                                    已核销
-                                </span>
-                                <Tooltip>
-                                    <TooltipTrigger
-                                        id={`${id}-paid-formula`}
-                                        aria-label="本申请已结算计算口径"
-                                        render={
-                                            <Button
-                                                variant="ghost"
-                                                size="icon-xs"
-                                                type="button"
-                                                className="size-4 rounded-full border border-border/80 text-tiny text-muted-foreground hover:bg-card hover:text-foreground"
-                                            />
-                                        }
-                                    >
-                                        <span aria-hidden="true">?</span>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        本申请已登记并核销的累计付款金额及完成比例。
-                                    </TooltipContent>
-                                </Tooltip>
-                            </div>
-                            <div className="mt-1 min-w-0">
-                                <MoneyValue
-                                    value={request.paid_amount}
-                                    display="exact"
-                                    className="num text-value-compact font-semibold"
-                                />
-                            </div>
+                            </>
+                        }
+                    />
+                    <DecisionKpiCell
+                        label="本申请已结算"
+                        basis="已核销"
+                        emphasis="secondary"
+                        value={
+                            <MoneyValue
+                                value={request.paid_amount}
+                                size="compact"
+                                display="exact"
+                            />
+                        }
+                        formulaTooltip="本申请已登记并核销的累计付款金额及完成比例。"
+                        formulaTooltipId={`${id}-paid-formula`}
+                        formulaTooltipLabel="本申请已结算计算口径"
+                        extra={
                             <div
                                 aria-hidden="true"
-                                className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"
+                                className="h-1.5 overflow-hidden rounded-full bg-muted"
                             >
                                 <div
                                     className="h-full rounded-full bg-primary"
@@ -455,7 +393,9 @@ function BankRequestPaymentForm({
                                     }}
                                 />
                             </div>
-                            <p className="mt-0.5 text-tiny text-muted-foreground">
+                        }
+                        footnote={
+                            <>
                                 完成{" "}
                                 <RateValue
                                     value={paidRate}
@@ -473,36 +413,24 @@ function BankRequestPaymentForm({
                                         />
                                     </>
                                 )}
-                            </p>
-                        </div>
-                        <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                                <span>希望付款日</span>
-                                <span className="text-tiny text-muted-foreground/80">
-                                    银行转账
-                                </span>
-                            </div>
-                            <p className="num mt-1 text-value-compact font-semibold text-foreground">
-                                {request.desired_payment_date}
-                            </p>
-                            <p className="mt-0.5 truncate text-tiny text-muted-foreground">
-                                申请人 {request.applicant_name}
-                            </p>
-                        </div>
-                    </section>
-                </TooltipProvider>
+                            </>
+                        }
+                    />
+                    <DecisionKpiCell
+                        label="希望付款日"
+                        basis="银行转账"
+                        emphasis="secondary"
+                        value={request.desired_payment_date}
+                        footnote={`申请人 ${request.applicant_name}`}
+                    />
+                </DecisionKpiBar>
             )}
             {blocked && !unknown && (
-                <div
-                    role="alert"
-                    className="flex items-start gap-2 rounded-r-md border-l-2 border-l-destructive bg-destructive-soft/65 px-3 py-2 text-xs text-destructive-soft-foreground"
-                >
-                    <TriangleAlertIcon
-                        aria-hidden="true"
-                        className="mt-0.5 size-3.5 shrink-0"
-                    />
-                    <span>{blocked}</span>
-                </div>
+                <TaskRiskSummaryBar
+                    severity="destructive"
+                    leadLabel={null}
+                    summary={blocked}
+                />
             )}
             <WorkspaceFactGroup title="付款与收款账户">
                 <WorkspaceFactGrid columns={3} ariaLabel="付款与收款账户">

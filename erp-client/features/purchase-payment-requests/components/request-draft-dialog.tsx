@@ -471,18 +471,13 @@ function RequestDraftForm({
                                                     )}
                                                     size={
                                                         fixedOrder
-                                                            ? "inherit"
+                                                            ? "compact"
                                                             : "section"
                                                     }
                                                     display={
                                                         fixedOrder
                                                             ? "exact"
                                                             : "full"
-                                                    }
-                                                    className={
-                                                        fixedOrder
-                                                            ? "text-value-compact font-semibold tracking-tight"
-                                                            : undefined
                                                     }
                                                 />
                                             )}

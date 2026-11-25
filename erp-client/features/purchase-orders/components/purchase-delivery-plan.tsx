@@ -195,7 +195,7 @@ export function PurchaseDeliveryPlan({
             ) : mode === "export-summary" ? (
                 <div className="space-y-3">
                     <DeliverySummaryTable groups={summary.itemGroups} />
-                    <div className="rounded-sm border border-border bg-muted/30 px-3 py-2.5 text-xs leading-5 text-foreground">
+                    <div className="rounded-sm border border-border bg-muted/30 px-3 py-2.5 text-xs text-foreground">
                         本采购单共含{" "}
                         <span className="num font-medium">
                             {summary.totalRows}
@@ -272,9 +272,10 @@ export function PurchaseDeliveryPlan({
                             />
                             <Input
                                 id={`${idPrefix}-sheet-search`}
+                                size="lg"
                                 aria-label="搜索收货人、电话、地址或商品"
                                 placeholder="搜索收货人、电话、地址或商品…"
-                                className="h-9 pr-9 pl-9"
+                                className="pr-9 pl-9"
                                 value={query}
                                 onChange={(event) =>
                                     setQuery(event.target.value)
@@ -434,9 +435,10 @@ export function PurchaseDeliveryPlanExplorer({
                     />
                     <Input
                         id={`${idPrefix}-search`}
+                        size="sm"
                         aria-label="搜索收货人、电话、地址或商品"
                         placeholder="搜索收货人、电话、地址或商品…"
-                        className="h-control-sm border-transparent bg-surface-sunken pr-7 pl-8 text-xs shadow-none hover:bg-muted/70 focus-visible:border-primary focus-visible:bg-card"
+                        className="border-transparent bg-surface-sunken pr-7 pl-8 shadow-none hover:bg-muted/70 focus-visible:border-primary focus-visible:bg-card"
                         value={query}
                         onChange={(event) => setQuery(event.target.value)}
                     />
@@ -530,7 +532,7 @@ function DeliverySummaryTable({
     groups: readonly PurchaseDeliveryItemGroup[]
 }) {
     return (
-        <Table className="w-full table-fixed border-collapse text-xs">
+        <Table className="w-full table-fixed border-collapse">
             <TableHeader>
                 <TableRow className="bg-muted/40 text-left hover:bg-muted/40">
                     <TableHead className="w-[34%] border border-border p-2 font-medium">
@@ -625,7 +627,7 @@ function GroupedDeliveryTables({
                     </div>
 
                     {group.allocations.length > 0 ? (
-                        <Table className="w-full table-fixed border-collapse text-xs">
+                        <Table className="w-full table-fixed border-collapse">
                             <TableHeader>
                                 <TableRow className="bg-muted/20 text-left hover:bg-muted/20">
                                     <TableHead className="w-[8%] border-r border-b border-border px-2 py-1.5 font-medium">

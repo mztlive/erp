@@ -352,7 +352,6 @@ export function InquiryExpenseSourceSection({
                                                         candidate.available_amount
                                                     }
                                                     display="exact"
-                                                    className="font-semibold text-foreground"
                                                 />
                                             </div>
                                             <Button
@@ -726,7 +725,6 @@ function InquiryExpenseSourceForm({
                                 <MoneyValue
                                     value={line.grossAmount}
                                     display="exact"
-                                    className="font-semibold text-foreground"
                                 />
                             </dd>
                         </div>
@@ -866,7 +864,6 @@ function InquiryExpenseSourceForm({
                             <MoneyValue
                                 value={candidate.available_amount}
                                 display="exact"
-                                className="font-medium text-foreground"
                             />
                             <span className="mx-1.5">·</span>
                             确认税率：
@@ -1178,11 +1175,10 @@ function InquiryExpenseAmountPreview({
                         </p>
                     ) : (
                         <p className="text-muted-foreground">
-                            本次转换后剩余可转余额：
+                            本次转换后剩余可转余额：{" "}
                             <MoneyValue
                                 value={quotaStatus.value}
                                 display="exact"
-                                className="ml-1 font-medium text-foreground"
                             />
                         </p>
                     )}

@@ -24,55 +24,12 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { FileUpload, imagePreviewSource } from "@/components/ui/file-upload"
-import { Input } from "@/components/ui/input"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { moveListItem } from "@/features/master-data/lib/move-list-item"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { fileNameConflictError, fileSelectionError } from "@/lib/file-selection"
 import { fileUploadText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
-
-function MoneyInput({
-    value,
-    onChange,
-    disabled = false,
-    align = "start",
-    "aria-label": ariaLabel,
-    id,
-}: {
-    value: string
-    onChange: (next: string) => void
-    disabled?: boolean
-    align?: "start" | "end"
-    "aria-label": string
-    id?: string
-}) {
-    const showPrefix = !value.trim().startsWith("¥")
-    return (
-        <div className="relative">
-            {showPrefix ? (
-                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground/70">
-                    ¥
-                </span>
-            ) : null}
-            <Input
-                id={id}
-                inputMode="decimal"
-                className={cn(
-                    "h-control-sm num",
-                    showPrefix && "pl-6",
-                    align === "end" && "text-right",
-                )}
-                value={value}
-                disabled={disabled}
-                onChange={(event) =>
-                    onChange(event.target.value.replaceAll("¥", ""))
-                }
-                aria-label={ariaLabel}
-            />
-        </div>
-    )
-}
 
 function useMediaLocalPreviews(
     value: readonly string[],
@@ -709,7 +666,7 @@ function ProductBasicMediaRail({
                                 <Maximize2Icon className="size-4" aria-hidden />
                             </span>
                         </button>
-                        <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-sm bg-primary/90 px-1.5 py-0.5 text-tiny leading-none font-medium text-primary-foreground">
+                        <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-sm bg-primary/90 px-1.5 py-0.5 text-tiny font-medium text-primary-foreground">
                             首图
                         </span>
                         {editable ? (
@@ -1052,4 +1009,4 @@ function SkuMainImageField({
     )
 }
 
-export { MediaListEditor, MoneyInput, ProductBasicMediaRail, SkuMainImageField }
+export { MediaListEditor, ProductBasicMediaRail, SkuMainImageField }

@@ -388,7 +388,7 @@ function InventoryBalancePreview({
                         </>
                     ) : null}
 
-                    <p className="text-tiny leading-relaxed text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         查询于{" "}
                         {formatDateTime(
                             detail.queriedAt,

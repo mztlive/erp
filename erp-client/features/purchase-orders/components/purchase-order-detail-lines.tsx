@@ -55,7 +55,7 @@ export function PurchaseOrderDetailLines({
                     <TableHead
                         scope="col"
                         data-align="end"
-                        className="w-28 whitespace-normal leading-4"
+                        className="w-28 whitespace-normal"
                     >
                         采购含税单价
                     </TableHead>
@@ -65,7 +65,7 @@ export function PurchaseOrderDetailLines({
                     <TableHead
                         scope="col"
                         data-align="end"
-                        className="w-28 whitespace-normal leading-4"
+                        className="w-28 whitespace-normal"
                     >
                         客户成交含税单价
                     </TableHead>
@@ -99,7 +99,7 @@ export function PurchaseOrderDetailLines({
                     return (
                         <TableRow key={line.lineId}>
                             <TableCell className="min-w-56 space-y-1 py-3 align-top whitespace-normal wrap-anywhere">
-                                <div className="leading-5 font-medium text-foreground">
+                                <div className="font-medium text-foreground">
                                     {line.itemName}
                                 </div>
                                 {spec ? (
@@ -143,10 +143,7 @@ export function PurchaseOrderDetailLines({
                                         {allocations
                                             .slice(0, 2)
                                             .map((allocation, index) => (
-                                                <p
-                                                    key={index}
-                                                    className="leading-4.5"
-                                                >
+                                                <p key={index}>
                                                     <span className="num">
                                                         {allocation.quantity}
                                                         {line.unitName

@@ -6,6 +6,7 @@ import { z } from "zod"
 import { todayDate } from "@/lib/datetime"
 
 import {
+    DetailInlineTable,
     MoneyValue,
     RateValue,
     detailWorkspaceStyles,
@@ -130,10 +131,7 @@ export function PurchaseOrderExpenseSection({
                     ? "费用发生后上传运单、签收单或账单凭证。确认后计入来源销售单的实际经营盈亏，该费用行不能再改单修改。"
                     : "费用已确认发生或已移除，无需继续确认。"}
             </p>
-            <div
-                data-slot="detail-inline-table"
-                className={detailWorkspaceStyles.dataTableWrapper}
-            >
+            <DetailInlineTable frame="scroll">
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -161,7 +159,7 @@ export function PurchaseOrderExpenseSection({
                         ))}
                     </TableBody>
                 </Table>
-            </div>
+            </DetailInlineTable>
             <div className="flex flex-wrap items-baseline justify-end gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
                 <span className="num">共 {lines.length} 项</span>
                 <span>

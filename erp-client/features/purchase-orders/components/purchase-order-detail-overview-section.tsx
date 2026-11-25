@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import Link from "next/link"
 import { ArrowUpRightIcon } from "lucide-react"
 
-import { MoneyValue, detailWorkspaceStyles } from "@/components/business"
+import { DetailInlineTable, MoneyValue } from "@/components/business"
 import { PurchaseOrderExpenseSection } from "@/features/purchase-orders/components/purchase-order-expense-section"
 import { PurchaseOrderSourceSales } from "@/features/purchase-orders/components/purchase-order-source-sales"
 import {
@@ -80,16 +80,13 @@ export function PurchaseOrderDetailOverviewSection({
                     title="采购明细"
                     count={productLines.length}
                 >
-                    <div
-                        data-slot="detail-inline-table"
-                        className={detailWorkspaceStyles.dataTableWrapper}
-                    >
+                    <DetailInlineTable frame="scroll">
                         <PurchaseOrderDetailLines
                             order={order}
                             lines={productLines}
                             costMasked={costMasked}
                         />
-                    </div>
+                    </DetailInlineTable>
                     {productSubtotal != null ? (
                         <div className="flex flex-wrap items-baseline justify-end gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
                             <span className="num">

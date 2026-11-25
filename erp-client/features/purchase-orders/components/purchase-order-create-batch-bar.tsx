@@ -13,7 +13,7 @@ import {
     WarehouseIcon,
     XIcon,
 } from "lucide-react"
-import { MoneyValue } from "@/components/business"
+import { FulfillmentRouteBadge, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -446,18 +446,15 @@ export function PurchaseOrderCreateSelectionBar({
                                                                     <span className="truncate text-body-compact font-medium text-foreground">
                                                                         {label}
                                                                     </span>
-                                                                    <Badge
-                                                                        variant={
-                                                                            isStock
-                                                                                ? "info"
-                                                                                : "neutral"
+                                                                    <FulfillmentRouteBadge
+                                                                        option={
+                                                                            opt
                                                                         }
-                                                                        className="h-4.5 px-1.5 text-tiny"
-                                                                    >
-                                                                        {sourcingRouteLabel(
+                                                                        label={sourcingRouteLabel(
                                                                             opt,
                                                                         )}
-                                                                    </Badge>
+                                                                        size="compact"
+                                                                    />
                                                                     {opt.inquirySource ? (
                                                                         <Badge
                                                                             variant="violet"

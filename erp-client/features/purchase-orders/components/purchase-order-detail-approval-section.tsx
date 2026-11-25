@@ -293,7 +293,7 @@ function FlatRuntimeSummary({
                         >
                             流程信息
                         </summary>
-                        <p className="mt-1.5 break-words leading-5">
+                        <p className="mt-1.5 break-words">
                             {displayProcessVersion({
                                 name: instance.processName,
                                 version: instance.processVersion,
@@ -491,12 +491,12 @@ function ApprovalEntry({
                                 {reason}
                             </span>
                         </summary>
-                        <p className="mt-1.5 whitespace-pre-wrap break-words leading-6">
+                        <p className="mt-1.5 whitespace-pre-wrap break-words">
                             {reason}
                         </p>
                     </details>
                 ) : (
-                    <p className="mt-1.5 whitespace-pre-wrap break-words text-body-compact leading-6 text-muted-foreground">
+                    <p className="mt-1.5 whitespace-pre-wrap break-words text-body-compact text-muted-foreground">
                         {reason}
                     </p>
                 )

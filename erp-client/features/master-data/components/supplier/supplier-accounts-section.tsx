@@ -6,8 +6,8 @@ import type { ColumnDef } from "@tanstack/react-table"
 import {
     BusinessEmptyState,
     DataTable,
+    DetailInlineTable,
     DetailWorkspaceSection,
-    detailWorkspaceStyles,
 } from "@/components/business"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
@@ -153,10 +153,7 @@ export function SupplierAccountsSection({
                     className="py-12"
                 />
             ) : (
-                <div
-                    data-slot="detail-inline-table"
-                    className={detailWorkspaceStyles.dataTableWrapper}
-                >
+                <DetailInlineTable frame="scroll">
                     <DataTable
                         id="supplier-portal-admin-accounts-table"
                         data={query.data?.items ?? []}
@@ -180,7 +177,7 @@ export function SupplierAccountsSection({
                             ) : undefined
                         }
                     />
-                </div>
+                </DetailInlineTable>
             )}
             {canCreate && creating && (
                 <SupplierAccountCreateDialog

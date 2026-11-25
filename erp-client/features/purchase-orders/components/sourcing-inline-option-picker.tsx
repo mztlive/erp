@@ -5,14 +5,17 @@ import {
     ArrowRightIcon,
     CheckIcon,
     ChevronDownIcon,
-    PackageCheckIcon,
     SearchIcon,
     SlidersHorizontalIcon,
     SparklesIcon,
     TriangleAlertIcon,
     XIcon,
 } from "lucide-react"
-import { MoneyValue, QuantityValue } from "@/components/business"
+import {
+    FulfillmentRouteBadge,
+    MoneyValue,
+    QuantityValue,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -124,13 +127,12 @@ export function SourcingInlineOptionPicker({
     const routeAndMeta = (
         <>
             {currentRoute ? (
-                <Badge
-                    variant={isStock ? "info" : "neutral"}
-                    className="h-5 px-1.5 text-tiny"
-                >
-                    {isStock ? <PackageCheckIcon aria-hidden="true" /> : null}
-                    {currentRoute}
-                </Badge>
+                <FulfillmentRouteBadge
+                    option={currentOption}
+                    label={currentRoute}
+                    size="compact"
+                    className="h-5"
+                />
             ) : null}
             {currentOption?.inquirySource ? (
                 <Badge variant="violet" className="h-5 px-1.5 text-tiny">
@@ -202,7 +204,6 @@ export function SourcingInlineOptionPicker({
                                 <MoneyValue
                                     display="exact"
                                     value={salesPrice}
-                                    className="font-medium text-foreground"
                                 />
                                 {" · "}待分配{" "}
                                 <QuantityValue
@@ -237,9 +238,10 @@ export function SourcingInlineOptionPicker({
                             />
                             <Input
                                 id={`${idPrefix}-option-search`}
+                                size="sm"
                                 aria-label="搜索供应商或仓库"
                                 placeholder="搜索供应商、仓库或履约方式"
-                                className="h-control-sm pr-7 pl-8 text-xs"
+                                className="pr-7 pl-8"
                                 value={query}
                                 onChange={(event) =>
                                     setQuery(event.target.value)
@@ -339,16 +341,11 @@ export function SourcingInlineOptionPicker({
                                                     <span className="truncate text-body-compact font-medium text-foreground">
                                                         {name}
                                                     </span>
-                                                    <Badge
-                                                        variant={
-                                                            stock
-                                                                ? "info"
-                                                                : "neutral"
-                                                        }
-                                                        className="h-4.5 px-1.5 text-tiny"
-                                                    >
-                                                        {route}
-                                                    </Badge>
+                                                    <FulfillmentRouteBadge
+                                                        option={option}
+                                                        label={route}
+                                                        size="compact"
+                                                    />
                                                     {option.inquirySource ? (
                                                         <Badge
                                                             variant="violet"

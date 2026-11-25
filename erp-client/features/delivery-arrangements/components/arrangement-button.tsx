@@ -657,7 +657,7 @@ function ArrangementEditor({
                             />
                             <Label
                                 htmlFor={`${prefix}-reset-packages`}
-                                className="block leading-relaxed"
+                                className="block"
                             >
                                 我已确认：地址发生变化的包裹需要重新登记，原物流号保留供核对。
                                 {hasUnsavedChanges

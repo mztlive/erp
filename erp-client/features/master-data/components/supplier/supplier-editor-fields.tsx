@@ -2,7 +2,7 @@
 
 import * as React from "react"
 
-import { DetailWorkspaceSection } from "@/components/business"
+import { DetailFormGrid, DetailWorkspaceSection } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -236,10 +236,7 @@ export function CapabilityCheckboxGroup({
     return (
         <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-5">
             {SUPPLIER_CAPABILITY_OPTIONS.map((option) => (
-                <label
-                    key={option}
-                    className="flex items-center gap-2 text-xs leading-none"
-                >
+                <label key={option} className="flex items-center gap-2 text-xs">
                     <Checkbox
                         id={`master-data-supplier-capability-${toAutomationIdSegment(option)}`}
                         checked={selected.includes(option)}
@@ -283,7 +280,7 @@ export function SectionPanel({
             subtitle={description}
             width="form"
         >
-            <div data-slot="detail-form-grid">{children}</div>
+            <DetailFormGrid layout="stack">{children}</DetailFormGrid>
         </DetailWorkspaceSection>
     )
 }

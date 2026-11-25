@@ -201,9 +201,10 @@ export function SourcingInlineWarehousePicker({
                         />
                         <Input
                             id={`${id}-search`}
+                            size="sm"
                             aria-label="搜索仓库名称或编码"
                             placeholder="搜索仓库名称或编码"
-                            className="h-control-sm pr-7 pl-8 text-xs"
+                            className="pr-7 pl-8"
                             value={rawQuery}
                             onChange={(event) =>
                                 setRawQuery(event.target.value)

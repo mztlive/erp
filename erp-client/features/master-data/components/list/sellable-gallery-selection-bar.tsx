@@ -112,7 +112,7 @@ export function SellableGallerySelectionBar({
             {leadingControl}
             <span className="inline-flex items-center gap-1.5 pl-1 text-foreground/85">
                 <span className="font-medium">已选</span>
-                <span className="num inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs leading-none font-semibold text-primary-foreground">
+                <span className="num inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground">
                     {display.selectedCount}
                 </span>
                 <span className="num text-muted-foreground">

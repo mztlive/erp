@@ -131,7 +131,7 @@ export function RequestDraftGroup({
                     ))}
             </header>
             {issues.length > 0 && (
-                <div className="mt-4 rounded-md bg-warning-soft px-3 py-2 text-xs leading-relaxed text-warning-soft-foreground">
+                <div className="mt-4 rounded-md bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground">
                     <p className="font-medium">待补充</p>
                     <ul className="mt-1 list-inside list-disc">
                         {issues.map((message) => (

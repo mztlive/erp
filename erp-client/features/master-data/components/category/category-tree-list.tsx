@@ -245,7 +245,7 @@ export function CategoryTreeList({
                             <CategoryName name={item.name} query={query} />
                         </span>
                         {isDisabled ? (
-                            <span className="shrink-0 rounded-sm bg-neutral-soft px-1.5 py-0 text-tiny leading-4 font-medium text-neutral-soft-foreground">
+                            <span className="shrink-0 rounded-sm bg-neutral-soft px-1.5 py-0 text-tiny font-medium text-neutral-soft-foreground">
                                 停用
                             </span>
                         ) : null}

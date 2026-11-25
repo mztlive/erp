@@ -285,9 +285,10 @@ export function PurchaseOrderCreateSourcingWorkspace({
                 />
                 <Input
                     id="sourcing-products-search"
+                    size="sm"
                     aria-label="搜索商品名称、规格或供应商"
                     placeholder="搜商品、规格或供应商"
-                    className="h-control-sm pr-7 pl-8 text-xs"
+                    className="pr-7 pl-8"
                     value={query}
                     onChange={(event) => changeQuery(event.target.value)}
                 />

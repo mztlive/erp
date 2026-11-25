@@ -4,8 +4,8 @@ import { ArrowUpRightIcon } from "lucide-react"
 import Link from "next/link"
 
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { DisabledActionHint } from "@/features/master-data/components/list/list-chrome"
 import { MasterDataPreviewPanel } from "@/features/master-data/components/list/master-data-preview"
@@ -78,15 +78,14 @@ export function WarehousePreviewSheet({
                             tone={previewRow.lifecycleTone}
                         />
                         {canReadRevisions ? (
-                            <Badge
-                                variant={
+                            <StatusBadge
+                                tone={
                                     previewRow.revisionTiming === "FUTURE"
                                         ? "warning"
-                                        : "secondary"
+                                        : "neutral"
                                 }
-                            >
-                                {previewRow.revisionTimingLabel}
-                            </Badge>
+                                label={previewRow.revisionTimingLabel}
+                            />
                         ) : null}
                     </div>
                 ) : null

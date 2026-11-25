@@ -2,17 +2,10 @@
 
 import { useImperativeHandle, useState, type Ref } from "react"
 import { ChevronLeftIcon, ChevronRightIcon, SearchIcon } from "lucide-react"
-import type { ValidationIssue } from "@/components/business"
+import { OptionCombobox, type ValidationIssue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
 import {
     Table,
     TableBody,
@@ -50,15 +43,8 @@ const QUALITY_LABELS: Readonly<Record<string, string>> = {
     不合格: "不合格",
     待检: "待检",
 }
-const QUALITY_TONE_DOT: Readonly<Record<string, string>> = {
-    合格: "bg-success",
-    部分合格: "bg-warning",
-    不合格: "bg-destructive",
-    待检: "bg-muted-foreground/40",
-}
-
 const inlineInputClassName =
-    "num h-control-sm min-w-0 border-0 bg-surface-sunken px-2 text-right text-body-compact shadow-none hover:bg-card focus-visible:bg-card"
+    "num min-w-0 border-0 bg-surface-sunken px-2 text-right shadow-none hover:bg-card focus-visible:bg-card"
 
 type BatchRow = {
     id: string
@@ -547,9 +533,10 @@ export function FulfillmentBatchTable({
                                         <Input
                                             id={`${id}-search`}
                                             type="search"
+                                            size="sm"
                                             aria-label="搜索商品、编码或收货地址"
                                             placeholder="搜索履约明细"
-                                            className="h-control-sm pl-7 text-body-compact"
+                                            className="pl-7"
                                             value={query}
                                             onChange={(event) => {
                                                 setQuery(event.target.value)
@@ -667,6 +654,7 @@ export function FulfillmentBatchTable({
                                         {row.editableKind !== "readonly" ? (
                                             <Input
                                                 id={row.id}
+                                                size="sm"
                                                 aria-label={`${row.name}${row.address ? ` · ${row.address}` : ""} · ${quantityLabel}`}
                                                 aria-invalid={
                                                     messagesByTarget.has(
@@ -854,8 +842,6 @@ function ReceiptQualityCell({
     const ids = receiptFieldIds(line)
     const normalizedResult =
         QUALITY_LABELS[line.qualityResult] ?? line.qualityResult
-    const toneDot =
-        QUALITY_TONE_DOT[normalizedResult] ?? "bg-muted-foreground/40"
 
     return (
         <TableCell className="align-top whitespace-normal">
@@ -868,6 +854,7 @@ function ReceiptQualityCell({
                         <span>合格</span>
                         <Input
                             id={ids.qualified}
+                            size="sm"
                             aria-label={`${itemName} 合格数量`}
                             aria-invalid={
                                 messagesByTarget.has(ids.qualified) || undefined
@@ -891,6 +878,7 @@ function ReceiptQualityCell({
                         <span>不合格</span>
                         <Input
                             id={ids.rejected}
+                            size="sm"
                             aria-label={`${itemName} 不合格数量`}
                             aria-invalid={
                                 messagesByTarget.has(ids.rejected) || undefined
@@ -909,54 +897,22 @@ function ReceiptQualityCell({
                         />
                     </label>
                 </div>
-                <Select
+                <OptionCombobox
+                    id={ids.result}
+                    size="sm"
+                    options={QUALITY_RESULT_OPTIONS}
                     value={normalizedResult || null}
                     disabled={disabled}
+                    allowClear={false}
+                    placeholder="选择质量结果"
+                    aria-label={`${itemName} 质量结果`}
+                    aria-invalid={messagesByTarget.has(ids.result) || undefined}
+                    aria-describedby={issueId}
+                    inputClassName="border-0 bg-surface-sunken hover:bg-card"
                     onValueChange={(value) =>
                         onUpdate({ qualityResult: value ?? "" })
                     }
-                >
-                    <SelectTrigger
-                        id={ids.result}
-                        size="sm"
-                        aria-label={`${itemName} 质量结果`}
-                        aria-invalid={
-                            messagesByTarget.has(ids.result) || undefined
-                        }
-                        aria-describedby={issueId}
-                        className="w-full min-w-0 border-0 bg-surface-sunken px-2 hover:bg-card"
-                    >
-                        <SelectValue placeholder="选择质量结果">
-                            {normalizedResult ? (
-                                <span className="inline-flex min-w-0 items-center gap-1.5">
-                                    <span
-                                        aria-hidden="true"
-                                        className={cn(
-                                            "size-1.5 shrink-0 rounded-full",
-                                            toneDot,
-                                        )}
-                                    />
-                                    <span className="truncate">
-                                        {normalizedResult}
-                                    </span>
-                                </span>
-                            ) : (
-                                "选择质量结果"
-                            )}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        {QUALITY_RESULT_OPTIONS.map((option) => (
-                            <SelectItem
-                                key={option.value}
-                                idPrefix={ids.result}
-                                value={option.value}
-                            >
-                                {option.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                />
                 {line.evidenceNote ? (
                     <p className="wrap-anywhere text-xs text-muted-foreground">
                         {line.evidenceNote}

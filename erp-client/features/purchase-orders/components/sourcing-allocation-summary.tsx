@@ -4,7 +4,7 @@ import {
     TriangleAlertIcon,
     ZapIcon,
 } from "lucide-react"
-import { QuantityValue } from "@/components/business"
+import { QuantityValue, sourceAccentForIndex } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
@@ -21,7 +21,6 @@ import {
 import { sourcingRouteLabel } from "../lib/sourcing/delivery-terms"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
 import { quantityUnits } from "../lib/sourcing/quantity"
-import { sourceAccentForIndex } from "../lib/sourcing/source-palette"
 
 type BarSegment = {
     key: string

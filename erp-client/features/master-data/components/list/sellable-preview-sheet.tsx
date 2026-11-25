@@ -6,9 +6,9 @@ import Link from "next/link"
 import { ArrowUpRightIcon } from "lucide-react"
 
 import { QuickPreviewSheet } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { SheetClose } from "@/components/ui/sheet"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { SellableItemPreviewPanel } from "@/features/master-data/components/list/master-data-preview"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
@@ -54,7 +54,7 @@ export function SellablePreviewSheet({
             summary={
                 previewRow?.sellableItem ? (
                     <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="success">当前可售</Badge>
+                        <StatusBadge tone="success" label="当前可售" />
                         <span className="text-xs text-muted-foreground">
                             {previewRow.sellableItem.productKindLabel}
                         </span>

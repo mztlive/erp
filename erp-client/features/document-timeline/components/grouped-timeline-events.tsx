@@ -275,11 +275,12 @@ function DocumentTimelineGroup({
                                 {latestAmountEvent?.amount != null ? (
                                     <span className="inline-flex items-baseline gap-1 text-xs text-muted-foreground">
                                         <span>{amountPrefix}</span>
-                                        <MoneyValue
-                                            value={latestAmountEvent.amount}
-                                            display="exact"
-                                            className="text-body-compact"
-                                        />
+                                        <span className="text-body-compact">
+                                            <MoneyValue
+                                                value={latestAmountEvent.amount}
+                                                display="exact"
+                                            />
+                                        </span>
                                     </span>
                                 ) : null}
                                 <time

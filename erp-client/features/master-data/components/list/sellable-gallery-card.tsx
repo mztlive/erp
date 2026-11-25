@@ -95,7 +95,6 @@ export function SellableGalleryCard({
                         <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
                             <MoneyValue
                                 display="exact"
-                                className="text-body-compact font-semibold"
                                 value={item?.salesVisiblePriceGross}
                             />
                             <span
@@ -110,7 +109,6 @@ export function SellableGalleryCard({
                                 <span>集采</span>
                                 <MoneyValue
                                     display="exact"
-                                    className="text-xs font-medium"
                                     value={item?.bulkPriceGross}
                                 />
                             </span>
@@ -118,13 +116,12 @@ export function SellableGalleryCard({
                                 <span>市场</span>
                                 <MoneyValue
                                     display="exact"
-                                    className="text-xs font-medium"
                                     value={item?.marketPrice}
                                 />
                             </span>
                         </div>
                         <CardTitle
-                            className="line-clamp-2 text-body-compact leading-snug font-semibold tracking-tight"
+                            className="line-clamp-2 text-body-compact font-semibold tracking-tight"
                             title={row.name}
                         >
                             {row.name}

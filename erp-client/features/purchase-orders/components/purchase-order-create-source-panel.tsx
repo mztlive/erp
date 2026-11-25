@@ -222,10 +222,7 @@ function SourceSnapshot({ summary }: { summary: SourcingOrderSummary }) {
             aria-label="来源销售单摘要"
         >
             <div className="flex flex-col gap-1">
-                <MoneyValue
-                    value={summary.minEstimatedGross}
-                    className="text-value-section font-semibold tracking-tight"
-                />
+                <MoneyValue size="section" value={summary.minEstimatedGross} />
                 <span className="text-xs text-muted-foreground">
                     推荐采购估算
                 </span>

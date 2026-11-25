@@ -338,7 +338,7 @@ function AddressEditor({
                     </p>
                 )}
                 {action.mode === "delete" ? (
-                    <p className="text-body-compact leading-6">
+                    <p className="text-body-compact">
                         {action.destination.recipient} ·{" "}
                         {action.destination.phone}
                         <br />
@@ -488,7 +488,7 @@ function AddressEditor({
                         {(field) => (
                             <Label
                                 htmlFor={`${prefix}-reset`}
-                                className="items-start text-xs font-normal leading-5"
+                                className="items-start text-xs font-normal"
                             >
                                 <Checkbox
                                     id={`${prefix}-reset`}

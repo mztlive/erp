@@ -2,9 +2,9 @@
 
 import { CircleHelpIcon } from "lucide-react"
 
+import { DetailInlineTable, MoneyValue } from "@/components/business"
 import { DetailHint } from "@/components/business/detail-presentation"
-import { detailWorkspaceStyles } from "@/components/business/detail-workspace"
-import { MoneyValue } from "@/components/business/values"
+import { MoneyInput } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,10 +19,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import {
-    MoneyInput,
-    SkuMainImageField,
-} from "@/features/master-data/components/product/product-editor-media"
+import { SkuMainImageField } from "@/features/master-data/components/product/product-editor-media"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import type {
     ProductFields,
@@ -141,7 +138,7 @@ function SkuRow({
                         {canRevise ? (
                             <Input
                                 id={`master-data-product-sku-${skuSegment}-name`}
-                                className="h-control-sm"
+                                size="sm"
                                 value={sku.name}
                                 onChange={(event) =>
                                     updateSku(index, {
@@ -154,14 +151,14 @@ function SkuRow({
                             />
                         ) : (
                             <p
-                                className="truncate pt-1 font-medium leading-5 text-foreground"
+                                className="truncate pt-1 font-medium text-foreground"
                                 title={skuName}
                             >
                                 {skuName}
                             </p>
                         )}
                         <p
-                            className="truncate pl-2.5 text-xs leading-4 text-muted-foreground"
+                            className="truncate pl-2.5 text-xs text-muted-foreground"
                             title={specText}
                         >
                             {specText}
@@ -182,7 +179,8 @@ function SkuRow({
                     ) : null}
                     <Input
                         id={`master-data-product-sku-${skuSegment}-barcode`}
-                        className="h-control-sm num"
+                        size="sm"
+                        className="num"
                         value={sku.barcode ?? ""}
                         disabled={!canRevise}
                         onChange={(event) =>
@@ -199,12 +197,17 @@ function SkuRow({
             <TableCell data-align="end" className={cellPad}>
                 <MoneyInput
                     id={`master-data-product-sku-${skuSegment}-sale-price`}
+                    size="sm"
+                    prefix
+                    showReadout={false}
                     value={sku.salePrice ?? ""}
                     disabled={!canRevise}
                     align="end"
-                    onChange={(next) =>
+                    onChange={(event) =>
                         updateSku(index, {
-                            salePrice: next || undefined,
+                            salePrice:
+                                event.target.value.replaceAll("¥", "") ||
+                                undefined,
                         })
                     }
                     aria-label={`${sku.specLabel} 一件代发价`}
@@ -213,11 +216,18 @@ function SkuRow({
             <TableCell data-align="end" className={cellPad}>
                 <MoneyInput
                     id={`master-data-product-sku-${skuSegment}-bulk-price`}
+                    size="sm"
+                    prefix
+                    showReadout={false}
                     value={sku.bulkPriceGross ?? ""}
                     disabled={!canRevise}
                     align="end"
-                    onChange={(next) =>
-                        updateSku(index, { bulkPriceGross: next || undefined })
+                    onChange={(event) =>
+                        updateSku(index, {
+                            bulkPriceGross:
+                                event.target.value.replaceAll("¥", "") ||
+                                undefined,
+                        })
                     }
                     aria-label={`${sku.specLabel} 集采价`}
                 />
@@ -225,7 +235,8 @@ function SkuRow({
             <TableCell data-align="end" className={cellPad}>
                 <Input
                     id={`master-data-product-sku-${skuSegment}-bulk-min-quantity`}
-                    className="h-control-sm num text-right"
+                    size="sm"
+                    className="num text-right"
                     inputMode="decimal"
                     value={sku.bulkMinQuantity ?? ""}
                     disabled={!canRevise}
@@ -240,12 +251,17 @@ function SkuRow({
             <TableCell data-align="end" className={cellPad}>
                 <MoneyInput
                     id={`master-data-product-sku-${skuSegment}-market-price`}
+                    size="sm"
+                    prefix
+                    showReadout={false}
                     value={sku.marketPrice ?? ""}
                     disabled={!canRevise}
                     align="end"
-                    onChange={(next) =>
+                    onChange={(event) =>
                         updateSku(index, {
-                            marketPrice: next || undefined,
+                            marketPrice:
+                                event.target.value.replaceAll("¥", "") ||
+                                undefined,
                         })
                     }
                     aria-label={`${sku.specLabel} 市场价`}
@@ -307,7 +323,7 @@ function SkuRow({
                                                 supplySummary.lowestDropshipPrice
                                             }
                                             display="compact"
-                                            className="text-muted-foreground"
+                                            inheritColor
                                         />
                                         起
                                     </span>
@@ -446,10 +462,7 @@ function ProductSkuTable({
 }: ProductSkuTableProps) {
     const showRowInventory = fields.skus.length > 1
     return (
-        <div
-            data-slot="detail-inline-table"
-            className={detailWorkspaceStyles.inlineTableWrapper}
-        >
+        <DetailInlineTable>
             <Table
                 data-density="comfortable"
                 className="min-w-[62rem] table-fixed [--table-cell-inline:0.625rem] [&_thead_th:not(:first-child)]:!static"
@@ -558,7 +571,7 @@ function ProductSkuTable({
                     ))}
                 </TableBody>
             </Table>
-        </div>
+        </DetailInlineTable>
     )
 }
 

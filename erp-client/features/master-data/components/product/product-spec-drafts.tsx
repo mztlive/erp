@@ -49,7 +49,8 @@ function ProductSpecDraftsEditor({
                                 </Label>
                                 <Input
                                     id={`${specItemId}-name`}
-                                    className="h-control-sm bg-card"
+                                    size="sm"
+                                    className="bg-card"
                                     value={draft.name}
                                     onChange={(event) => {
                                         const next = [...specDrafts]
@@ -85,7 +86,8 @@ function ProductSpecDraftsEditor({
                                                 >
                                                     <Input
                                                         id={valueId}
-                                                        className="h-control-sm bg-muted/35 focus-visible:bg-card"
+                                                        size="sm"
+                                                        className="bg-muted/35 focus-visible:bg-card"
                                                         value={specValue}
                                                         onChange={(event) => {
                                                             const nextValues = [

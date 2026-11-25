@@ -1,21 +1,16 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowDownIcon, CircleAlertIcon } from "lucide-react"
 import {
     BusinessStatusBadge,
+    DecisionKpiBar,
+    DecisionKpiCell,
     MoneyValue,
+    TaskRiskSummaryBar,
     WorkspaceFactGrid,
     WorkspaceFactItem,
 } from "@/components/business"
-import { Button } from "@/components/ui/button"
 import type { StatusTone } from "@/components/ui/status-badge"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -81,61 +76,47 @@ export function FulfillmentRiskStrip({
     if (!blocked && !impact.length && !paymentPending) return null
 
     return (
-        <section
-            className={cn(
-                "flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-r-md border-l-2 px-3 py-2 text-xs",
-                blocked
-                    ? "border-destructive bg-destructive-soft text-destructive-soft-foreground"
-                    : "border-warning bg-warning-soft text-warning-soft-foreground",
-            )}
+        <TaskRiskSummaryBar
             role="status"
             aria-label="履约核对事项"
-        >
-            <div className="flex min-w-0 flex-[1_1_16rem] gap-2">
-                <CircleAlertIcon
-                    aria-hidden="true"
-                    className="mt-0.5 size-4 shrink-0"
-                />
-                <div className="min-w-0 space-y-0.5 wrap-anywhere">
+            severity={blocked ? "destructive" : "warning"}
+            leadLabel={null}
+            summary={
+                <span className="inline-flex flex-col gap-0.5">
                     {blockers.map((message) => (
-                        <p key={message} className="font-medium">
+                        <span key={message} className="font-medium">
                             {message}
-                        </p>
+                        </span>
                     ))}
                     {impact.map((message) => (
-                        <p key={message} className="whitespace-pre-line">
+                        <span key={message} className="whitespace-pre-line">
                             {message}
-                        </p>
+                        </span>
                     ))}
                     {paymentPending ? (
-                        <p>{paymentReminder(operation)}</p>
+                        <span className="inline-flex flex-wrap items-center gap-2">
+                            <span>{paymentReminder(operation)}</span>
+                            <FulfillmentPaymentLink
+                                operation={operation}
+                                id={`${task.id}-risk-payment`}
+                            />
+                        </span>
                     ) : null}
-                </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-1 empty:hidden">
-                {impact.length > 0 && operation.lines.length > 0 ? (
-                    <Button
-                        id={`${task.id}-risk-locate`}
-                        type="button"
-                        size="xs"
-                        variant="outline"
-                        onClick={onLocate}
-                    >
-                        定位履约明细
-                        <ArrowDownIcon
-                            aria-hidden="true"
-                            data-icon="inline-end"
-                        />
-                    </Button>
-                ) : null}
-                {paymentPending ? (
-                    <FulfillmentPaymentLink
-                        operation={operation}
-                        id={`${task.id}-risk-payment`}
-                    />
-                ) : null}
-            </div>
-        </section>
+                </span>
+            }
+            actions={
+                impact.length > 0 && operation.lines.length > 0
+                    ? [
+                          {
+                              id: "locate",
+                              buttonId: `${task.id}-risk-locate`,
+                              label: "定位履约明细",
+                              onClick: onLocate,
+                          },
+                      ]
+                    : undefined
+            }
+        />
     )
 }
 
@@ -168,152 +149,93 @@ export function FulfillmentTaskKpis({
     const gate = GATE_STATUS[operation.gate.state]
 
     return (
-        <dl
-            aria-label="本次履约核心指标"
-            className="grid min-w-0 grid-cols-1 gap-x-5 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/fulfillment-task:grid-cols-2 @[840px]/fulfillment-task:grid-cols-4"
-        >
-            <div className="min-w-0">
-                <dt className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                    <span>本次待履约量</span>
-                    <span className="text-tiny text-muted-foreground">
-                        按单位汇总
-                    </span>
-                    <Tooltip>
-                        <TooltipTrigger
-                            id={`${task.id}-quantity-help`}
-                            render={
-                                <Button
-                                    type="button"
-                                    size="icon-xs"
-                                    variant="ghost"
-                                    aria-label="待履约量统计口径"
-                                />
-                            }
-                        >
-                            <span aria-hidden="true">?</span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            统计当前批次已有的待履约余量，按计量单位分别汇总。
-                        </TooltipContent>
-                    </Tooltip>
-                </dt>
-                <dd className="num wrap-anywhere text-value-section font-semibold tracking-tight">
-                    {pending}
-                </dd>
-                {task.amount ? (
-                    <dd className="wrap-anywhere text-xs text-muted-foreground">
-                        {task.amount.label}{" "}
-                        <span className="num select-all">
-                            {task.amount.value}
-                        </span>
-                    </dd>
-                ) : (
-                    <dd className="num text-xs text-muted-foreground">
-                        共 {operation.lines.length} 项明细
-                    </dd>
-                )}
-            </div>
-            <div className="min-w-0">
-                <dt className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                    <span>履约完成进度</span>
-                    <span className="text-tiny text-muted-foreground">
-                        各明细均摊
-                    </span>
-                    <Tooltip>
-                        <TooltipTrigger
-                            id={`${task.id}-progress-help`}
-                            render={
-                                <Button
-                                    type="button"
-                                    size="icon-xs"
-                                    variant="ghost"
-                                    aria-label="履约完成进度计算口径"
-                                />
-                            }
-                        >
-                            <span aria-hidden="true">?</span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            按各明细 (应履约量 − 剩余待履约量) ÷ 应履约量
-                            分别计算后取均值，避免跨单位直接相加。
-                        </TooltipContent>
-                    </Tooltip>
-                </dt>
-                <dd className="num mt-0.5 text-value-compact font-semibold">
-                    {progress === "—" ? progress : `${progress}%`}
-                </dd>
-                {progress !== "—" ? (
-                    <dd
-                        aria-hidden="true"
-                        className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-border"
-                    >
+        <DecisionKpiBar columns={4} ariaLabel="本次履约核心指标">
+            <DecisionKpiCell
+                label="本次待履约量"
+                basis="按单位汇总"
+                emphasis="primary"
+                value={pending}
+                formulaTooltip="统计当前批次已有的待履约余量，按计量单位分别汇总。"
+                formulaTooltipId={`${task.id}-quantity-help`}
+                formulaTooltipLabel="待履约量统计口径"
+                footnote={
+                    task.amount ? (
+                        <>
+                            {task.amount.label}{" "}
+                            <span className="num select-all">
+                                {task.amount.value}
+                            </span>
+                        </>
+                    ) : (
+                        <>共 {operation.lines.length} 项明细</>
+                    )
+                }
+            />
+            <DecisionKpiCell
+                label="履约完成进度"
+                basis="各明细均摊"
+                emphasis="secondary"
+                value={progress === "—" ? progress : `${progress}%`}
+                formulaTooltip="按各明细 (应履约量 − 剩余待履约量) ÷ 应履约量 分别计算后取均值，避免跨单位直接相加。"
+                formulaTooltipId={`${task.id}-progress-help`}
+                formulaTooltipLabel="履约完成进度计算口径"
+                extra={
+                    progress !== "—" ? (
                         <div
-                            className="h-full rounded-full bg-success"
-                            style={{ width: `${progress}%` }}
-                        />
-                    </dd>
-                ) : null}
-            </div>
-            <div className="min-w-0">
-                <dt className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                    <span>先款条件</span>
-                    <span className="text-tiny text-muted-foreground">
-                        不阻断履约
-                    </span>
-                    <Tooltip>
-                        <TooltipTrigger
-                            id={`${task.id}-gate-help`}
-                            render={
-                                <Button
-                                    type="button"
-                                    size="icon-xs"
-                                    variant="ghost"
-                                    aria-label="先款条件说明"
-                                />
-                            }
+                            aria-hidden="true"
+                            className="h-1.5 overflow-hidden rounded-full bg-border"
                         >
-                            <span aria-hidden="true">?</span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            采购预付进度仅作核对提醒，不阻止按实际履约情况确认。
-                        </TooltipContent>
-                    </Tooltip>
-                </dt>
-                <dd className="mt-1 flex flex-wrap items-center gap-1.5">
-                    <BusinessStatusBadge {...gate} />
-                    {task.paymentStatus ? (
-                        <BusinessStatusBadge
-                            appearance="text"
-                            {...task.paymentStatus}
-                        />
-                    ) : null}
-                </dd>
-                {operation.gate.requiredAmount != null &&
-                operation.gate.effectivePaidAmount != null ? (
-                    <dd className="mt-1 wrap-anywhere text-xs text-muted-foreground">
-                        已付{" "}
-                        <MoneyValue
-                            value={operation.gate.effectivePaidAmount}
-                        />{" "}
-                        / 预付{" "}
-                        <MoneyValue value={operation.gate.requiredAmount} />
-                    </dd>
-                ) : null}
-            </div>
-            <div className="min-w-0">
-                <dt className="text-xs text-muted-foreground">
-                    {warehouseTask ? "履约仓库" : "履约供应商"}
-                </dt>
-                <dd className="mt-1 wrap-anywhere text-body-compact font-semibold text-foreground">
-                    {party || "—"}
-                </dd>
-                {task.commitment ? (
-                    <dd className="num mt-1 wrap-anywhere text-xs text-muted-foreground">
-                        {task.commitment.label} {task.commitment.value}
-                    </dd>
-                ) : null}
-            </div>
-        </dl>
+                            <div
+                                className="h-full rounded-full bg-success"
+                                style={{ width: `${progress}%` }}
+                            />
+                        </div>
+                    ) : null
+                }
+            />
+            <DecisionKpiCell
+                label="先款条件"
+                basis="不阻断履约"
+                emphasis="terms"
+                value={
+                    <span className="flex flex-wrap items-center gap-1.5">
+                        <BusinessStatusBadge {...gate} />
+                        {task.paymentStatus ? (
+                            <BusinessStatusBadge
+                                appearance="text"
+                                {...task.paymentStatus}
+                            />
+                        ) : null}
+                    </span>
+                }
+                formulaTooltip="采购预付进度仅作核对提醒，不阻止按实际履约情况确认。"
+                formulaTooltipId={`${task.id}-gate-help`}
+                formulaTooltipLabel="先款条件说明"
+                footnote={
+                    operation.gate.requiredAmount != null &&
+                    operation.gate.effectivePaidAmount != null ? (
+                        <>
+                            已付{" "}
+                            <MoneyValue
+                                value={operation.gate.effectivePaidAmount}
+                            />{" "}
+                            / 预付{" "}
+                            <MoneyValue value={operation.gate.requiredAmount} />
+                        </>
+                    ) : undefined
+                }
+            />
+            <DecisionKpiCell
+                label={warehouseTask ? "履约仓库" : "履约供应商"}
+                emphasis="terms"
+                value={party || "—"}
+                footnote={
+                    task.commitment
+                        ? `${task.commitment.label} ${task.commitment.value}`
+                        : undefined
+                }
+            />
+        </DecisionKpiBar>
     )
 }
 

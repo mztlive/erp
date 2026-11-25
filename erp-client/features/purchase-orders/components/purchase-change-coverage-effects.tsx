@@ -1,6 +1,6 @@
 "use client"
 
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import type { PurchaseChangeCoverageEffect } from "@/features/purchase-orders/types"
 import { compactFixed, compareDecimal } from "@/lib/fixed-decimal"
 
@@ -29,15 +29,16 @@ export function PurchaseChangeCoverageEffects({
         <section
             id={id}
             aria-labelledby={`${id}-title`}
-            className="space-y-3 rounded-xl border border-border/70 px-4 py-4 md:px-5"
+            className="space-y-3 rounded-lg border border-border/70 px-4 py-4 md:px-5"
         >
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 id={`${id}-title`} className="font-semibold">
                     对销售的影响
                 </h3>
-                <Badge variant={gaps ? "warning" : "secondary"}>
-                    {gaps ? `${gaps} 项产生缺口` : "不产生缺口"}
-                </Badge>
+                <StatusBadge
+                    tone={gaps ? "warning" : "neutral"}
+                    label={gaps ? `${gaps} 项产生缺口` : "不产生缺口"}
+                />
             </div>
             <p className="text-xs text-muted-foreground">
                 以上为预计受影响的销售需求；改单审批通过后，产生的采购缺口将重新生成待采购任务。

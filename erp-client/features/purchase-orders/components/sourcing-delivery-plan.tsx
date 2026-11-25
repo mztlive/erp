@@ -2,9 +2,9 @@
 
 import { ChevronDownIcon } from "lucide-react"
 import { QuantityValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import {
     Collapsible,
     CollapsibleContent,
@@ -36,12 +36,11 @@ import { fullDeliveryAddress } from "@/lib/delivery-address"
 
 const NO_ADDRESS_NOTE = "未指定交付地址，履约前补齐。"
 
-const TERM_BADGE: Record<DeliveryTerm, "neutral" | "warning" | "destructive"> =
-    {
-        FREIGHT_INCLUDED: "neutral",
-        FREIGHT_EXTRA: "warning",
-        NOT_DELIVERABLE: "destructive",
-    }
+const TERM_BADGE: Record<DeliveryTerm, StatusTone> = {
+    FREIGHT_INCLUDED: "neutral",
+    FREIGHT_EXTRA: "warning",
+    NOT_DELIVERABLE: "destructive",
+}
 
 function DeliveryAddress({
     row,
@@ -56,9 +55,10 @@ function DeliveryAddress({
             <span className="flex flex-wrap items-center gap-1.5 font-medium">
                 {row.recipient} · {row.phone}
                 {option && term ? (
-                    <Badge variant={TERM_BADGE[term]}>
-                        {deliveryTermLabel(option, term)}
-                    </Badge>
+                    <StatusBadge
+                        tone={TERM_BADGE[term]}
+                        label={deliveryTermLabel(option, term)}
+                    />
                 ) : null}
             </span>
             <span className="block break-words text-muted-foreground">

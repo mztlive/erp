@@ -154,7 +154,7 @@ type DraftLineIssue = {
 }
 
 const sunkenDraftInputClass =
-    "h-control-sm border-transparent bg-surface-sunken shadow-none hover:bg-card focus-visible:bg-card"
+    "border-transparent bg-surface-sunken shadow-none hover:bg-card focus-visible:bg-card"
 
 function collectDraftLineIssues(
     order: PurchaseOrderCenterView,
@@ -1211,6 +1211,7 @@ function DraftNumberField({
             </div>
             <Input
                 id={id}
+                size="sm"
                 inputMode="decimal"
                 className={cn(
                     "num w-full min-w-0 text-right",

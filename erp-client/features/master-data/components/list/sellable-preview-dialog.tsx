@@ -5,8 +5,8 @@ import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import Link from "next/link"
 import { ArrowUpRightIcon } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Dialog,
     DialogBody,
@@ -74,7 +74,7 @@ export function SellablePreviewDialog({
                     )}
                     {previewRow?.sellableItem ? (
                         <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="success">当前可售</Badge>
+                            <StatusBadge tone="success" label="当前可售" />
                             <span className="text-xs text-muted-foreground">
                                 {previewRow.sellableItem.productKindLabel}
                             </span>
@@ -89,7 +89,7 @@ export function SellablePreviewDialog({
                                     previewRow.sellableItem.mainImageAssetId
                                 }
                                 label={previewRow.name}
-                                className="aspect-[16/9] max-h-48 w-full rounded-xl"
+                                className="aspect-[16/9] max-h-48 w-full rounded-lg"
                             />
                             <SellableItemPreviewPanel row={previewRow} />
                         </div>

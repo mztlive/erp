@@ -920,7 +920,7 @@ export function FulfillmentPackingForm({
                                                                                                         id={`${id}-quantity`}
                                                                                                         aria-label={`包裹${index + 1}中${itemName(item.delivery_line_id)}数量`}
                                                                                                         inputMode="decimal"
-                                                                                                        className="h-8 w-24"
+                                                                                                        className="w-24"
                                                                                                         disabled={
                                                                                                             disabled
                                                                                                         }
@@ -1421,7 +1421,7 @@ export function FulfillmentPackingForm({
                                                                                                             disabled={
                                                                                                                 disabled
                                                                                                             }
-                                                                                                            className="h-8 w-24"
+                                                                                                            className="w-24"
                                                                                                         />
                                                                                                     )}
                                                                                                 </form.Field>

@@ -18,7 +18,11 @@ import {
     XIcon,
     ZapIcon,
 } from "lucide-react"
-import { QuantityValue } from "@/components/business"
+import {
+    OptionCombobox,
+    QuantityValue,
+    sourceAccentForIndex,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox, NativeCheckbox } from "@/components/ui/checkbox"
@@ -34,13 +38,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compactFixed, compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
@@ -70,7 +68,6 @@ import {
 } from "../lib/sourcing/delivery-terms"
 import type { SourcingEditorRow } from "../lib/sourcing/editor-rows"
 import { quantityUnits } from "../lib/sourcing/quantity"
-import { sourceAccentForIndex } from "../lib/sourcing/source-palette"
 import type { PurchaseDeliveryAllocation } from "../types"
 
 export type AddressSourceFilter =
@@ -795,9 +792,14 @@ export function SourcingAddressEditor({
                                         <p className="text-xs font-medium text-foreground/75">
                                             目标直发来源
                                         </p>
-                                        <Select
+                                        <OptionCombobox
+                                            id={`${idPrefix}-quota-source`}
+                                            size="sm"
+                                            allowClear={false}
+                                            aria-label="目标直发来源"
+                                            className="w-full"
                                             value={resolvedQuotaTarget}
-                                            items={activeDirectSources.map(
+                                            options={activeDirectSources.map(
                                                 (src) => ({
                                                     value: src.rowKey,
                                                     label: src.shortLabel,
@@ -807,29 +809,7 @@ export function SourcingAddressEditor({
                                                 if (next)
                                                     setQuotaTargetRowKey(next)
                                             }}
-                                        >
-                                            <SelectTrigger
-                                                id={`${idPrefix}-quota-source`}
-                                                size="sm"
-                                                aria-label="目标直发来源"
-                                                className="w-full"
-                                            >
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {activeDirectSources.map(
-                                                    (src) => (
-                                                        <SelectItem
-                                                            key={src.rowKey}
-                                                            idPrefix={`${idPrefix}-quota-source`}
-                                                            value={src.rowKey}
-                                                        >
-                                                            {src.shortLabel}
-                                                        </SelectItem>
-                                                    ),
-                                                )}
-                                            </SelectContent>
-                                        </Select>
+                                        />
                                     </div>
                                 ) : null}
 
@@ -842,12 +822,13 @@ export function SourcingAddressEditor({
                                     </label>
                                     <Input
                                         id={`${idPrefix}-quota-qty`}
+                                        size="sm"
                                         type="number"
                                         inputMode="decimal"
                                         min="0"
                                         step={minStepStr}
                                         placeholder={`例如 ${state.directTargetQty}`}
-                                        className="num h-control-sm"
+                                        className="num"
                                         value={quotaQty}
                                         onChange={(event) =>
                                             setQuotaQty(event.target.value)
@@ -1078,9 +1059,10 @@ export function SourcingAddressEditor({
                     />
                     <Input
                         id={`${idPrefix}-search`}
+                        size="sm"
                         aria-label="搜索收件人、电话或收货地址"
                         placeholder="搜收件人、电话或地址"
-                        className="h-control-sm bg-card pr-7 pl-8 text-xs"
+                        className="bg-card pr-7 pl-8"
                         value={query}
                         onChange={(event) => {
                             setQuery(event.target.value)
@@ -1460,9 +1442,15 @@ export function SourcingAddressEditor({
                     <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1.5">
                             <span>每页</span>
-                            <Select
+                            <OptionCombobox
+                                id={`${idPrefix}-page-size`}
+                                size="sm"
+                                allowClear={false}
+                                aria-label="每页显示地址条数"
+                                className="w-24"
+                                inputClassName="bg-card"
                                 value={String(pageSize)}
-                                items={[
+                                options={[
                                     { value: "25", label: "25 条" },
                                     { value: "50", label: "50 条" },
                                     { value: "100", label: "100 条" },
@@ -1478,36 +1466,7 @@ export function SourcingAddressEditor({
                                     setPageSize(nextSize)
                                     setPageIndex(0)
                                 }}
-                            >
-                                <SelectTrigger
-                                    id={`${idPrefix}-page-size`}
-                                    size="sm"
-                                    aria-label="每页显示地址条数"
-                                    className="w-22 bg-card"
-                                >
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent align="end">
-                                    <SelectItem
-                                        idPrefix={`${idPrefix}-page-size`}
-                                        value="25"
-                                    >
-                                        25 条
-                                    </SelectItem>
-                                    <SelectItem
-                                        idPrefix={`${idPrefix}-page-size`}
-                                        value="50"
-                                    >
-                                        50 条
-                                    </SelectItem>
-                                    <SelectItem
-                                        idPrefix={`${idPrefix}-page-size`}
-                                        value="100"
-                                    >
-                                        100 条
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
+                            />
                         </div>
                         <div className="inline-flex items-center gap-1">
                             <Button
@@ -1710,18 +1669,20 @@ function AddressRouteRow({
                 {/* 配送判定 */}
                 <div>
                     {termSource && displayTerm ? (
-                        <Badge
-                            variant={
+                        <StatusBadge
+                            tone={
                                 displayTerm === "NOT_DELIVERABLE"
                                     ? "destructive"
                                     : displayTerm === "FREIGHT_EXTRA"
                                       ? "warning"
                                       : "neutral"
                             }
+                            label={deliveryTermLabel(
+                                termSource.option,
+                                displayTerm,
+                            )}
                             className="h-5 px-1.5 text-tiny"
-                        >
-                            {deliveryTermLabel(termSource.option, displayTerm)}
-                        </Badge>
+                        />
                     ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                     )}
@@ -1905,24 +1866,51 @@ function AddressRouteRow({
                             )
                         })()
                     ) : (
-                        <Select
+                        <OptionCombobox
+                            id={`${rowId}-source`}
+                            size="sm"
+                            allowClear={false}
+                            aria-label={`${entry.baseRow.recipient} 分配去向`}
+                            className="w-48"
+                            inputClassName="bg-card"
                             value={selectCurrentValue}
-                            items={[
-                                ...directSources.map((src) => ({
-                                    value: src.rowKey,
-                                    label: src.shortLabel,
-                                })),
+                            options={[
+                                ...directSources.map((src) => {
+                                    const term = addressDeliveryTerm(
+                                        src.option,
+                                        entry.baseRow.region_code,
+                                    )
+                                    const undeliverable =
+                                        term === "NOT_DELIVERABLE"
+                                    const suffix = undeliverable
+                                        ? "（不配送）"
+                                        : term === "FREIGHT_EXTRA"
+                                          ? "（运费另计）"
+                                          : ""
+                                    return {
+                                        value: src.rowKey,
+                                        label: `${src.shortLabel}${suffix}`,
+                                        disabled:
+                                            undeliverable &&
+                                            singleDirectSlice?.rowKey !==
+                                                src.rowKey,
+                                    }
+                                }),
                                 ...(hasNonDirectSources
                                     ? [
                                           {
                                               value: WAREHOUSE_SELECT_VALUE,
-                                              label: warehousePillLabel,
+                                              label: `${warehousePillLabel}${
+                                                  nonDirectSources.length > 1
+                                                      ? "（自动配平）"
+                                                      : ""
+                                              }`,
                                           },
                                       ]
                                     : [
                                           {
                                               value: UNASSIGNED_SELECT_VALUE,
-                                              label: "待分配",
+                                              label: "暂不直发（待分配）",
                                           },
                                       ]),
                             ]}
@@ -1937,64 +1925,7 @@ function AddressRouteRow({
                                 }
                                 onAssignDirect(next)
                             }}
-                        >
-                            <SelectTrigger
-                                id={`${rowId}-source`}
-                                size="sm"
-                                aria-label={`${entry.baseRow.recipient} 分配去向`}
-                                className="w-48 bg-card text-xs"
-                            >
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent align="end" className="min-w-56">
-                                {directSources.map((src) => {
-                                    const term = addressDeliveryTerm(
-                                        src.option,
-                                        entry.baseRow.region_code,
-                                    )
-                                    const undeliverable =
-                                        term === "NOT_DELIVERABLE"
-                                    const suffix = undeliverable
-                                        ? "（不配送）"
-                                        : term === "FREIGHT_EXTRA"
-                                          ? "（运费另计）"
-                                          : ""
-                                    return (
-                                        <SelectItem
-                                            key={src.rowKey}
-                                            idPrefix={`${rowId}-source`}
-                                            value={src.rowKey}
-                                            disabled={
-                                                undeliverable &&
-                                                singleDirectSlice?.rowKey !==
-                                                    src.rowKey
-                                            }
-                                        >
-                                            {src.shortLabel}
-                                            {suffix}
-                                        </SelectItem>
-                                    )
-                                })}
-                                {hasNonDirectSources ? (
-                                    <SelectItem
-                                        idPrefix={`${rowId}-source`}
-                                        value={WAREHOUSE_SELECT_VALUE}
-                                    >
-                                        {warehousePillLabel}
-                                        {nonDirectSources.length > 1
-                                            ? "（自动配平）"
-                                            : ""}
-                                    </SelectItem>
-                                ) : (
-                                    <SelectItem
-                                        idPrefix={`${rowId}-source`}
-                                        value={UNASSIGNED_SELECT_VALUE}
-                                    >
-                                        暂不直发（待分配）
-                                    </SelectItem>
-                                )}
-                            </SelectContent>
-                        </Select>
+                        />
                     )}
                 </div>
             </div>
@@ -2034,13 +1965,14 @@ function AddressRouteRow({
                                 </span>
                                 <Input
                                     id={`${rowId}-split-${toAutomationIdSegment(src.rowKey)}`}
+                                    size="sm"
                                     type="number"
                                     inputMode="decimal"
                                     min="0"
                                     max={entry.demandQty}
                                     step={minStepStr}
                                     disabled={!deliverable && !existing}
-                                    className="num h-control-sm w-16 bg-card text-right"
+                                    className="num w-16 bg-card text-right"
                                     value={existing?.quantity ?? ""}
                                     placeholder="0"
                                     onChange={(event) =>

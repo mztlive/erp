@@ -5,12 +5,15 @@ import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { useMutation } from "@tanstack/react-query"
 import { useStore } from "@tanstack/react-form"
-import { ArrowUpRightIcon, CircleHelpIcon } from "lucide-react"
+import { ArrowUpRightIcon } from "lucide-react"
 import { z } from "zod"
 import {
     BusinessStatusBadge,
+    DecisionKpiBar,
+    DecisionKpiCell,
     MoneyValue,
     SensitiveValue,
+    TaskRiskSummaryBar,
     WorkspaceFactGrid,
     WorkspaceFactItem,
     WorkspaceTaskFooter,
@@ -26,11 +29,6 @@ import { Button } from "@/components/ui/button"
 import { FileUpload } from "@/components/ui/file-upload"
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { toast } from "@/components/ui/toast"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { uploadEvidenceFileAsset } from "@/features/file-assets/api/file-assets"
@@ -94,7 +92,7 @@ const cents = { maxScale: 2, outputScale: 2 } as const
 const maximumNoteCharacters = 2000
 const maximumNoteBytes = maximumNoteCharacters * 4
 const editorControlClass =
-    "h-control-sm w-full min-w-0 rounded-md border border-transparent bg-surface-sunken px-2.5 text-body-compact shadow-none outline-none hover:bg-card focus-visible:bg-card focus-visible:ring-2 focus-visible:ring-ring aria-invalid:ring-2 aria-invalid:ring-destructive/50"
+    "w-full min-w-0 rounded-md border border-transparent bg-surface-sunken px-2.5 shadow-none outline-none hover:bg-card focus-visible:bg-card focus-visible:ring-2 focus-visible:ring-ring aria-invalid:ring-2 aria-invalid:ring-destructive/50"
 const sunkenInputClass =
     "border-transparent bg-surface-sunken shadow-none hover:bg-card focus-visible:bg-card"
 
@@ -824,184 +822,191 @@ function PaymentArrangementSurface({
                 error ||
                 blockedMessage ||
                 (editable && balance !== 0)) && (
-                <div
+                <TaskRiskSummaryBar
                     role={
                         unknown || unavailable || error || blockedMessage
                             ? "alert"
                             : "status"
                     }
-                    className={cn(
-                        "flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-l-2 px-3 py-2 text-xs",
+                    severity={
                         blockedMessage || unavailable || balance < 0
-                            ? "border-destructive bg-destructive-soft text-destructive-soft-foreground"
-                            : "border-warning bg-warning-soft text-warning-soft-foreground",
-                    )}
-                >
-                    <span className="min-w-0 wrap-anywhere">
-                        {unknown
-                            ? "提交结果待确认，请核对本次提交结果。"
-                            : unavailable || error
-                              ? balanceChanged
-                                  ? "可申请余额已变化，请刷新后重新核对金额。"
-                                  : getErrorMessage(
-                                        error ??
-                                            query.error ??
-                                            candidates.error,
-                                        "读取或提交失败，请刷新后重试。",
-                                    )
-                              : blockedMessage || balanceState}
-                    </span>
-                    {!unknown && (unavailable || error) ? (
-                        <Button
-                            id={`${idPrefix}-refresh`}
-                            type="button"
-                            variant="link"
-                            size="xs"
-                            disabled={busy}
-                            onClick={refresh}
-                        >
-                            刷新最新数据
-                        </Button>
-                    ) : !unknown && arrangement.payment_blocked ? (
-                        <Button
-                            id={`${idPrefix}-resolve-source`}
-                            type="button"
-                            variant="link"
-                            size="xs"
-                            render={<Link href={orderHref} />}
-                        >
-                            查看采购单
-                            <ArrowUpRightIcon aria-hidden="true" />
-                        </Button>
-                    ) : !unknown &&
-                      !blockedMessage &&
-                      editable &&
-                      balance !== 0 ? (
-                        <Button
-                            id={`${idPrefix}-balance`}
-                            type="button"
-                            variant="link"
-                            size="xs"
-                            disabled={busy}
-                            onClick={fill}
-                        >
-                            {balance > 0 ? "填剩余金额" : "调整至上限"}
-                        </Button>
-                    ) : null}
-                </div>
+                            ? "destructive"
+                            : "warning"
+                    }
+                    leadLabel={null}
+                    summary={
+                        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span>
+                                {unknown
+                                    ? "提交结果待确认，请核对本次提交结果。"
+                                    : unavailable || error
+                                      ? balanceChanged
+                                          ? "可申请余额已变化，请刷新后重新核对金额。"
+                                          : getErrorMessage(
+                                                error ??
+                                                    query.error ??
+                                                    candidates.error,
+                                                "读取或提交失败，请刷新后重试。",
+                                            )
+                                      : blockedMessage || balanceState}
+                            </span>
+                            {!unknown &&
+                            !(unavailable || error) &&
+                            arrangement.payment_blocked ? (
+                                <Button
+                                    id={`${idPrefix}-resolve-source`}
+                                    type="button"
+                                    variant="link"
+                                    size="xs"
+                                    render={<Link href={orderHref} />}
+                                >
+                                    查看采购单
+                                    <ArrowUpRightIcon aria-hidden="true" />
+                                </Button>
+                            ) : null}
+                        </span>
+                    }
+                    actions={
+                        !unknown && (unavailable || error)
+                            ? [
+                                  {
+                                      id: "refresh",
+                                      buttonId: `${idPrefix}-refresh`,
+                                      label: "刷新最新数据",
+                                      disabled: busy,
+                                      showChevron: false,
+                                      onClick: refresh,
+                                  },
+                              ]
+                            : !unknown &&
+                                !arrangement.payment_blocked &&
+                                !blockedMessage &&
+                                editable &&
+                                balance !== 0
+                              ? [
+                                    {
+                                        id: "balance",
+                                        buttonId: `${idPrefix}-balance`,
+                                        label:
+                                            balance > 0
+                                                ? "填剩余金额"
+                                                : "调整至上限",
+                                        disabled: busy,
+                                        showChevron: false,
+                                        onClick: fill,
+                                    },
+                                ]
+                              : undefined
+                    }
+                />
             )}
 
-            <dl className="grid grid-cols-1 gap-x-5 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/payment-arrangement:grid-cols-2 @[840px]/payment-arrangement:grid-cols-4">
-                <div className="min-w-0 space-y-1">
-                    <dt className="flex items-center gap-1 text-xs text-muted-foreground">
-                        待安排付款额
-                        <Tooltip>
-                            <TooltipTrigger
-                                id={`${idPrefix}-formula`}
-                                aria-label="待安排付款额计算口径"
-                                render={
-                                    <Button
-                                        type="button"
-                                        size="icon-xs"
-                                        variant="ghost"
-                                    />
-                                }
-                            >
-                                <CircleHelpIcon aria-hidden="true" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                待安排付款额 = 剩余应付 −
-                                有效申请占用。有效已付已从应付余额扣除。
-                            </TooltipContent>
-                        </Tooltip>
-                    </dt>
-                    <dd className="num text-value-section font-semibold tracking-tight">
-                        {money(available)}
-                    </dd>
-                </div>
-                <div className="min-w-0 space-y-1">
-                    <dt className="text-xs text-muted-foreground">
-                        申请占用 / 有效已付
-                    </dt>
-                    <dd className="flex flex-wrap items-baseline gap-x-2 text-value-compact font-semibold">
-                        {money(arrangement.reserved_amount)}
-                        <span
-                            aria-hidden="true"
-                            className="text-xs font-normal text-muted-foreground"
-                        >
-                            /
-                        </span>
-                        {money(arrangement.paid_amount)}
-                    </dd>
-                    {!costMasked && (
-                        <dd className="space-y-0.5">
-                            <div
+            <DecisionKpiBar columns={4} ariaLabel="付款安排核心指标">
+                <DecisionKpiCell
+                    label="待安排付款额"
+                    emphasis="primary"
+                    value={money(available)}
+                    formulaTooltip="待安排付款额 = 剩余应付 − 有效申请占用。有效已付已从应付余额扣除。"
+                    formulaTooltipId={`${idPrefix}-formula`}
+                    formulaTooltipLabel="待安排付款额计算口径"
+                />
+                <DecisionKpiCell
+                    label="申请占用 / 有效已付"
+                    emphasis="secondary"
+                    value={
+                        <span className="flex flex-wrap items-baseline gap-x-2">
+                            {money(arrangement.reserved_amount)}
+                            <span
                                 aria-hidden="true"
-                                className="h-1.5 overflow-hidden rounded-full bg-border"
+                                className="text-xs font-normal text-muted-foreground"
                             >
+                                /
+                            </span>
+                            {money(arrangement.paid_amount)}
+                        </span>
+                    }
+                    extra={
+                        !costMasked ? (
+                            <div className="space-y-0.5">
                                 <div
-                                    className={cn(
-                                        "h-full rounded-full",
-                                        coverageTone,
-                                    )}
-                                    style={{ width: `${coverage}%` }}
-                                />
+                                    aria-hidden="true"
+                                    className="h-1.5 overflow-hidden rounded-full bg-border"
+                                >
+                                    <div
+                                        className={cn(
+                                            "h-full rounded-full",
+                                            coverageTone,
+                                        )}
+                                        style={{ width: `${coverage}%` }}
+                                    />
+                                </div>
+                                <p className="text-tiny text-muted-foreground">
+                                    含本次预计覆盖{" "}
+                                    <span className="num">{coverage}%</span>
+                                </p>
                             </div>
-                            <p className="text-tiny text-muted-foreground">
-                                含本次预计覆盖{" "}
-                                <span className="num">{coverage}%</span>
-                            </p>
-                        </dd>
-                    )}
-                </div>
-                <div className="min-w-0 space-y-1">
-                    <dt className="text-xs text-muted-foreground">
-                        本次安排金额
-                    </dt>
-                    <dd className="num text-value-compact font-semibold">
-                        {money(planned)}
-                    </dd>
-                    <dd
-                        aria-live="polite"
-                        className={cn(
-                            "text-xs font-medium",
-                            !costMasked && balanceTone,
-                        )}
-                    >
-                        {balanceState}
-                    </dd>
-                </div>
-                <div className="min-w-0 space-y-1">
-                    <dt className="text-xs text-muted-foreground">
-                        {identityInHeader ? "先款门禁" : "付款条件"}
-                    </dt>
-                    {!identityInHeader && (
-                        <dd className="wrap-anywhere text-body-compact font-semibold">
-                            {arrangement.payment_term_label || "待核对"}
-                        </dd>
-                    )}
-                    <dd
-                        className={cn(
-                            identityInHeader
-                                ? "text-body-compact font-semibold"
-                                : "text-xs",
-                            prepaymentGap && positive(prepaymentGap)
-                                ? "text-warning-soft-foreground"
-                                : identityInHeader
-                                  ? "text-foreground"
-                                  : "text-muted-foreground",
-                        )}
-                    >
-                        {prepaymentGap == null ? (
-                            "无先款门禁"
-                        ) : positive(prepaymentGap) ? (
-                            <>履约前还需实付 {money(prepaymentGap)}</>
+                        ) : undefined
+                    }
+                />
+                <DecisionKpiCell
+                    label="本次安排金额"
+                    emphasis="secondary"
+                    value={money(planned)}
+                    footnote={
+                        <span
+                            aria-live="polite"
+                            className={cn(
+                                "text-xs font-medium",
+                                !costMasked && balanceTone,
+                            )}
+                        >
+                            {balanceState}
+                        </span>
+                    }
+                />
+                <DecisionKpiCell
+                    label={identityInHeader ? "先款门禁" : "付款条件"}
+                    emphasis="terms"
+                    value={
+                        identityInHeader ? (
+                            prepaymentGap == null ? (
+                                "无先款门禁"
+                            ) : positive(prepaymentGap) ? (
+                                <>履约前还需实付 {money(prepaymentGap)}</>
+                            ) : (
+                                "先款条件已满足"
+                            )
                         ) : (
-                            "先款条件已满足"
-                        )}
-                    </dd>
-                </div>
-            </dl>
+                            arrangement.payment_term_label || "待核对"
+                        )
+                    }
+                    tone={
+                        identityInHeader &&
+                        prepaymentGap &&
+                        positive(prepaymentGap)
+                            ? "warning"
+                            : "default"
+                    }
+                    footnote={
+                        !identityInHeader ? (
+                            prepaymentGap == null ? (
+                                "无先款门禁"
+                            ) : positive(prepaymentGap) ? (
+                                <>履约前还需实付 {money(prepaymentGap)}</>
+                            ) : (
+                                "先款条件已满足"
+                            )
+                        ) : undefined
+                    }
+                    footnoteTone={
+                        !identityInHeader &&
+                        prepaymentGap &&
+                        positive(prepaymentGap)
+                            ? "warning"
+                            : "muted"
+                    }
+                />
+            </DecisionKpiBar>
 
             {Boolean(
                 (!identityInHeader && purchaseOrderNo) ||
@@ -1094,6 +1099,7 @@ function PaymentArrangementSurface({
                                         <div className="flex min-w-0 gap-1.5">
                                             <Input
                                                 id={controlId("amount")}
+                                                size="sm"
                                                 inputMode="decimal"
                                                 value={field.state.value}
                                                 onChange={(event) =>

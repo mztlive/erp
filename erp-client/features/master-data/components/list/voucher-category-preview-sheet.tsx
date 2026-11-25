@@ -108,7 +108,7 @@ export function VoucherCategoryPreviewSheet({
                         <h3 className="font-medium">
                             {masterDataCopy.fDescription}
                         </h3>
-                        <p className="whitespace-pre-wrap break-words leading-6">
+                        <p className="whitespace-pre-wrap break-words">
                             {description || "—"}
                         </p>
                     </section>
@@ -180,7 +180,7 @@ export function VoucherCategoryPreviewSheet({
                                                 "full",
                                             )}
                                         </p>
-                                        <p className="whitespace-pre-wrap break-words text-body-compact leading-6">
+                                        <p className="whitespace-pre-wrap break-words text-body-compact">
                                             {revision.descriptionSnapshot ||
                                                 "暂无描述"}
                                         </p>

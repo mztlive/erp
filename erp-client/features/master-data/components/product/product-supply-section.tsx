@@ -6,6 +6,7 @@ import { ArrowUpRightIcon, PlusIcon, SearchIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
+    DetailInlineTable,
     MoneyValue,
     QuantityValue,
     detailWorkspaceStyles,
@@ -110,11 +111,13 @@ function SkuReferencePricesStrip({
             {sku.salePrice ? (
                 <span className="inline-flex items-baseline gap-1">
                     <span>代发</span>
-                    <MoneyValue
-                        value={sku.salePrice}
-                        display="exact"
-                        className="font-medium text-foreground/90"
-                    />
+                    <span className="text-foreground/90">
+                        <MoneyValue
+                            value={sku.salePrice}
+                            display="exact"
+                            inheritColor
+                        />
+                    </span>
                 </span>
             ) : null}
             {sku.bulkPriceGross ? (
@@ -129,11 +132,13 @@ function SkuReferencePricesStrip({
                     ) : null}
                     <span className="inline-flex items-baseline gap-1">
                         <span>集采</span>
-                        <MoneyValue
-                            value={sku.bulkPriceGross}
-                            display="exact"
-                            className="font-medium text-foreground/90"
-                        />
+                        <span className="text-foreground/90">
+                            <MoneyValue
+                                value={sku.bulkPriceGross}
+                                display="exact"
+                                inheritColor
+                            />
+                        </span>
                         {sku.bulkMinQuantity ? (
                             <span className="num text-muted-foreground">
                                 （起订 {sku.bulkMinQuantity}
@@ -155,11 +160,13 @@ function SkuReferencePricesStrip({
                     ) : null}
                     <span className="inline-flex items-baseline gap-1">
                         <span>市场</span>
-                        <MoneyValue
-                            value={sku.marketPrice}
-                            display="exact"
-                            className="text-foreground/80"
-                        />
+                        <span className="text-foreground/80">
+                            <MoneyValue
+                                value={sku.marketPrice}
+                                display="exact"
+                                inheritColor
+                            />
+                        </span>
                     </span>
                 </>
             ) : null}
@@ -221,10 +228,7 @@ function OfferingRowsTable({
             }
 
     return (
-        <div
-            data-slot="detail-inline-table"
-            className={detailWorkspaceStyles.inlineTableWrapper}
-        >
+        <DetailInlineTable>
             <Table
                 data-density="comfortable"
                 className="min-w-[56rem] table-fixed [&_thead_th]:!static"
@@ -451,7 +455,7 @@ function OfferingRowsTable({
                     })}
                 </TableBody>
             </Table>
-        </div>
+        </DetailInlineTable>
     )
 }
 
@@ -826,13 +830,14 @@ export function ProductSupplySection({
                             />
                             <Input
                                 id="master-data-product-supply-search"
+                                size="sm"
                                 value={search}
                                 onChange={(event) =>
                                     setSearch(event.target.value)
                                 }
                                 placeholder="筛选规格或 SKU 编码"
                                 aria-label="筛选规格或 SKU 编码"
-                                className="h-control-sm border-transparent bg-muted/65 pl-8 text-xs shadow-none hover:bg-muted focus-visible:border-primary/60 focus-visible:bg-card"
+                                className="border-transparent bg-muted/65 pl-8 shadow-none hover:bg-muted focus-visible:border-primary/60 focus-visible:bg-card"
                             />
                         </div>
                     ) : null}

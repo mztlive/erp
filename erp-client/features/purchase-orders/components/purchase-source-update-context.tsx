@@ -1,26 +1,23 @@
 "use client"
 
 import Link from "next/link"
-import { ChevronDownIcon, ChevronRightIcon, CircleHelpIcon } from "lucide-react"
+import { ChevronDownIcon } from "lucide-react"
 import {
+    DecisionKpiBar,
+    DecisionKpiCell,
     MoneyValue,
     QuantityValue,
+    TaskRiskSummaryBar,
     WorkspaceFactGrid,
     WorkspaceFactItem,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { Button } from "@/components/ui/button"
 import {
     Collapsible,
     CollapsibleContent,
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { StatusBadge } from "@/components/ui/status-badge"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     compactFixed,
@@ -272,97 +269,76 @@ export function PurchaseSourceUpdateContext({
     return (
         <div className="min-w-0 space-y-3">
             {hasRisk ? (
-                <section
+                <TaskRiskSummaryBar
                     aria-label="采购变更影响"
-                    className={cn(
-                        "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-r-lg border-l-2 px-3 py-2 text-body-compact",
-                        severe
-                            ? "border-l-destructive bg-destructive-soft text-destructive-soft-foreground"
-                            : "border-l-warning bg-warning-soft text-warning-soft-foreground",
-                    )}
-                >
-                    <div className="min-w-0 wrap-anywhere">
-                        <p className="font-medium">
-                            {impact.changeKinds.join(" · ") ||
-                                (update?.awaitingSubmission
-                                    ? "采购修改待提交"
-                                    : "销售要求已变更")}
-                            <span className="num"> · {impacted} 行受影响</span>
-                        </p>
-                        {update?.blocksPayment || impact.unmatched.length ? (
-                            <p className="text-xs">
-                                {update?.blocksPayment
-                                    ? "暂停付款申请和付款，处理完成后解除。"
-                                    : null}
-                                {impact.unmatched.length
-                                    ? "部分销售变更未能关联到当前采购行。"
-                                    : null}
-                            </p>
-                        ) : null}
-                    </div>
-                    {onShowImpacted &&
-                    (impacted > 0 || impact.unmatched.length > 0) ? (
-                        <Button
-                            id={`${idPrefix}-jump-impact`}
-                            variant="ghost"
-                            size="xs"
-                            className="text-inherit"
-                            aria-controls={`${idPrefix}-lines`}
-                            onClick={onShowImpacted}
-                        >
-                            {impacted > 0 ? (
-                                <span>
-                                    仅看受影响行（
-                                    <span className="num">{impacted}</span>）
+                    severity={severe ? "destructive" : "warning"}
+                    leadLabel={null}
+                    summary={
+                        <span className="inline-flex flex-col gap-0.5">
+                            <span className="font-medium">
+                                {impact.changeKinds.join(" · ") ||
+                                    (update?.awaitingSubmission
+                                        ? "采购修改待提交"
+                                        : "销售要求已变更")}
+                                <span className="num">
+                                    {" "}
+                                    · {impacted} 行受影响
                                 </span>
-                            ) : (
-                                "查看销售变更原因"
-                            )}
-                            <ChevronRightIcon
-                                aria-hidden="true"
-                                data-icon="inline-end"
-                            />
-                        </Button>
-                    ) : null}
-                </section>
+                            </span>
+                            {update?.blocksPayment ||
+                            impact.unmatched.length ? (
+                                <span className="text-xs">
+                                    {update?.blocksPayment
+                                        ? "暂停付款申请和付款，处理完成后解除。"
+                                        : null}
+                                    {impact.unmatched.length
+                                        ? "部分销售变更未能关联到当前采购行。"
+                                        : null}
+                                </span>
+                            ) : null}
+                        </span>
+                    }
+                    actions={
+                        onShowImpacted &&
+                        (impacted > 0 || impact.unmatched.length > 0)
+                            ? [
+                                  {
+                                      id: "jump-impact",
+                                      buttonId: `${idPrefix}-jump-impact`,
+                                      label:
+                                          impacted > 0
+                                              ? "仅看受影响行"
+                                              : "查看销售变更原因",
+                                      count:
+                                          impacted > 0 ? impacted : undefined,
+                                      onClick: onShowImpacted,
+                                  },
+                              ]
+                            : undefined
+                    }
+                />
             ) : null}
 
-            <dl className="grid grid-cols-1 gap-x-5 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/source-update:grid-cols-2 @[840px]/source-update:grid-cols-4">
-                <div className="min-w-0">
-                    <dt className="flex items-center gap-1 text-xs text-muted-foreground">
-                        {costMasked ? "受影响采购行" : "采购单含税金额"}
-                        <Tooltip>
-                            <TooltipTrigger
-                                render={
-                                    <Button
-                                        id={`${idPrefix}-kpi-help`}
-                                        variant="ghost"
-                                        size="icon-xs"
-                                        aria-label="查看指标计算口径"
-                                    />
-                                }
-                            >
-                                <CircleHelpIcon aria-hidden="true" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                金额以当前采购整单为基准。目标差额按当前采购价计算，待确认差额以修改或改单结果为准。
-                            </TooltipContent>
-                        </Tooltip>
-                    </dt>
-                    <dd className="num text-value-section font-semibold wrap-anywhere">
-                        {costMasked ? (
+            <DecisionKpiBar columns={4} ariaLabel="采购变更关键指标">
+                <DecisionKpiCell
+                    label={costMasked ? "受影响采购行" : "采购单含税金额"}
+                    emphasis="primary"
+                    value={
+                        costMasked ? (
                             <QuantityValue value={String(impacted)} unit="行" />
                         ) : (
                             <MoneyValue value={totals.gross} display="exact" />
-                        )}
-                    </dd>
-                </div>
-                <div className="min-w-0 space-y-1">
-                    <dt className="text-xs text-muted-foreground">
-                        采购目标差额
-                    </dt>
-                    <dd className="text-value-compact font-semibold">
-                        {costMasked ? (
+                        )
+                    }
+                    formulaTooltip="金额以当前采购整单为基准。目标差额按当前采购价计算，待确认差额以修改或改单结果为准。"
+                    formulaTooltipId={`${idPrefix}-kpi-help`}
+                    formulaTooltipLabel="查看指标计算口径"
+                />
+                <DecisionKpiCell
+                    label="采购目标差额"
+                    emphasis="secondary"
+                    value={
+                        costMasked ? (
                             <span className="text-xs font-normal text-muted-foreground">
                                 金额已隐藏
                             </span>
@@ -375,36 +351,37 @@ export function PurchaseSourceUpdateContext({
                             <span className="text-xs font-normal text-muted-foreground">
                                 金额待核对
                             </span>
-                        )}
-                    </dd>
-                    <dd className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
-                        {impact.quantityDeltas.map((delta) => (
-                            <PurchaseSourceDelta
-                                key={delta.key}
-                                value={delta.value}
-                                unit={delta.unit}
-                            />
-                        ))}
-                        {impact.unknownQuantity ? (
-                            <span className="text-muted-foreground">
-                                {update?.awaitingSubmission
-                                    ? "数量修改已保存"
-                                    : "数量待核对"}
-                            </span>
-                        ) : impact.quantityDeltas.length === 0 ? (
-                            <span className="text-muted-foreground">
-                                数量无差额
-                            </span>
-                        ) : null}
-                    </dd>
-                </div>
-                <div className="min-w-0 space-y-1">
-                    <dt className="text-xs text-muted-foreground">明细影响</dt>
-                    <dd className="flex items-baseline gap-1.5">
-                        <span className="num text-value-compact font-semibold">
-                            {impacted}
+                        )
+                    }
+                    footnote={
+                        <span className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                            {impact.quantityDeltas.map((delta) => (
+                                <PurchaseSourceDelta
+                                    key={delta.key}
+                                    value={delta.value}
+                                    unit={delta.unit}
+                                />
+                            ))}
+                            {impact.unknownQuantity ? (
+                                <span className="text-muted-foreground">
+                                    {update?.awaitingSubmission
+                                        ? "数量修改已保存"
+                                        : "数量待核对"}
+                                </span>
+                            ) : impact.quantityDeltas.length === 0 ? (
+                                <span className="text-muted-foreground">
+                                    数量无差额
+                                </span>
+                            ) : null}
                         </span>
-                        <span className="text-xs text-muted-foreground">
+                    }
+                />
+                <DecisionKpiCell
+                    label="明细影响"
+                    emphasis="secondary"
+                    value={impacted}
+                    valueMeta={
+                        <span className="text-xs font-normal text-muted-foreground">
                             / <span className="num">{lines.length}</span> 行
                             {impacted > 0
                                 ? "受影响"
@@ -412,67 +389,72 @@ export function PurchaseSourceUpdateContext({
                                   ? "未关联影响"
                                   : "未受影响"}
                         </span>
-                    </dd>
-                    <dd className="space-y-1">
-                        <div
-                            aria-hidden="true"
-                            className="flex h-1.5 overflow-hidden rounded-full bg-border"
-                        >
-                            {impacted > 0 ? (
-                                <span
-                                    className={
-                                        severe ? "bg-destructive" : "bg-warning"
-                                    }
-                                    style={{ flexGrow: impacted }}
-                                />
-                            ) : null}
-                            {unaffected > 0 ? (
-                                <span
-                                    className={
-                                        impacted === 0
-                                            ? "bg-success"
-                                            : "bg-border"
-                                    }
-                                    style={{ flexGrow: unaffected }}
-                                />
+                    }
+                    extra={
+                        <div className="space-y-1">
+                            <div
+                                aria-hidden="true"
+                                className="flex h-1.5 overflow-hidden rounded-full bg-border"
+                            >
+                                {impacted > 0 ? (
+                                    <span
+                                        className={
+                                            severe
+                                                ? "bg-destructive"
+                                                : "bg-warning"
+                                        }
+                                        style={{ flexGrow: impacted }}
+                                    />
+                                ) : null}
+                                {unaffected > 0 ? (
+                                    <span
+                                        className={
+                                            impacted === 0
+                                                ? "bg-success"
+                                                : "bg-border"
+                                        }
+                                        style={{ flexGrow: unaffected }}
+                                    />
+                                ) : null}
+                            </div>
+                            {unaffected > 0 && impacted > 0 ? (
+                                <p className="num text-tiny text-muted-foreground">
+                                    其余 {unaffected} 行
+                                    {impact.unmatched.length
+                                        ? "未关联影响"
+                                        : "未受影响"}
+                                </p>
                             ) : null}
                         </div>
-                        {unaffected > 0 && impacted > 0 ? (
-                            <p className="num text-tiny text-muted-foreground">
-                                其余 {unaffected} 行
-                                {impact.unmatched.length
-                                    ? "未关联影响"
-                                    : "未受影响"}
-                            </p>
-                        ) : null}
-                    </dd>
-                </div>
-                <div className="min-w-0 space-y-1">
-                    <dt className="text-xs text-muted-foreground">
-                        来源销售版本
-                    </dt>
-                    <dd className="num text-body-compact">
-                        {purchaseRevision != null &&
+                    }
+                />
+                <DecisionKpiCell
+                    label="来源销售版本"
+                    emphasis="terms"
+                    value={
+                        purchaseRevision != null &&
                         currentRevision != null &&
                         purchaseRevision !== currentRevision
                             ? `第 ${purchaseRevision} 版 → 第 ${currentRevision} 版`
                             : currentRevision != null ||
                                 purchaseRevision != null
                               ? `第 ${currentRevision ?? purchaseRevision} 版`
-                              : "—"}
-                    </dd>
-                    <dd className="text-xs text-muted-foreground">
-                        {sourceSalesOrder ? (
+                              : "—"
+                    }
+                    extra={
+                        sourceSalesOrder ? (
                             <StatusBadge
                                 label={sourceSalesOrder.statusLabel}
                                 tone={sourceSalesOrder.statusTone}
                             />
                         ) : (
-                            resolution
-                        )}
-                    </dd>
-                </div>
-            </dl>
+                            <span className="text-xs text-muted-foreground">
+                                {resolution}
+                            </span>
+                        )
+                    }
+                />
+            </DecisionKpiBar>
 
             <div
                 aria-label="来源销售与采购状态"

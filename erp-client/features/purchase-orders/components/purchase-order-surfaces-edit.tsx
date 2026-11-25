@@ -8,6 +8,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import {
     BusinessFailureState,
     DataTable,
+    DetailInlineTable,
     DetailWorkspaceSection,
     detailWorkspaceStyles,
 } from "@/components/business"
@@ -605,10 +606,7 @@ export function EditSurface({
                         options,
                     }}
                 >
-                    <div
-                        data-slot="detail-inline-table"
-                        className={detailWorkspaceStyles.inlineTableWrapper}
-                    >
+                    <DetailInlineTable>
                         <DataTable
                             id={`procurement-orders-detail-edit-table-${order.identity.purchaseOrderId}`}
                             data={[...lines]}
@@ -624,7 +622,7 @@ export function EditSurface({
                             defaultColumnPinning={{ left: ["item"] }}
                             emptyTitle="暂无采购明细"
                         />
-                    </div>
+                    </DetailInlineTable>
                 </EditLineContext.Provider>
                 {optionsQuery.isError ? (
                     <p className="text-xs text-muted-foreground">

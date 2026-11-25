@@ -33,7 +33,7 @@ export function PurchaseOrderDetailSectionTabs({
         ...item,
         badge:
             item.id === "approval" && approvalPending ? (
-                <span className="rounded-sm bg-info-soft px-1.5 py-0.5 text-tiny leading-3.5 font-medium text-info-soft-foreground">
+                <span className="rounded-sm bg-info-soft px-1.5 py-0.5 text-tiny font-medium text-info-soft-foreground">
                     进行中
                 </span>
             ) : undefined,

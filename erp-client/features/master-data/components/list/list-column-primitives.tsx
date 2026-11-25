@@ -11,7 +11,7 @@ import {
     TableIdentityCell,
     TableRowActions,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { masterDataCopy } from "@/features/master-data/lib/copy"
 import { formatEffectiveRange } from "@/features/master-data/lib/filter"
 import type { MasterDataListItem } from "@/features/master-data/types"
@@ -90,12 +90,12 @@ export function lifecycleColumn(): ColumnDef<MasterDataListItem> {
                     tone={row.original.lifecycleTone}
                 />
                 {row.original.primaryBlocker ? (
-                    <span className="max-w-48 whitespace-normal text-xs leading-4 text-destructive">
+                    <span className="max-w-48 whitespace-normal text-xs text-destructive">
                         {row.original.primaryBlocker}
                     </span>
                 ) : null}
                 {row.original.scheduledLifecycleLabel ? (
-                    <span className="text-xs leading-4 text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                         {row.original.scheduledLifecycleLabel}
                     </span>
                 ) : null}
@@ -111,16 +111,14 @@ export function revisionTimingColumn(): ColumnDef<MasterDataListItem> {
         enableSorting: false,
         meta: { label: masterDataCopy.colVersionState, width: "status" },
         cell: ({ row }) => (
-            <Badge
-                variant={
+            <StatusBadge
+                tone={
                     row.original.revisionTiming === "FUTURE"
                         ? "warning"
-                        : "secondary"
+                        : "neutral"
                 }
-                className="text-xs"
-            >
-                {row.original.revisionTimingLabel}
-            </Badge>
+                label={row.original.revisionTimingLabel}
+            />
         ),
     }
 }
@@ -153,7 +151,7 @@ export function blockerColumn(
             meta: { label: masterDataCopy.colBlocker },
             cell: ({ row }) =>
                 row.original.primaryBlocker ? (
-                    <span className="text-xs leading-4 text-destructive">
+                    <span className="text-xs text-destructive">
                         {row.original.primaryBlocker}
                     </span>
                 ) : (

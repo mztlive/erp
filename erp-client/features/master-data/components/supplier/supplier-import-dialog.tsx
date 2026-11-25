@@ -118,7 +118,7 @@ export const SupplierImportDialog = ({
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
-                    <div className="rounded-lg bg-muted/50 p-4 text-body-compact leading-6">
+                    <div className="rounded-lg bg-muted/50 p-4 text-body-compact">
                         签约和付款主体互相补齐，并按公司全称、简称或别名匹配。周期结算默认期末后
                         15 天计划付款；不明确的合同有效期留空。
                         <PermissionGuard permission="company:list">

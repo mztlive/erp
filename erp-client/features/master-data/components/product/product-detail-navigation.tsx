@@ -44,7 +44,7 @@ function ProductSectionTabs({
         if (section.id === "supply" && !isCreate) {
             if (missingSupplyCount != null && missingSupplyCount > 0) {
                 badge = (
-                    <span className="num rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny leading-3.5 font-medium text-warning-soft-foreground">
+                    <span className="num rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny font-medium text-warning-soft-foreground">
                         缺 {missingSupplyCount}
                     </span>
                 )

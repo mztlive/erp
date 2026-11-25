@@ -6,6 +6,7 @@ import { MoneyValue } from "@/components/business"
 import { ChangeOrderSection } from "@/components/business/change-order-section"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compactFixed, compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
@@ -28,10 +29,10 @@ import type { PurchaseChangeDraftFormApi } from "../lib/purchase-change-draft-fo
 
 const DIFF_BADGE: Record<
     Exclude<PurchaseChangeLineDiff["status"], "unchanged">,
-    { label: string; variant: "warning" | "neutral" }
+    { label: string; tone: StatusTone }
 > = {
-    changed: { label: "已修改", variant: "warning" },
-    removed: { label: "已移除", variant: "neutral" },
+    changed: { label: "已修改", tone: "warning" },
+    removed: { label: "已移除", tone: "neutral" },
 }
 
 const LINE_GRID =
@@ -222,10 +223,13 @@ function PurchaseChangeLineRow({
                             <Badge variant="secondary">已发生 · 不可修改</Badge>
                         ) : null}
                         {badge ? (
-                            <Badge variant={badge.variant}>{badge.label}</Badge>
+                            <StatusBadge
+                                tone={badge.tone}
+                                label={badge.label}
+                            />
                         ) : null}
                         {bound?.quantityAffected && !removed ? (
-                            <Badge variant="warning">销售已调减</Badge>
+                            <StatusBadge tone="warning" label="销售已调减" />
                         ) : null}
                     </div>
                     {item ? (

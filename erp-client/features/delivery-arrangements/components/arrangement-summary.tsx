@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 
 import {
+    DetailInlineTable,
     DetailWorkspaceSection,
     detailWorkspaceStyles,
 } from "@/components/business"
@@ -502,10 +503,7 @@ function UnsetArrangementView({
                 ) : null}
             </div>
 
-            <div
-                data-slot="detail-inline-table"
-                className={detailWorkspaceStyles.inlineTableWrapper}
-            >
+            <DetailInlineTable>
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -536,7 +534,7 @@ function UnsetArrangementView({
                         ))}
                     </TableBody>
                 </Table>
-            </div>
+            </DetailInlineTable>
         </div>
     )
 }
@@ -766,10 +764,7 @@ function MultiLineSummaryTable({
         summary.totalLines === 1 ? summary.lines[0]?.lineId : null
 
     return (
-        <div
-            data-slot="detail-inline-table"
-            className={detailWorkspaceStyles.dataTableWrapper}
-        >
+        <DetailInlineTable frame="scroll">
             <Table data-density="comfortable" className="min-w-[38rem]">
                 <TableHeader>
                     <TableRow>
@@ -1078,7 +1073,7 @@ function MultiLineSummaryTable({
                     })}
                 </TableBody>
             </Table>
-        </div>
+        </DetailInlineTable>
     )
 }
 
@@ -1103,12 +1098,12 @@ function InlineAllocationsTable({
     nested?: boolean
 }) {
     return (
-        <div
-            data-slot="detail-inline-table"
+        <DetailInlineTable
+            frame={nested ? "none" : "inline"}
             className={
                 nested
                     ? "overflow-x-auto rounded-md border border-border/70 bg-card"
-                    : detailWorkspaceStyles.inlineTableWrapper
+                    : undefined
             }
         >
             <Table>
@@ -1192,7 +1187,7 @@ function InlineAllocationsTable({
                     })}
                 </TableBody>
             </Table>
-        </div>
+        </DetailInlineTable>
     )
 }
 

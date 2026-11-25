@@ -87,7 +87,7 @@ export function PurchaseOrderCreateSwitchList({
                                                 <MoneyValue
                                                     display="exact"
                                                     value={item.amount}
-                                                    className="shrink-0 font-semibold text-foreground"
+                                                    className="shrink-0"
                                                 />
                                             ) : null}
                                         </div>

@@ -4,16 +4,22 @@ import { useMemo, useState } from "react"
 import {
     ArrowUpDownIcon,
     MapPinIcon,
-    PackageCheckIcon,
     PlusIcon,
     RefreshCwIcon,
     SparklesIcon,
     TriangleAlertIcon,
     XIcon,
 } from "lucide-react"
-import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
+import {
+    FulfillmentRouteBadge,
+    MoneyValue,
+    QuantityValue,
+    RateValue,
+    sourceRouteCategory,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compareDecimal, multiplyFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
@@ -27,10 +33,6 @@ import {
     comparePurchaseCostToSalesPrice,
     priceDeltaFromLowest,
 } from "../lib/sourcing/pricing"
-import {
-    sourceRouteBadgeVariant,
-    sourceRouteCategory,
-} from "../lib/sourcing/source-palette"
 import type {
     SourcingProductLine,
     SourcingSalesOrder,
@@ -447,7 +449,6 @@ function CandidateRow({
         ? option.warehouseName || option.supplierName
         : option.supplierName
     const route = sourcingRouteLabel(option)
-    const routeVariant = sourceRouteBadgeVariant(option)
     const minimum = bulkMinimumOptionState(order, option)
     const margin = !isStock
         ? comparePurchaseCostToSalesPrice(option.unitCostGross, salesPrice)
@@ -508,31 +509,26 @@ function CandidateRow({
                         >
                             {name}
                         </span>
-                        <Badge
-                            variant={routeVariant}
-                            className="h-4.5 shrink-0 px-1.5 text-tiny"
-                        >
-                            {isStock ? (
-                                <PackageCheckIcon aria-hidden="true" />
-                            ) : null}
-                            {route}
-                        </Badge>
+                        <FulfillmentRouteBadge
+                            option={option}
+                            label={route}
+                            size="compact"
+                            className="shrink-0"
+                        />
                         {priceDelta?.isLowest ? (
-                            <Badge
-                                variant="success"
+                            <StatusBadge
+                                tone="success"
+                                label="最低价"
                                 className="h-4.5 shrink-0 px-1.5 text-tiny"
-                            >
-                                最低价
-                            </Badge>
+                            />
                         ) : null}
                         {isRecommended ? (
-                            <Badge
-                                variant="info"
+                            <StatusBadge
+                                tone="info"
+                                icon={SparklesIcon}
+                                label="推荐"
                                 className="h-4.5 shrink-0 px-1.5 text-tiny"
-                            >
-                                <SparklesIcon aria-hidden="true" />
-                                推荐
-                            </Badge>
+                            />
                         ) : null}
                         {option.inquirySource ? (
                             <Badge
@@ -553,16 +549,19 @@ function CandidateRow({
                             </span>
                         ) : (
                             <div className="flex items-baseline justify-end gap-1">
-                                <MoneyValue
-                                    display="exact"
-                                    value={option.unitCostGross}
-                                    className={cn(
-                                        "text-body-compact font-semibold",
+                                <span
+                                    className={
                                         margin?.inverted
                                             ? "text-destructive"
-                                            : "text-foreground",
-                                    )}
-                                />
+                                            : undefined
+                                    }
+                                >
+                                    <MoneyValue
+                                        display="exact"
+                                        value={option.unitCostGross}
+                                        inheritColor={Boolean(margin?.inverted)}
+                                    />
+                                </span>
                                 {priceDelta && !priceDelta.isLowest ? (
                                     <span className="num text-tiny text-muted-foreground">
                                         +¥{priceDelta.delta}

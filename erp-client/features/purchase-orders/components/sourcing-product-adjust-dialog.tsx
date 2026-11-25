@@ -649,7 +649,6 @@ export function SourcingProductAdjustDialog({
                                                     <MoneyValue
                                                         display="exact"
                                                         value={salesUnitPrice}
-                                                        className="font-medium [&_[data-slot=money-value-number]]:text-foreground"
                                                     />
                                                 </span>
                                             ) : null,

@@ -67,7 +67,8 @@ function SkuBulkPriceBar({
                     </Label>
                     <Input
                         id={`master-data-product-sku-bulk-${field.key}`}
-                        className="h-control-sm num bg-card text-right"
+                        size="sm"
+                        className="num bg-card text-right"
                         inputMode="decimal"
                         value={field.value}
                         disabled={!canRevise}

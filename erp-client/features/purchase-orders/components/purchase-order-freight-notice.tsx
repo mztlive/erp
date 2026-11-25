@@ -7,6 +7,7 @@ import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Dialog,
     DialogContent,
@@ -84,7 +85,10 @@ export function PurchaseOrderFreightNotice({
                                 </Badge>
                             ) : line.freightPending ? (
                                 <>
-                                    <Badge variant="warning">待追加</Badge>
+                                    <StatusBadge
+                                        tone="warning"
+                                        label="待追加"
+                                    />
                                     {canWaive ? (
                                         <Button
                                             id={`purchase-order-freight-waive-${toAutomationIdSegment(line.salesOrderLineId)}`}
@@ -98,7 +102,10 @@ export function PurchaseOrderFreightNotice({
                                     ) : null}
                                 </>
                             ) : (
-                                <Badge variant="success">已追加物流费用</Badge>
+                                <StatusBadge
+                                    tone="success"
+                                    label="已追加物流费用"
+                                />
                             )}
                         </li>
                     ))}

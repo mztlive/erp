@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 
 import {
+    DetailInlineTable,
     DetailWorkspaceSubTabs,
     OptionCombobox,
     QuickPreviewSheet,
@@ -382,10 +383,11 @@ export function ArrangementDetailSheet({
                         />
                         <Input
                             id={`${idPrefix}-search`}
+                            size="sm"
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
                             placeholder="搜索收货人、电话、地区、地址或商品…"
-                            className="h-control-sm pr-7 pl-8"
+                            className="pr-7 pl-8"
                         />
                         {search ? (
                             <Button
@@ -685,10 +687,7 @@ function ProductDetailBlock({
                     )}
                 </div>
             ) : (
-                <div
-                    data-slot="detail-inline-table"
-                    className={detailWorkspaceStyles.inlineTableWrapper}
-                >
+                <DetailInlineTable>
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -779,7 +778,7 @@ function ProductDetailBlock({
                             })}
                         </TableBody>
                     </Table>
-                </div>
+                </DetailInlineTable>
             )}
 
             {unmatchedShipped.length > 0 ? (

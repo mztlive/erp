@@ -198,10 +198,11 @@ export function PurchaseSourceUpdateLines({
                         <Input
                             id={`${idPrefix}-lines-search`}
                             type="search"
+                            size="sm"
                             aria-label="搜索采购商品或规格"
                             placeholder="搜索商品或规格"
                             value={active.search}
-                            className="h-control-sm max-w-full border-transparent bg-surface-sunken shadow-none hover:bg-card focus-visible:bg-card @[480px]/source-update:ml-auto @[480px]/source-update:w-52"
+                            className="max-w-full border-transparent bg-surface-sunken shadow-none hover:bg-card focus-visible:bg-card @[480px]/source-update:ml-auto @[480px]/source-update:w-52"
                             onChange={(event) =>
                                 setView({
                                     ...active,

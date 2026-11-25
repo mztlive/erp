@@ -11,7 +11,12 @@ import {
     TriangleAlertIcon,
     ZapIcon,
 } from "lucide-react"
-import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
+import {
+    MoneyValue,
+    QuantityValue,
+    RateValue,
+    sourceAccentForIndex,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -54,7 +59,6 @@ import {
     minimumUnits,
     quantityUnits,
 } from "../lib/sourcing/quantity"
-import { sourceAccentForIndex } from "../lib/sourcing/source-palette"
 import type {
     SourcingLineInput,
     SourcingProductLine,
@@ -324,12 +328,11 @@ export function SourcingSourceRow({
                     </button>
 
                     {priceDelta?.isLowest && product.options.length > 1 ? (
-                        <Badge
-                            variant="success"
+                        <StatusBadge
+                            tone="success"
+                            label="最低价"
                             className="h-5 shrink-0 px-1.5 text-tiny"
-                        >
-                            最低价
-                        </Badge>
+                        />
                     ) : priceDelta &&
                       !priceDelta.isLowest &&
                       lowestPurchaseCost ? (
@@ -461,16 +464,21 @@ export function SourcingSourceRow({
                             ) : (
                                 <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                     <span className="inline-flex items-baseline gap-1">
-                                        <MoneyValue
-                                            display="exact"
-                                            value={option.unitCostGross}
-                                            className={cn(
-                                                "font-semibold",
+                                        <span
+                                            className={
                                                 margin?.inverted
                                                     ? "text-destructive"
-                                                    : "text-foreground",
-                                            )}
-                                        />
+                                                    : undefined
+                                            }
+                                        >
+                                            <MoneyValue
+                                                display="exact"
+                                                value={option.unitCostGross}
+                                                inheritColor={Boolean(
+                                                    margin?.inverted,
+                                                )}
+                                            />
+                                        </span>
                                         {margin ? (
                                             <span
                                                 className={cn(

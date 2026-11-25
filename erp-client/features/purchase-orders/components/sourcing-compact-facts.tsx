@@ -80,11 +80,12 @@ export function SourcingCompactFacts({
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                             <span className="inline-flex items-baseline gap-1.5">
                                 <span>含税单价</span>
-                                <MoneyValue
-                                    className="text-body-compact font-semibold text-foreground"
-                                    display="exact"
-                                    value={option.unitCostGross}
-                                />
+                                <span className="text-body-compact">
+                                    <MoneyValue
+                                        display="exact"
+                                        value={option.unitCostGross}
+                                    />
+                                </span>
                             </span>
                             <span
                                 aria-hidden="true"

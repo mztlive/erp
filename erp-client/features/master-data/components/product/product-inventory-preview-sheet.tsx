@@ -129,8 +129,8 @@ export function ProductInventoryPreviewSheet({
                     aria-busy="true"
                     aria-label="正在加载商品库存"
                 >
-                    <div className="h-20 animate-pulse rounded-xl bg-muted" />
-                    <div className="h-48 animate-pulse rounded-xl bg-muted" />
+                    <div className="h-20 animate-pulse rounded-lg bg-muted" />
+                    <div className="h-48 animate-pulse rounded-lg bg-muted" />
                 </div>
             )
         }
@@ -209,7 +209,7 @@ export function ProductInventoryPreviewSheet({
                         </Button>
                     </div>
 
-                    <div className="overflow-hidden rounded-xl border border-border">
+                    <div className="overflow-hidden rounded-lg border border-border">
                         <Table data-density="compact">
                             <TableCaption className="sr-only">
                                 {selectedSku.skuNo} 按仓库展示的库存余额

@@ -9,6 +9,7 @@ import { PlusIcon } from "lucide-react"
 import { BusinessFailureState } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Dialog,
     DialogClose,
@@ -153,18 +154,20 @@ export function ProductSupplyDialog({
                                                 </Badge>
                                                 {!offeringLoading &&
                                                 !offeringError ? (
-                                                    <Badge
-                                                        variant={
+                                                    <StatusBadge
+                                                        tone={
                                                             skuOfferings.length >
                                                             0
                                                                 ? "success"
-                                                                : "outline"
+                                                                : "neutral"
                                                         }
-                                                    >
-                                                        {skuOfferings.length > 0
-                                                            ? `${skuOfferings.length} 条供给`
-                                                            : "无供给"}
-                                                    </Badge>
+                                                        label={
+                                                            skuOfferings.length >
+                                                            0
+                                                                ? `${skuOfferings.length} 条供给`
+                                                                : "无供给"
+                                                        }
+                                                    />
                                                 ) : null}
                                             </div>
                                             <p className="mt-1 text-xs text-muted-foreground">
@@ -273,21 +276,22 @@ export function ProductSupplyDialog({
                                                                 </TableCell>
                                                             </PermissionGuard>
                                                             <TableCell>
-                                                                <Badge
-                                                                    variant={
+                                                                <StatusBadge
+                                                                    tone={
                                                                         offering.availability_status ===
                                                                         "AVAILABLE"
                                                                             ? "success"
-                                                                            : "outline"
+                                                                            : "neutral"
                                                                     }
-                                                                >
-                                                                    {offering.availability_status
-                                                                        ? AVAILABILITY_STATUS_LABELS[
-                                                                              offering
-                                                                                  .availability_status
-                                                                          ]
-                                                                        : "未更新"}
-                                                                </Badge>
+                                                                    label={
+                                                                        offering.availability_status
+                                                                            ? AVAILABILITY_STATUS_LABELS[
+                                                                                  offering
+                                                                                      .availability_status
+                                                                              ]
+                                                                            : "未更新"
+                                                                    }
+                                                                />
                                                                 <div className="mt-1 text-xs text-muted-foreground">
                                                                     数量{" "}
                                                                     {offering.available_quantity ??
