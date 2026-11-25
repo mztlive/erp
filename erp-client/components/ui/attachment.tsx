@@ -7,14 +7,14 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
 const attachmentVariants = cva(
-    "group/attachment relative flex w-fit max-w-full min-w-0 shrink-0 flex-wrap rounded-2xl border bg-card text-card-foreground transition-colors focus-within:ring-1 focus-within:ring-ring/30 has-[>a,>button]:hover:bg-muted/50 data-[state=error]:border-destructive/30 data-[state=idle]:border-dashed",
+    "group/attachment relative flex w-fit max-w-full min-w-0 shrink-0 flex-wrap rounded-lg border bg-card text-card-foreground transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-ring has-[>a,>button]:hover:bg-muted/50 data-[state=error]:border-destructive-border data-[state=idle]:border-dashed",
     {
         variants: {
             size: {
                 default:
                     "gap-2 text-body-compact has-data-[slot=attachment-content]:px-2.5 has-data-[slot=attachment-content]:py-2 has-data-[slot=attachment-media]:p-2",
                 sm: "gap-2.5 text-xs has-data-[slot=attachment-content]:px-2 has-data-[slot=attachment-content]:py-1.5 has-data-[slot=attachment-media]:p-1.5",
-                xs: "gap-1.5 rounded-xl text-xs has-data-[slot=attachment-content]:px-1.5 has-data-[slot=attachment-content]:py-1 has-data-[slot=attachment-media]:p-1",
+                xs: "gap-1.5 rounded-md text-xs has-data-[slot=attachment-content]:px-1.5 has-data-[slot=attachment-content]:py-1 has-data-[slot=attachment-media]:p-1",
             },
             orientation: {
                 horizontal: "min-w-40 items-center",
@@ -48,7 +48,7 @@ function Attachment({
 }
 
 const attachmentMediaVariants = cva(
-    "relative flex aspect-square w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-foreground group-data-[orientation=vertical]/attachment:w-full group-data-[size=sm]/attachment:w-8 group-data-[size=xs]/attachment:w-7 group-data-[size=xs]/attachment:rounded-md group-data-[state=error]/attachment:bg-destructive/10 group-data-[state=error]/attachment:text-destructive group-data-[orientation=vertical]/attachment:*:data-[slot=spinner]:size-6! [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 group-data-[orientation=vertical]/attachment:[&_svg:not([class*='size-'])]:size-6 group-data-[size=xs]/attachment:[&_svg:not([class*='size-'])]:size-3.5",
+    "relative flex aspect-square w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted text-foreground group-data-[orientation=vertical]/attachment:w-full group-data-[size=sm]/attachment:w-8 group-data-[size=xs]/attachment:w-7 group-data-[size=xs]/attachment:rounded-sm group-data-[state=error]/attachment:bg-destructive-soft group-data-[state=error]/attachment:text-destructive-soft-foreground group-data-[orientation=vertical]/attachment:*:data-[slot=spinner]:size-6! [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 group-data-[orientation=vertical]/attachment:[&_svg:not([class*='size-'])]:size-6 group-data-[size=xs]/attachment:[&_svg:not([class*='size-'])]:size-3.5",
     {
         variants: {
             variant: {
@@ -186,7 +186,7 @@ function AttachmentGroup({ className, ...props }: React.ComponentProps<"div">) {
         <div
             data-slot="attachment-group"
             className={cn(
-                "flex min-w-0 scroll-fade-x snap-x snap-mandatory scroll-px-1 scrollbar-none gap-3 overflow-x-auto overscroll-x-contain py-1 *:data-[slot=attachment]:flex-none *:data-[slot=attachment]:snap-start",
+                "flex min-w-0 scroll-fade-x snap-x snap-mandatory scroll-px-1 gap-3 overflow-x-auto overscroll-x-contain py-1 *:data-[slot=attachment]:flex-none *:data-[slot=attachment]:snap-start",
                 className,
             )}
             {...props}

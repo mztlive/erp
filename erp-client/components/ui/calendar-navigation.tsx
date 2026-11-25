@@ -55,7 +55,7 @@ function CalendarMonthCaption({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-(--cell-size) px-1.5"
+                className="num h-(--cell-size) px-1.5"
                 disabled={disabled}
                 aria-label={`选择年份，当前 ${year} 年`}
                 onClick={() => navigation?.open("years", date)}
@@ -71,7 +71,7 @@ function CalendarMonthCaption({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-(--cell-size) px-1.5"
+                className="num h-(--cell-size) px-1.5"
                 data-calendar-month-trigger
                 disabled={disabled}
                 aria-label={`选择月份，当前 ${month + 1} 月`}
@@ -230,7 +230,7 @@ function CalendarMonths({ children, className, ...props }: MonthsProps) {
                             </Button>
                             {view === "years" ? (
                                 <span
-                                    className="text-body-compact font-medium"
+                                    className="num text-body-compact font-medium"
                                     aria-live="polite"
                                 >
                                     {Math.max(yearStart, minYear)}—
@@ -242,7 +242,7 @@ function CalendarMonths({ children, className, ...props }: MonthsProps) {
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    className="h-(--cell-size)"
+                                    className="num h-(--cell-size)"
                                     aria-label={`选择年份，当前 ${cursor.year} 年`}
                                     onClick={() => {
                                         setYearStart(
@@ -316,7 +316,7 @@ function CalendarMonths({ children, className, ...props }: MonthsProps) {
                                         variant={
                                             current ? "secondary" : "ghost"
                                         }
-                                        className="h-full min-h-(--cell-size) px-1"
+                                        className="num h-full min-h-(--cell-size) px-1"
                                         data-calendar-option
                                         data-current={current}
                                         onKeyDown={handleOptionKeyDown}

@@ -191,7 +191,7 @@ function ChartTooltipContent({
     return (
         <div
             className={cn(
-                "grid min-w-32 items-start gap-1.5 rounded-xl bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10",
+                "grid min-w-32 items-start gap-1.5 rounded-lg border border-border/90 bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-md",
                 className,
             )}
         >
@@ -281,7 +281,7 @@ function ChartTooltipContent({
                                                 </span>
                                             </div>
                                             {item.value != null && (
-                                                <span className="font-mono font-medium text-foreground tabular-nums">
+                                                <span className="num font-medium text-foreground">
                                                     {typeof item.value ===
                                                     "number"
                                                         ? item.value.toLocaleString()
@@ -346,10 +346,12 @@ function ChartLegendContent({
                                 <itemConfig.icon />
                             ) : (
                                 <div
-                                    className="h-2 w-2 shrink-0 rounded-xs"
-                                    style={{
-                                        backgroundColor: item.color,
-                                    }}
+                                    className="h-2 w-2 shrink-0 rounded-xs bg-(--color-bg)"
+                                    style={
+                                        {
+                                            "--color-bg": item.color,
+                                        } as React.CSSProperties
+                                    }
                                 />
                             )}
                             {itemConfig?.label}
