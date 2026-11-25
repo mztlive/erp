@@ -41,9 +41,10 @@ export type WorkspaceReworkTriageAction = Readonly<{
 
 export type WorkspaceReworkTriageItem = Readonly<{
     id: string
-    tone: "destructive" | "warning" | "info"
+    tone: "destructive" | "warning" | "info" | "success"
     text: ReactNode
     action?: WorkspaceReworkTriageAction
+    actions?: readonly WorkspaceReworkTriageAction[]
 }>
 
 export type WorkspaceReworkCommandCardProps = Readonly<{
@@ -83,6 +84,96 @@ function TriageActionIcon({
         return <ArrowUpRightIcon data-icon="inline-end" aria-hidden="true" />
     }
     return null
+}
+
+function ReworkTriageItemsList({
+    items,
+}: {
+    items: readonly WorkspaceReworkTriageItem[]
+}) {
+    if (items.length === 0) return null
+
+    return (
+        <ul className="space-y-1.5">
+            {items.map((entry) => {
+                const entryActions = [
+                    ...(entry.action ? [entry.action] : []),
+                    ...(entry.actions ?? []),
+                ]
+                return (
+                    <li
+                        key={entry.id}
+                        className={cn(
+                            "flex flex-wrap items-center justify-between gap-2 rounded-md px-3 py-2",
+                            entry.tone === "destructive"
+                                ? "bg-destructive-soft/35 text-destructive-soft-foreground"
+                                : entry.tone === "warning"
+                                  ? "bg-warning-soft/50 text-warning-soft-foreground"
+                                  : entry.tone === "success"
+                                    ? "bg-success-soft/50 text-success-soft-foreground"
+                                    : "bg-surface-sunken text-foreground/85",
+                        )}
+                    >
+                        <span className="flex min-w-0 items-start gap-1.5 font-medium">
+                            {entry.tone === "destructive" ? (
+                                <AlertTriangleIcon
+                                    aria-hidden="true"
+                                    className="mt-0.5 size-3.5 shrink-0 text-destructive"
+                                />
+                            ) : entry.tone === "success" ? (
+                                <CheckCircle2Icon
+                                    aria-hidden="true"
+                                    className="mt-0.5 size-3.5 shrink-0"
+                                />
+                            ) : (
+                                <CircleAlertIcon
+                                    aria-hidden="true"
+                                    className={cn(
+                                        "mt-0.5 size-3.5 shrink-0",
+                                        entry.tone === "info" &&
+                                            "text-muted-foreground",
+                                    )}
+                                />
+                            )}
+                            <span className="num min-w-0 wrap-anywhere">
+                                {entry.text}
+                            </span>
+                        </span>
+                        {entryActions.length === 1 ? (
+                            <Button
+                                id={entryActions[0].id}
+                                type="button"
+                                variant={entryActions[0].variant ?? "outline"}
+                                size="xs"
+                                disabled={entryActions[0].disabled}
+                                onClick={entryActions[0].onClick}
+                            >
+                                {entryActions[0].label}
+                                <TriageActionIcon icon={entryActions[0].icon} />
+                            </Button>
+                        ) : entryActions.length > 1 ? (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                {entryActions.map((action) => (
+                                    <Button
+                                        key={action.id}
+                                        id={action.id}
+                                        type="button"
+                                        variant={action.variant ?? "outline"}
+                                        size="xs"
+                                        disabled={action.disabled}
+                                        onClick={action.onClick}
+                                    >
+                                        {action.label}
+                                        <TriageActionIcon icon={action.icon} />
+                                    </Button>
+                                ))}
+                            </div>
+                        ) : null}
+                    </li>
+                )
+            })}
+        </ul>
+    )
 }
 
 /**
@@ -327,62 +418,7 @@ export function WorkspaceReworkCommandCard({
                             ) : null}
                         </div>
 
-                        {items.length > 0 ? (
-                            <ul className="space-y-1.5">
-                                {items.map((entry) => (
-                                    <li
-                                        key={entry.id}
-                                        className={cn(
-                                            "flex flex-wrap items-center justify-between gap-2 rounded-md px-3 py-2",
-                                            entry.tone === "destructive"
-                                                ? "bg-destructive-soft/35 text-destructive-soft-foreground"
-                                                : entry.tone === "warning"
-                                                  ? "bg-warning-soft/50 text-warning-soft-foreground"
-                                                  : "bg-surface-sunken text-foreground/85",
-                                        )}
-                                    >
-                                        <span className="flex min-w-0 items-start gap-1.5 font-medium">
-                                            {entry.tone === "destructive" ? (
-                                                <AlertTriangleIcon
-                                                    aria-hidden="true"
-                                                    className="mt-0.5 size-3.5 shrink-0 text-destructive"
-                                                />
-                                            ) : (
-                                                <CircleAlertIcon
-                                                    aria-hidden="true"
-                                                    className={cn(
-                                                        "mt-0.5 size-3.5 shrink-0",
-                                                        entry.tone === "info" &&
-                                                            "text-muted-foreground",
-                                                    )}
-                                                />
-                                            )}
-                                            <span className="num min-w-0 wrap-anywhere">
-                                                {entry.text}
-                                            </span>
-                                        </span>
-                                        {entry.action ? (
-                                            <Button
-                                                id={entry.action.id}
-                                                type="button"
-                                                variant={
-                                                    entry.action.variant ??
-                                                    "outline"
-                                                }
-                                                size="xs"
-                                                disabled={entry.action.disabled}
-                                                onClick={entry.action.onClick}
-                                            >
-                                                {entry.action.label}
-                                                <TriageActionIcon
-                                                    icon={entry.action.icon}
-                                                />
-                                            </Button>
-                                        ) : null}
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : null}
+                        <ReworkTriageItemsList items={items} />
 
                         {description ? (
                             <p className="text-muted-foreground">
@@ -419,11 +455,12 @@ export function WorkspaceReworkCommandCard({
                                 </Button>
                             ) : null}
                         </div>
+                        <ReworkTriageItemsList items={items} />
                         {description ? (
                             <div className="flex items-start gap-1.5 text-muted-foreground">
                                 <CheckCircle2Icon
                                     aria-hidden="true"
-                                    className="mt-0.5 size-3.5 shrink-0 text-success-foreground"
+                                    className="mt-0.5 size-3.5 shrink-0 text-success-soft-foreground"
                                 />
                                 <p className="min-w-0 wrap-anywhere">
                                     {description}

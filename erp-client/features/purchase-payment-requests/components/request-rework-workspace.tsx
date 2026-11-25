@@ -11,9 +11,7 @@ import {
 } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
-    AlertTriangleIcon,
     ArrowUpRightIcon,
-    CheckCircle2Icon,
     ChevronRightIcon,
     CircleAlertIcon,
     DownloadIcon,
@@ -29,13 +27,15 @@ import {
     MoneyValue,
     QuantityValue,
     RateValue,
+    ReasonTextareaField,
     WorkspaceFactGrid,
     WorkspaceFactGroup,
     WorkspaceFactItem,
+    WorkspaceReworkCommandCard,
     WorkspaceTaskFooter,
     detailWorkspaceStyles,
+    type WorkspaceReworkTriageItem,
 } from "@/components/business"
-import { ReasonTextareaField } from "@/components/business/reason-textarea-field"
 import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
@@ -1215,360 +1215,181 @@ function RequestReworkWorkspaceInner({
         editingSections.account ||
         (Boolean(accountError) && !isPremiseInvalidated)
 
+    const reworkTriageItems: WorkspaceReworkTriageItem[] = []
+    if (triageState !== "premise_invalidated") {
+        if (accountError) {
+            reworkTriageItems.push({
+                id: "account-error",
+                tone: "destructive",
+                text: accountError,
+                action: canEdit
+                    ? {
+                          id: `${idPrefix}-triage-fix-account`,
+                          label: "更换收款账户",
+                          variant: "outline",
+                          onClick: () => openSectionForEdit("account"),
+                      }
+                    : undefined,
+            })
+        }
+        if (routingNumberMissing) {
+            reworkTriageItems.push({
+                id: "routing-number-missing",
+                tone: "warning",
+                text: "当前收款账户尚未填写联行号（在供应商档案补全后切回本页将自动同步）",
+                action: {
+                    id: `${idPrefix}-triage-open-supplier`,
+                    label: "去维护供应商账户",
+                    icon: "external",
+                    variant: "outline",
+                    onClick: openSupplierProfile,
+                },
+            })
+        }
+        if (hasBalanceBlock) {
+            const balanceActions = [
+                ...(hasAdjustableOverLimit && canEdit
+                    ? [
+                          {
+                              id: `${idPrefix}-triage-clamp-amount`,
+                              label: "一键调至可用额",
+                              variant: "outline" as const,
+                              onClick: adjustOverLimitLinesToAvailable,
+                          },
+                      ]
+                    : []),
+                ...(canEdit
+                    ? [
+                          {
+                              id: `${idPrefix}-triage-fix-lines`,
+                              label: "定位调整",
+                              variant: "ghost" as const,
+                              onClick: () => openSectionForEdit("lines"),
+                          },
+                      ]
+                    : []),
+            ]
+            reworkTriageItems.push({
+                id: "balance-block",
+                tone: "destructive",
+                text: (
+                    <>
+                        申请金额超出采购单当前可申请余额（可用{" "}
+                        <MoneyValue
+                            value={liveAvailableTotal}
+                            display="exact"
+                        />
+                        ）
+                    </>
+                ),
+                actions: balanceActions.length > 0 ? balanceActions : undefined,
+            })
+        }
+        if (bankAccountMasterUpdated) {
+            reworkTriageItems.push({
+                id: "bank-account-master-updated",
+                tone: "success",
+                text: `已同步供应商最新收款账户主数据${liveRoutingNumber ? `（联行号 ${liveRoutingNumber}）` : ""}，重提时将自动按最新资料提交。`,
+            })
+        }
+    }
+
     return (
         <div className="min-w-0 space-y-5 bg-card pt-3 pb-4">
             {/* 1. 统一行动指挥卡：合并「上轮驳回意见 + 前置可行性体检 + 唯一清晰行动指引」 */}
-            <section
-                aria-label="驳回处理指引"
-                data-slot="rework-command-card"
-                className={cn(
-                    "overflow-hidden rounded-lg border border-border/70 border-l-2 bg-card",
-                    triageState === "premise_invalidated" ||
-                        hasBalanceBlock ||
-                        accountError
-                        ? "border-l-destructive"
-                        : triageState === "needs_fix"
-                          ? "border-l-warning"
-                          : "border-l-info",
-                )}
-            >
-                {/* 上段：为什么被打回（单点聚焦，不再与告警红框重复叠放） */}
-                <div className="space-y-1.5 bg-destructive-soft/40 px-4 py-3">
-                    <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 text-xs">
-                        <span className="inline-flex items-center gap-1.5 font-semibold text-destructive-soft-foreground">
-                            <CircleAlertIcon
-                                aria-hidden="true"
-                                className="size-3.5 shrink-0 text-destructive"
-                            />
-                            本次审批已驳回
-                        </span>
-                        {rejection?.rejector && (
-                            <span className="font-medium text-foreground/85">
-                                {rejection.rejector}
-                            </span>
-                        )}
-                        {rejection?.node && (
-                            <span className="text-muted-foreground">
-                                {rejection.node}
-                            </span>
-                        )}
-                        {rejection?.rejectedAt && (
-                            <time
-                                dateTime={rejection.rejectedAt.dateTime}
-                                className="num text-muted-foreground"
-                            >
-                                {rejection.rejectedAt.label}
-                            </time>
-                        )}
-                    </div>
-                    {rejection?.reason ? (
-                        <p className="text-body-compact font-semibold text-foreground whitespace-pre-wrap wrap-anywhere">
-                            「{rejection.reason}」
-                        </p>
-                    ) : (
-                        <p className="text-xs text-muted-foreground">
-                            {rejection?.loading
-                                ? "正在读取驳回意见…"
-                                : "驳回意见暂不可用，可核对右侧审批记录。"}
-                        </p>
-                    )}
-                    {rejection?.isError && rejection.onRetry && (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span role="status">驳回意见读取失败。</span>
-                            <Button
-                                id={`${idPrefix}-rejection-retry`}
-                                type="button"
-                                variant="ghost"
-                                size="xs"
-                                disabled={rejection.isFetching}
-                                onClick={rejection.onRetry}
-                            >
-                                重试读取
-                            </Button>
-                        </div>
-                    )}
-                </div>
-
-                {/* 下段：系统前置体检与三态势分流 */}
-                <div className="space-y-2.5 border-t border-border/60 bg-card px-4 py-3 text-xs">
-                    {triageState === "premise_invalidated" ? (
-                        <div role="alert" className="space-y-2.5">
-                            <div className="flex items-start gap-2">
-                                <AlertTriangleIcon
-                                    aria-hidden="true"
-                                    className="mt-0.5 size-3.5 shrink-0 text-destructive"
-                                />
-                                <div className="min-w-0 space-y-1">
-                                    <p className="font-semibold text-destructive-soft-foreground">
-                                        当前无法继续重提：来源采购单可申请余额已为
-                                        ¥0.00
-                                    </p>
-                                    <p className="text-foreground/80">
-                                        {canAbandon
-                                            ? "该采购单可能已通过其他付款或申请结清。若无需继续付款，建议核对下方记录后直接「放弃本次办理」关闭此待办。"
-                                            : "该采购单已无可用申请额度；如需改付同供应商其他未付采购单，请点击下方「更换采购单」。"}
-                                    </p>
-                                </div>
-                            </div>
-
-                            {balanceEvidenceItems.length > 0 ? (
-                                <ul className="space-y-1 rounded-md bg-surface-sunken px-3 py-2 text-foreground/85">
-                                    {balanceEvidenceItems
-                                        .slice(0, 4)
-                                        .map((evidence) => (
-                                            <li
-                                                key={evidence}
-                                                className="num flex items-baseline gap-1.5"
-                                            >
-                                                <span
-                                                    aria-hidden="true"
-                                                    className="text-muted-foreground"
-                                                >
-                                                    •
-                                                </span>
-                                                <span className="wrap-anywhere">
-                                                    {evidence}
-                                                </span>
-                                            </li>
-                                        ))}
-                                </ul>
-                            ) : (
-                                <p className="rounded-md bg-surface-sunken px-3 py-2 text-muted-foreground">
-                                    来源采购总额{" "}
-                                    <MoneyValue
-                                        value={liveSourceTotal}
-                                        display="exact"
-                                        className="font-medium text-foreground"
-                                    />{" "}
-                                    · 已结算{" "}
-                                    <RateValue
-                                        value={paidRate}
-                                        precision={1}
-                                        className="font-medium text-foreground"
-                                    />
-                                    ，当前无可申请余额。
-                                </p>
-                            )}
-
-                            <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                                {canAbandon && onRequestAbandon && (
-                                    <Button
-                                        id={`${idPrefix}-card-abandon`}
-                                        type="button"
-                                        variant="default"
-                                        size="xs"
-                                        disabled={busy}
-                                        onClick={onRequestAbandon}
-                                    >
-                                        放弃本次办理
-                                    </Button>
-                                )}
-                                {addableCandidates.length > 0 && canEdit && (
-                                    <Button
-                                        id={`${idPrefix}-card-switch-po`}
-                                        type="button"
-                                        variant="outline"
-                                        size="xs"
-                                        disabled={busy}
-                                        onClick={() =>
-                                            openSectionForEdit("lines")
-                                        }
-                                    >
-                                        更换其他未付采购单（
-                                        {addableCandidates.length}）
-                                    </Button>
-                                )}
-                                <Button
-                                    id={`${idPrefix}-card-refresh`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="xs"
-                                    className={
-                                        detailWorkspaceStyles.quietButton
-                                    }
-                                    disabled={refreshing}
-                                    onClick={() => void refreshLiveData()}
-                                >
-                                    <RefreshCwIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                        className={cn(
-                                            refreshing && "animate-spin",
-                                        )}
-                                    />
-                                    刷新余额
-                                </Button>
-                            </div>
-
-                            {routingNumberMissing && (
-                                <p className="text-muted-foreground">
-                                    另注：当前收款账户尚未填写联行号；若后续仍需更换其他采购单发起付款，可先在供应商档案补全联行号。
-                                </p>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="space-y-2">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="font-medium text-foreground">
-                                    {triageState === "ready"
-                                        ? "前置校验已通过，核对或按需修改后即可重新提交"
-                                        : "提交前需先核对或处理以下事项"}
-                                </p>
-                                <Button
-                                    id={`${idPrefix}-triage-refresh`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="xs"
-                                    className={
-                                        detailWorkspaceStyles.quietButton
-                                    }
-                                    disabled={refreshing}
-                                    onClick={() => void refreshLiveData()}
-                                >
-                                    <RefreshCwIcon
-                                        data-icon="inline-start"
-                                        aria-hidden="true"
-                                        className={cn(
-                                            refreshing && "animate-spin",
-                                        )}
-                                    />
-                                    刷新校验
-                                </Button>
-                            </div>
-
-                            <ul className="space-y-1.5">
-                                {accountError && (
-                                    <li className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-destructive-soft/35 px-3 py-2 text-destructive-soft-foreground">
-                                        <span className="flex items-center gap-1.5 font-medium">
-                                            <AlertTriangleIcon
-                                                aria-hidden="true"
-                                                className="size-3.5 shrink-0 text-destructive"
-                                            />
-                                            {accountError}
-                                        </span>
-                                        {canEdit && (
-                                            <Button
-                                                id={`${idPrefix}-triage-fix-account`}
-                                                type="button"
-                                                variant="outline"
-                                                size="xs"
-                                                onClick={() =>
-                                                    openSectionForEdit(
-                                                        "account",
-                                                    )
-                                                }
-                                            >
-                                                更换收款账户
-                                            </Button>
-                                        )}
-                                    </li>
-                                )}
-
-                                {routingNumberMissing && (
-                                    <li className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-warning-soft/50 px-3 py-2 text-warning-soft-foreground">
-                                        <span className="flex items-center gap-1.5 font-medium">
-                                            <CircleAlertIcon
-                                                aria-hidden="true"
-                                                className="size-3.5 shrink-0"
-                                            />
-                                            当前收款账户尚未填写联行号（在供应商档案补全后切回本页将自动同步）
-                                        </span>
-                                        <Button
-                                            id={`${idPrefix}-triage-open-supplier`}
-                                            type="button"
-                                            variant="outline"
-                                            size="xs"
-                                            onClick={openSupplierProfile}
-                                        >
-                                            去维护供应商账户
-                                            <ArrowUpRightIcon
-                                                data-icon="inline-end"
-                                                aria-hidden="true"
-                                            />
-                                        </Button>
-                                    </li>
-                                )}
-
-                                {hasBalanceBlock && (
-                                    <li className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-destructive-soft/35 px-3 py-2 text-destructive-soft-foreground">
-                                        <span className="flex items-center gap-1.5 font-medium">
-                                            <AlertTriangleIcon
-                                                aria-hidden="true"
-                                                className="size-3.5 shrink-0 text-destructive"
-                                            />
-                                            申请金额超出采购单当前可申请余额（可用{" "}
-                                            <MoneyValue
-                                                value={liveAvailableTotal}
-                                                display="exact"
-                                            />
-                                            ）
-                                        </span>
-                                        <div className="flex flex-wrap items-center gap-1.5">
-                                            {hasAdjustableOverLimit &&
-                                                canEdit && (
-                                                    <Button
-                                                        id={`${idPrefix}-triage-clamp-amount`}
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="xs"
-                                                        onClick={
-                                                            adjustOverLimitLinesToAvailable
-                                                        }
-                                                    >
-                                                        一键调至可用额
-                                                    </Button>
-                                                )}
-                                            {canEdit && (
-                                                <Button
-                                                    id={`${idPrefix}-triage-fix-lines`}
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="xs"
-                                                    onClick={() =>
-                                                        openSectionForEdit(
-                                                            "lines",
-                                                        )
-                                                    }
-                                                >
-                                                    定位调整
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </li>
-                                )}
-
-                                {bankAccountMasterUpdated && (
-                                    <li className="flex items-center gap-1.5 rounded-md bg-success-soft/50 px-3 py-1.5 font-medium text-success-foreground">
-                                        <CheckCircle2Icon
-                                            aria-hidden="true"
-                                            className="size-3.5 shrink-0"
-                                        />
-                                        <span>
-                                            已同步供应商最新收款账户主数据
-                                            {liveRoutingNumber
-                                                ? `（联行号 ${liveRoutingNumber}）`
-                                                : ""}
-                                            ，重提时将自动按最新资料提交。
-                                        </span>
-                                    </li>
-                                )}
-
-                                {triageState === "ready" && (
-                                    <li className="flex items-center gap-1.5 text-muted-foreground">
-                                        <CheckCircle2Icon
-                                            aria-hidden="true"
-                                            className="size-3.5 shrink-0 text-success-foreground"
-                                        />
-                                        <span>
-                                            收款账户与来源采购余额均符合重提条件；如需改动单据内容，可点击对应分区右上角「修改」。
-                                        </span>
-                                    </li>
-                                )}
-                            </ul>
-                        </div>
-                    )}
-                </div>
-            </section>
+            <WorkspaceReworkCommandCard
+                idPrefix={idPrefix}
+                rejection={rejection ?? {}}
+                stance={
+                    triageState === "premise_invalidated"
+                        ? "blocked"
+                        : triageState
+                }
+                headline={
+                    triageState === "premise_invalidated"
+                        ? "当前无法继续重提：来源采购单可申请余额已为 ¥0.00"
+                        : triageState === "ready"
+                          ? "前置校验已通过，核对或按需修改后即可重新提交"
+                          : "提交前需先核对或处理以下事项"
+                }
+                description={
+                    triageState === "premise_invalidated"
+                        ? canAbandon
+                            ? "该采购单可能已通过其他付款或申请结清。若无需继续付款，建议核对下方记录后直接「放弃本次办理」关闭此待办。"
+                            : "该采购单已无可用申请额度；如需改付同供应商其他未付采购单，请点击下方「更换采购单」。"
+                        : triageState === "ready"
+                          ? "收款账户与来源采购余额均符合重提条件；如需改动单据内容，可点击对应分区右上角「修改」。"
+                          : undefined
+                }
+                items={reworkTriageItems}
+                evidence={
+                    triageState === "premise_invalidated"
+                        ? balanceEvidenceItems.length > 0
+                            ? balanceEvidenceItems.slice(0, 4)
+                            : [
+                                  <span
+                                      key="source-balance-summary"
+                                      className="text-muted-foreground"
+                                  >
+                                      来源采购总额{" "}
+                                      <MoneyValue
+                                          value={liveSourceTotal}
+                                          display="exact"
+                                          className="font-medium text-foreground"
+                                      />{" "}
+                                      · 已结算{" "}
+                                      <RateValue
+                                          value={paidRate}
+                                          precision={1}
+                                          className="font-medium text-foreground"
+                                      />
+                                      ，当前无可申请余额。
+                                  </span>,
+                              ]
+                        : undefined
+                }
+                primaryAction={
+                    triageState === "premise_invalidated" &&
+                    canAbandon &&
+                    onRequestAbandon
+                        ? {
+                              id: `${idPrefix}-card-abandon`,
+                              label: "放弃本次办理",
+                              variant: "default",
+                              disabled: busy,
+                              onClick: onRequestAbandon,
+                          }
+                        : undefined
+                }
+                secondaryActions={
+                    triageState === "premise_invalidated" &&
+                    addableCandidates.length > 0 &&
+                    canEdit
+                        ? [
+                              {
+                                  id: `${idPrefix}-card-switch-po`,
+                                  label: `更换其他未付采购单（${addableCandidates.length}）`,
+                                  variant: "outline",
+                                  disabled: busy,
+                                  onClick: () => openSectionForEdit("lines"),
+                              },
+                          ]
+                        : undefined
+                }
+                onRefresh={() => void refreshLiveData()}
+                refreshing={refreshing}
+                refreshLabel={
+                    triageState === "premise_invalidated"
+                        ? "刷新余额"
+                        : "刷新校验"
+                }
+                footnote={
+                    triageState === "premise_invalidated" &&
+                    routingNumberMissing
+                        ? "另注：当前收款账户尚未填写联行号；若后续仍需更换其他采购单发起付款，可先在供应商档案补全联行号。"
+                        : undefined
+                }
+            />
 
             {/* 2. 核心资金指标带（仅保留 2 格高价值金额与余额指标，消除低价值凑数格） */}
             <TooltipProvider>

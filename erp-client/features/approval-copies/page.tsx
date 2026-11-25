@@ -6,22 +6,19 @@ import { RefreshCwIcon, SearchIcon, XIcon } from "lucide-react"
 import {
     BusinessFailureState,
     BusinessStatusBadge,
-} from "@/components/business"
-import {
     ListDataTable,
     ListSelectionBar,
     ListWorkspaceFilterBar,
     ListWorkspacePage,
-    listWorkspaceStyles,
-    type ListWorkspaceFilterChip,
-} from "@/components/business/list-workspace"
-import { OptionCombobox } from "@/components/business/option-combobox"
-import {
+    OptionCombobox,
+    WorkspaceHotkeyCheatSheetButton,
     WorkspaceQueueLayoutToggle,
     WorkspaceSplitCardList,
     WorkspaceSplitQueue,
+    listWorkspaceStyles,
     useWorkspaceQueueLayout,
-} from "@/components/business/workspace-split-queue"
+    type ListWorkspaceFilterChip,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -38,10 +35,7 @@ import {
     queueQuickTypes,
     queueTypeLabel,
 } from "@/features/workspace/lib/queue-presentation"
-import {
-    WorkspaceHotkeyCheatSheetButton,
-    useWorkspaceHotkeys,
-} from "@/features/workspace/hooks/use-workspace-hotkeys"
+import { useWorkspaceHotkeys } from "@/hooks/use-workspace-hotkeys"
 import { getErrorMessage, getErrorPresentation } from "@/lib/api"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatClock } from "@/lib/datetime"

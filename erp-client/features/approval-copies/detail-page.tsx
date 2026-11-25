@@ -15,13 +15,12 @@ import {
     DetailWorkspaceMeta,
     DetailWorkspacePage,
     IconActionButton,
-    detailWorkspaceStyles,
-} from "@/components/business"
-import {
+    UnifiedMaterialViewer,
     UnifiedTaskWorkbench,
     UnifiedTaskWorkbenchRailToggle,
-} from "@/components/business/unified-task-workbench"
-import { UnifiedMaterialViewer } from "@/components/business/unified-material-viewer"
+    detailWorkspaceStyles,
+    resolveWorkspaceDocumentBadge,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
@@ -46,8 +45,7 @@ import {
     displayUnixSeconds,
 } from "@/features/approval-workflow/display"
 import { useAccountProfileQuery } from "@/features/auth/queries"
-import { workspaceDocumentBadge } from "@/features/workspace/api/work-item-meta"
-import { useWorkspaceHotkeys } from "@/features/workspace/hooks/use-workspace-hotkeys"
+import { useWorkspaceHotkeys } from "@/hooks/use-workspace-hotkeys"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { useRouter, useSearchParams } from "@/lib/navigation"
 import {
@@ -324,7 +322,10 @@ function CopyDetailPane({
         ? getApprovalInstanceStatusMeta(primaryPage.instance_status)
         : undefined
     const documentBadge = receipt
-        ? workspaceDocumentBadge("DOCUMENT_APPROVAL", receipt.document_type)
+        ? resolveWorkspaceDocumentBadge(
+              "DOCUMENT_APPROVAL",
+              receipt.document_type,
+          )
         : undefined
     const copiedAt = receipt ? displayUnixSeconds(receipt.copied_at) : null
     const trigger = receipt ? COPY_TRIGGER_LABELS[receipt.trigger] : null

@@ -6,15 +6,16 @@ import { usePathname, useSearchParams } from "next/navigation"
 import { ArrowUpRightIcon, FileTextIcon, PaperclipIcon } from "lucide-react"
 
 import {
+    ApprovalRouteStepper,
     BusinessFailureState,
     DetailWorkspaceMeta,
     DetailWorkspaceSection,
     IconActionButton,
     detailWorkspaceStyles,
     taxAmountToneClass,
+    useWorkspaceTaskPage,
+    type MaterialFileItem,
 } from "@/components/business"
-import type { MaterialFileItem } from "@/components/business/unified-material-viewer"
-import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -27,7 +28,6 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import { fetchApprovalMaterialPreview } from "@/features/approval-workflow/api/materials"
 import { ApprovalActionBar } from "@/features/approval-workflow/components/approval-action-bar"
 import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
-import { ApprovalRouteStepper } from "@/features/approval-workflow/components/approval-route-stepper"
 import { ApprovalSubmittedSummary } from "@/features/approval-workflow/components/approval-submitted-summary"
 import {
     FinancialApprovalRenderer,

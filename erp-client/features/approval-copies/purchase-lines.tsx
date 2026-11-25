@@ -3,7 +3,16 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { AlertTriangleIcon, ChevronRightIcon } from "lucide-react"
 
-import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
+import {
+    APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
+    APPROVAL_TABLE_FILTER_THRESHOLD,
+    ApprovalLineFilterBar,
+    ApprovalLinePagination,
+    MoneyValue,
+    PurchaseProfitValue,
+    QuantityValue,
+    RateValue,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     Table,
@@ -22,13 +31,6 @@ import {
     countUniqueDeliveryPoints,
     formatPurchaseFulfillmentSummary,
 } from "@/features/approval-workflow/purchase-fulfillment"
-import {
-    APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
-    APPROVAL_TABLE_FILTER_THRESHOLD,
-    ApprovalLineFilterBar,
-    ApprovalLinePagination,
-} from "@/features/workspace/components/workspace-approval-table-controls"
-import { PurchaseProfitValue } from "@/features/workspace/components/workspace-purchase-amount-details"
 import { evaluatePurchaseLines } from "@/features/workspace/components/workspace-purchase-comparison-model"
 import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { multiplyFixed, sumFixed } from "@/lib/fixed-decimal"

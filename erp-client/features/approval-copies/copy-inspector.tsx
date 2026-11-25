@@ -5,11 +5,11 @@ import { ArrowUpRightIcon, ChevronDownIcon, RefreshCwIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
+    PaperDocumentViewport,
+    UnifiedMaterialViewer,
     WorkspaceFactGrid,
     WorkspaceFactItem,
 } from "@/components/business"
-import { PaperDocumentViewport } from "@/components/business/paper-document-viewport"
-import { UnifiedMaterialViewer } from "@/components/business/unified-material-viewer"
 import { Button } from "@/components/ui/button"
 import {
     Collapsible,

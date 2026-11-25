@@ -11,16 +11,14 @@ import {
 import { createPortal } from "react-dom"
 import { PanelRightCloseIcon, PaperclipIcon, XIcon } from "lucide-react"
 import {
+    ApprovalRouteStepper,
     DetailWorkspaceMeta,
-    detailWorkspaceStyles,
-} from "@/components/business"
-import {
     UnifiedMaterialViewer,
+    detailWorkspaceStyles,
+    useWorkspaceTaskPage,
     type MaterialFileItem,
-} from "@/components/business/unified-material-viewer"
-import { useWorkspaceTaskPage } from "@/components/business/workspace-task-pane"
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
-import { ApprovalRouteStepper } from "@/features/approval-workflow/components/approval-route-stepper"
 import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
 import { useApprovalHistoryInfiniteQuery } from "@/features/approval-workflow/queries"
 import type { ApprovalCommandView } from "@/features/approval-workflow/types"
