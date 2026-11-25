@@ -4,11 +4,12 @@ import * as React from "react"
 import { SearchIcon, XIcon } from "lucide-react"
 
 import {
+    DetailWorkspaceMeta,
     MoneyValue,
     PaperDocument,
-    PaperDocumentViewport,
     QuantityValue,
 } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -69,6 +70,10 @@ export function PurchaseOrderCreateSourcePickerDialog({
         filteredWorkspace[0] ??
         workspace.find((order) => order.salesOrderId === draftId) ??
         workspace[0]
+    const draftSummary = React.useMemo(
+        () => (draftOrder ? summarizeSourcingOrder(draftOrder) : null),
+        [draftOrder],
+    )
 
     React.useEffect(() => {
         const justOpened = open && !wasOpenRef.current
@@ -81,18 +86,54 @@ export function PurchaseOrderCreateSourcePickerDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                size="xl"
+                size="2xl"
                 scroll="body"
-                className="h-[88dvh]"
+                className="h-[88dvh] bg-card"
                 closeButtonId="procurement-orders-create-source-picker-close"
             >
-                <DialogHeader className="text-left">
-                    <DialogTitle>选择来源销售单</DialogTitle>
+                <DialogHeader className="border-border/60 bg-card py-3 text-left">
+                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                        <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <DialogTitle>选择来源销售单</DialogTitle>
+                                <Badge variant="neutral" className="num">
+                                    共 {workspace.length} 单
+                                </Badge>
+                            </div>
+                            {draftOrder ? (
+                                <DetailWorkspaceMeta
+                                    items={[
+                                        <span key="so" className="num">
+                                            {draftOrder.salesOrderNo}
+                                        </span>,
+                                        draftOrder.customerName,
+                                        draftOrder.contractNumber ?? "无合同",
+                                        draftOrder.salesOwnerName,
+                                    ]}
+                                />
+                            ) : null}
+                        </div>
+                        {draftSummary ? (
+                            <div className="shrink-0 text-left sm:text-right">
+                                <div className="text-xs text-muted-foreground">
+                                    推荐采购含税估算
+                                </div>
+                                <MoneyValue
+                                    display="exact"
+                                    value={draftSummary.minEstimatedGross}
+                                    className="text-value-compact font-semibold tracking-tight text-foreground"
+                                />
+                            </div>
+                        ) : null}
+                    </div>
                 </DialogHeader>
 
-                <DialogBody className="flex flex-col overflow-hidden p-0 md:flex-row">
+                <DialogBody className="flex flex-col overflow-hidden bg-card p-0 md:flex-row">
                     {workspace.length > 1 ? (
-                        <div className="flex w-full shrink-0 flex-col border-b border-border bg-muted/40 md:w-72 md:border-r md:border-b-0">
+                        <aside
+                            aria-label="候选销售单列表"
+                            className="flex max-h-56 w-full shrink-0 flex-col border-b border-border/60 bg-card md:max-h-none md:w-76 md:border-r md:border-b-0"
+                        >
                             {workspace.length >= 4 ? (
                                 <div className="border-b border-border/60 p-3">
                                     <div className="relative">
@@ -104,7 +145,7 @@ export function PurchaseOrderCreateSourcePickerDialog({
                                             id="procurement-orders-create-source-picker-search"
                                             aria-label="搜索待分配销售单"
                                             placeholder="搜索单号、客户或合同"
-                                            className="h-control-sm bg-card pr-7 pl-8 text-xs"
+                                            className="h-control-sm border-transparent bg-surface-sunken pr-7 pl-8 text-xs shadow-none hover:bg-muted/70 focus-visible:border-primary focus-visible:bg-card"
                                             value={query}
                                             onChange={(event) =>
                                                 setQuery(event.target.value)
@@ -126,61 +167,82 @@ export function PurchaseOrderCreateSourcePickerDialog({
                                     </div>
                                 </div>
                             ) : null}
-                            <div className="min-h-0 flex-1 overflow-y-auto">
+                            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                                 <PurchaseOrderCreateSwitchList
                                     label="待分配供给销售单"
                                     activeId={draftOrder?.salesOrderId ?? ""}
-                                    items={filteredWorkspace.map((order) => ({
-                                        id: order.salesOrderId,
-                                        title: order.salesOrderNo,
-                                        description: `${order.customerName} · ${order.lines.length} 行`,
-                                    }))}
+                                    items={filteredWorkspace.map((order) => {
+                                        const orderSummary =
+                                            summarizeSourcingOrder(order)
+                                        return {
+                                            id: order.salesOrderId,
+                                            title: order.salesOrderNo,
+                                            description: order.customerName,
+                                            meta: `${orderSummary.lineCount} 行 · 已覆盖 ${orderSummary.coveredLineCount} 行`,
+                                            amount: orderSummary.minEstimatedGross,
+                                        }
+                                    })}
                                     onSelect={setDraftId}
                                 />
                             </div>
-                        </div>
+                        </aside>
                     ) : null}
 
-                    <PaperDocumentViewport
-                        fitMode="width"
-                        className="bg-transparent"
+                    <div
                         role="region"
                         aria-label="来源销售单预览"
-                        tabIndex={0}
-                        fitKey={draftOrder?.salesOrderId ?? "empty"}
+                        className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-card px-5 py-4"
                     >
                         {draftOrder ? (
                             <SourcingSalesOrderPaper order={draftOrder} />
                         ) : (
-                            <p className="text-xs text-muted-foreground">
+                            <p className="py-10 text-center text-xs text-muted-foreground">
                                 当前没有可预览的销售单。
                             </p>
                         )}
-                    </PaperDocumentViewport>
+                    </div>
                 </DialogBody>
 
-                <DialogFooter>
-                    <Button
-                        id="procurement-orders-create-source-picker-cancel"
-                        type="button"
-                        variant="outline"
-                        onClick={() => onOpenChange(false)}
-                    >
-                        取消
-                    </Button>
-                    <Button
-                        id="procurement-orders-create-source-picker-confirm"
-                        type="button"
-                        data-testid="purchase-create-source-confirm"
-                        disabled={!draftOrder}
-                        onClick={() => {
-                            if (!draftOrder) return
-                            onSelect(draftOrder.salesOrderId)
-                            onOpenChange(false)
-                        }}
-                    >
-                        使用该销售单
-                    </Button>
+                <DialogFooter className="items-center border-border/60 bg-card py-2.5 sm:justify-between">
+                    {draftOrder && draftSummary ? (
+                        <DetailWorkspaceMeta
+                            items={[
+                                <span key="so" className="num">
+                                    已选 {draftOrder.salesOrderNo}
+                                </span>,
+                                <span key="lines" className="num">
+                                    待分配 {draftSummary.lineCount} 行
+                                </span>,
+                            ]}
+                        />
+                    ) : (
+                        <span />
+                    )}
+                    <div className="flex items-center gap-2">
+                        <Button
+                            id="procurement-orders-create-source-picker-cancel"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onOpenChange(false)}
+                        >
+                            取消
+                        </Button>
+                        <Button
+                            id="procurement-orders-create-source-picker-confirm"
+                            type="button"
+                            size="sm"
+                            data-testid="purchase-create-source-confirm"
+                            disabled={!draftOrder}
+                            onClick={() => {
+                                if (!draftOrder) return
+                                onSelect(draftOrder.salesOrderId)
+                                onOpenChange(false)
+                            }}
+                        >
+                            使用该销售单
+                        </Button>
+                    </div>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -204,7 +266,7 @@ function SourcingSalesOrderPaper({ order }: { order: SourcingSalesOrder }) {
     return (
         <PaperDocument<SourcingProductLine>
             frame="borderless"
-            className="min-w-3xl w-3xl max-w-3xl"
+            compact
             title="销售单"
             subtitle="供给分配来源"
             documentNumber={order.salesOrderNo}

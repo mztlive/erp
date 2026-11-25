@@ -49,24 +49,31 @@ export function ApprovalSubmittedMaterials({
     view = "all",
     sourceRevisionId,
     reference,
+    bare = false,
 }: {
     instanceId: string
     enabled: boolean
     view?: "all" | "source-sales" | "attachments"
     sourceRevisionId?: string
     reference?: MaterialReference
+    bare?: boolean
 }) {
     const query = useApprovalMaterials(instanceId, enabled, reference)
     if (query.isPending || (!query.data && query.isFetching))
         return (
-            <div className="flex min-h-64 items-center justify-center gap-2 bg-card p-8 text-xs text-muted-foreground">
+            <div
+                className={cn(
+                    "flex items-center justify-center gap-2 bg-card text-xs text-muted-foreground",
+                    bare ? "min-h-48 py-8" : "min-h-64 p-8",
+                )}
+            >
                 <Spinner />
                 正在读取提交资料…
             </div>
         )
     if (query.isError)
         return (
-            <div className="bg-card p-8">
+            <div className={cn(!bare && "bg-card p-8", bare && "py-2")}>
                 <BusinessFailureState
                     id="approval-submitted-materials-retry"
                     title="提交资料读取失败"
@@ -81,6 +88,7 @@ export function ApprovalSubmittedMaterials({
             instanceId={instanceId}
             view={view}
             sourceRevisionId={sourceRevisionId}
+            bare={bare}
         />
     )
 }
@@ -132,43 +140,63 @@ export function ApprovalSubmittedMaterialsContent({
         displayReadableName(display.counterparty_label) ||
         displayReadableName(source.customer)
     const isSummary = view === "all" && !salesOrder
+    const showCompactHeader = isSummary || !bare || view === "all"
     return (
-        <article className={cn("space-y-6", !bare && "bg-card p-6 sm:p-8")}>
-            <header className="space-y-1.5 border-b border-border/60 pb-5">
-                {isSummary ? (
-                    <>
-                        <p className="text-xs font-medium text-muted-foreground">
-                            审批提交资料 · 提交版本 {version}
-                        </p>
-                        <h2 className="text-section-title font-semibold tracking-tight">
-                            {counterpartyName || "审批提交资料"}
-                        </h2>
-                        {source.extra_sections.length === 0 &&
-                            source.list_summary && (
-                                <p className="text-body-compact">
-                                    {source.list_summary}
-                                </p>
-                            )}
-                    </>
-                ) : (
-                    <>
-                        <h2 className="text-section-title font-semibold tracking-tight">
-                            {view === "source-sales"
-                                ? "销售单预览"
-                                : view === "attachments"
-                                  ? "合同、凭证及附件"
-                                  : "销售单提交预览"}
-                        </h2>
-                        <p className="text-xs text-muted-foreground">
-                            {view === "source-sales"
-                                ? `销售版本 V${sourceSnapshot?.revision_no ?? "—"}`
-                                : `提交版本 ${version}`}
-                        </p>
-                    </>
-                )}
-            </header>
+        <article
+            className={cn(bare ? "space-y-4" : "space-y-6 bg-card p-6 sm:p-8")}
+        >
+            {showCompactHeader ? (
+                <header
+                    className={cn(
+                        "border-b border-border/60",
+                        bare ? "pb-2.5" : "space-y-1.5 pb-5",
+                    )}
+                >
+                    {isSummary ? (
+                        <div className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground">
+                                审批提交资料 · 提交版本 {version}
+                            </p>
+                            <h2 className="text-section-title font-semibold tracking-tight">
+                                {counterpartyName || "审批提交资料"}
+                            </h2>
+                            {source.extra_sections.length === 0 &&
+                                source.list_summary && (
+                                    <p className="text-body-compact">
+                                        {source.list_summary}
+                                    </p>
+                                )}
+                        </div>
+                    ) : bare ? (
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <h2 className="text-body-compact font-semibold text-foreground">
+                                销售单提交预览
+                            </h2>
+                            <p className="num text-xs text-muted-foreground">
+                                提交版本 {version}
+                            </p>
+                        </div>
+                    ) : (
+                        <>
+                            <h2 className="text-section-title font-semibold tracking-tight">
+                                {view === "source-sales"
+                                    ? "销售单预览"
+                                    : view === "attachments"
+                                      ? "合同、凭证及附件"
+                                      : "销售单提交预览"}
+                            </h2>
+                            <p className="text-xs text-muted-foreground">
+                                {view === "source-sales"
+                                    ? `销售版本 V${sourceSnapshot?.revision_no ?? "—"}`
+                                    : `提交版本 ${version}`}
+                            </p>
+                        </>
+                    )}
+                </header>
+            ) : null}
             {view === "attachments" ? null : salesOrder ? (
                 <ApprovalSalesOrderPaper
+                    compact={bare}
                     submission={salesOrder}
                     documentNo={
                         displayBusinessText(
@@ -183,9 +211,16 @@ export function ApprovalSubmittedMaterialsContent({
                     }
                 />
             ) : view === "source-sales" ? (
-                <p role="status" className="text-xs text-muted-foreground">
-                    此次审批的完整来源销售单暂不可读取，请刷新后重试；仍不可用时请联系管理员核对。
-                </p>
+                <div className="space-y-1 py-4">
+                    {bare ? (
+                        <p className="num text-xs text-muted-foreground">
+                            销售版本 V{sourceSnapshot?.revision_no ?? "—"}
+                        </p>
+                    ) : null}
+                    <p role="status" className="text-xs text-muted-foreground">
+                        此次审批的完整来源销售单暂不可读取，请刷新后重试；仍不可用时请联系管理员核对。
+                    </p>
+                </div>
             ) : (
                 <ApprovalSubmittedSummary
                     source={source}
@@ -203,7 +238,7 @@ export function ApprovalSubmittedMaterialsContent({
                 />
             )}
             {view === "all" && (display.source_sales ?? []).length > 0 && (
-                <section className="space-y-4 border-t pt-5">
+                <section className="space-y-3 border-t border-border/60 pt-4">
                     <MaterialSectionHeading title="关联销售单" />
                     {display.source_sales
                         ?.filter(
@@ -293,11 +328,12 @@ export function ApprovalSubmittedMaterialsContent({
                             source.revision_id !==
                             currentBasis.source.revision_id,
                     )) && (
-                    <section className="space-y-4 border-t pt-5">
+                    <section className="space-y-3 border-t border-border/60 pt-4">
                         <MaterialSectionHeading
                             title={`当前销售依据 · V${currentBasis.source.revision_no}`}
                         />
                         <ApprovalSalesOrderPaper
+                            compact={bare}
                             submission={currentBasis.sales_order.revision}
                             documentNo={currentBasis.sales_order.document_no}
                             submitterName={null}
@@ -320,7 +356,13 @@ export function ApprovalSubmittedMaterialsContent({
                 </p>
             )}
             {(attachments.length > 0 || !currentBasis || view !== "all") && (
-                <section className="space-y-3 border-t pt-5">
+                <section
+                    className={cn(
+                        "space-y-2.5",
+                        !(bare && view === "attachments") &&
+                            "border-t border-border/60 pt-4",
+                    )}
+                >
                     <MaterialSectionHeading
                         title={
                             display.source_sales?.length

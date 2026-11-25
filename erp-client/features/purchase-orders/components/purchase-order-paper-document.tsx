@@ -23,8 +23,10 @@ type PurchaseOrderPaperLine =
  */
 export function PurchaseOrderPaperDocument({
     order,
+    compact = false,
 }: {
     order: PurchaseOrderCenterView
+    compact?: boolean
 }) {
     const { identity, header, currentContent, progress } = order
     const costMasked = currentContent.costMasked
@@ -36,6 +38,7 @@ export function PurchaseOrderPaperDocument({
     return (
         <PaperDocument<PurchaseOrderPaperLine>
             frame="borderless"
+            compact={compact}
             title="采购单"
             subtitle={PURCHASE_TYPE_LABEL[header.purchaseType]}
             documentNumber={documentNumber}
@@ -262,20 +265,31 @@ export function PurchaseOrderPaperDocument({
                     : "系统业务数据的打印件；金额与状态以系统记录为准。"
             }
             signature={
-                <div className="space-y-8">
-                    <div>
-                        <div className="text-muted-foreground">采购负责人</div>
-                        <div className="mt-6 border-b border-dashed border-border pb-1">
-                            {header.ownerName}
+                compact ? (
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                        <span>采购负责人：{header.ownerName}</span>
+                        <span className="num">
+                            提交日期：{header.submittedAt?.slice(0, 10) ?? "—"}
+                        </span>
+                    </div>
+                ) : (
+                    <div className="space-y-8">
+                        <div>
+                            <div className="text-muted-foreground">
+                                采购负责人
+                            </div>
+                            <div className="mt-6 border-b border-dashed border-border pb-1">
+                                {header.ownerName}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-muted-foreground">日期</div>
+                            <div className="num mt-6 border-b border-dashed border-border pb-1">
+                                {header.submittedAt?.slice(0, 10) ?? "—"}
+                            </div>
                         </div>
                     </div>
-                    <div>
-                        <div className="text-muted-foreground">日期</div>
-                        <div className="num mt-6 border-b border-dashed border-border pb-1">
-                            {header.submittedAt?.slice(0, 10) ?? "—"}
-                        </div>
-                    </div>
-                </div>
+                )
             }
             appendix={
                 <PurchaseDeliveryPlan

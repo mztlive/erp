@@ -1,9 +1,18 @@
 "use client"
 
-import { SalesDeliveryPlan } from "./sales-delivery-plan"
-
-import { MoneyValue, PaperDocument, QuantityValue } from "@/components/business"
+import {
+    DeliveryAllocationPrintAppendix,
+    MoneyValue,
+    PaperDocument,
+    QuantityValue,
+} from "@/components/business"
 import { welfareScenarioLabel } from "@/lib/business-options"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import {
+    buildDeliveryAllocationSummary,
+    formatLineDeliveryHint,
+    type DeliveryAllocationLineInput,
+} from "@/lib/delivery-allocation-summary"
 import { NATURE_LABEL, ORIGIN_LABEL } from "@/features/sales-orders/lib/labels"
 import type {
     SalesOrderLineItem,
@@ -12,14 +21,73 @@ import type {
 
 export function SalesOrderPaperDocument({
     order,
+    compact = false,
+    onInspectAddresses,
 }: {
     order: SalesOrderListItem
+    compact?: boolean
+    onInspectAddresses?: (lineId?: string) => void
 }) {
     const isCard = order.nature === "card_voucher"
+    const deliveryLines: DeliveryAllocationLineInput[] = order.lineItems.map(
+        (row, index) => ({
+            id: row.id,
+            lineNo: index + 1,
+            itemName: row.name,
+            specification: row.sku,
+            unit: row.unitName ?? "",
+            quantity: row.quantity,
+            allocations: row.deliveryAllocations,
+        }),
+    )
+    const deliverySummary = buildDeliveryAllocationSummary(deliveryLines)
+    const deliveryItemById = new Map(
+        deliverySummary.itemGroups.map((group) => [group.lineId, group]),
+    )
+
+    const renderLineName = (row: SalesOrderLineItem) => {
+        const group = deliveryItemById.get(row.id)
+        const hint = formatLineDeliveryHint(group, deliverySummary)
+        return (
+            <div>
+                <div className="font-medium text-foreground">{row.name}</div>
+                {row.sku ? (
+                    <div className="num mt-0.5 text-xs text-muted-foreground">
+                        {row.sku}
+                    </div>
+                ) : null}
+                {hint ||
+                (onInspectAddresses &&
+                    group &&
+                    group.uniqueAddressCount > 0) ? (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                        {hint ? <span>收货：{hint}</span> : null}
+                        {onInspectAddresses &&
+                        group &&
+                        group.uniqueAddressCount > 0 ? (
+                            <button
+                                id={`sales-order-paper-line-${toAutomationIdSegment(row.id)}-addresses`}
+                                type="button"
+                                className={
+                                    hint
+                                        ? "ml-1.5 inline cursor-pointer text-xs font-medium text-primary hover:underline"
+                                        : "inline cursor-pointer text-xs font-medium text-primary hover:underline"
+                                }
+                                onClick={() => onInspectAddresses(row.id)}
+                            >
+                                查看明细
+                            </button>
+                        ) : null}
+                    </p>
+                ) : null}
+            </div>
+        )
+    }
 
     return (
         <PaperDocument<SalesOrderLineItem>
             frame="borderless"
+            compact={compact}
             issuer={order.sellerEntity}
             title="销售单"
             subtitle={NATURE_LABEL[order.nature]}
@@ -99,19 +167,7 @@ export function SalesOrderPaperDocument({
                           {
                               id: "name",
                               header: "卡券类目",
-                              cell: (row) => (
-                                  <div>
-                                      <div>{row.name}</div>
-                                      <SalesDeliveryPlan
-                                          rows={row.deliveryAllocations}
-                                      />
-                                      {row.sku ? (
-                                          <div className="num mt-1 text-xs text-muted-foreground">
-                                              {row.sku}
-                                          </div>
-                                      ) : null}
-                                  </div>
-                              ),
+                              cell: renderLineName,
                           },
                           {
                               id: "face",
@@ -172,19 +228,7 @@ export function SalesOrderPaperDocument({
                           {
                               id: "name",
                               header: "项目",
-                              cell: (row) => (
-                                  <div>
-                                      <div>{row.name}</div>
-                                      <SalesDeliveryPlan
-                                          rows={row.deliveryAllocations}
-                                      />
-                                      {row.sku ? (
-                                          <div className="num mt-1 text-xs text-muted-foreground">
-                                              {row.sku}
-                                          </div>
-                                      ) : null}
-                                  </div>
-                              ),
+                              cell: renderLineName,
                           },
                           {
                               id: "due",
@@ -264,7 +308,7 @@ export function SalesOrderPaperDocument({
                             value={order.receivedAmount}
                         />
                     ),
-                    description: `回款进度：${order.collection.label}`,
+                    description: order.collection.label,
                 },
                 {
                     id: "invoiced",
@@ -275,7 +319,7 @@ export function SalesOrderPaperDocument({
                             value={order.invoicedAmount}
                         />
                     ),
-                    description: `开票进度：${order.invoicing.label}`,
+                    description: order.invoicing.label,
                 },
             ]}
             remarks={
@@ -285,27 +329,49 @@ export function SalesOrderPaperDocument({
                     : undefined)
             }
             signature={
-                <div className="space-y-8 text-body-compact">
-                    <div>
-                        <div className="text-muted-foreground">业务负责人</div>
-                        <div className="mt-6 border-b border-dashed border-border pb-1">
-                            {order.ownerName}
+                compact ? (
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                        <span>业务负责人：{order.ownerName}</span>
+                        <span className="num">
+                            提交日期：{order.submittedAt.slice(0, 10)}
+                        </span>
+                    </div>
+                ) : (
+                    <div className="space-y-8 text-body-compact">
+                        <div>
+                            <div className="text-muted-foreground">
+                                业务负责人
+                            </div>
+                            <div className="mt-6 border-b border-dashed border-border pb-1">
+                                {order.ownerName}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-muted-foreground">日期</div>
+                            <div className="num mt-6 border-b border-dashed border-border pb-1">
+                                {order.submittedAt.slice(0, 10)}
+                            </div>
                         </div>
                     </div>
-                    <div>
-                        <div className="text-muted-foreground">日期</div>
-                        <div className="num mt-6 border-b border-dashed border-border pb-1">
-                            {order.submittedAt.slice(0, 10)}
-                        </div>
-                    </div>
-                </div>
+                )
             }
             seal={
-                <div className="flex h-28 w-28 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/40 text-center text-xs text-muted-foreground">
+                <div
+                    className={
+                        compact
+                            ? "hidden h-24 w-24 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/40 text-center text-xs text-muted-foreground print:flex"
+                            : "flex h-28 w-28 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/40 text-center text-xs text-muted-foreground"
+                    }
+                >
                     公司签章
                     <br />
                     签章位
                 </div>
+            }
+            appendix={
+                !onInspectAddresses && deliverySummary.totalRows > 0 ? (
+                    <DeliveryAllocationPrintAppendix lines={deliveryLines} />
+                ) : undefined
             }
         />
     )

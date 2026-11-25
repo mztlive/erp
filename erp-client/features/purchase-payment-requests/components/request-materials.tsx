@@ -3,6 +3,7 @@ import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 
 import { useMemo, useState, type ReactNode } from "react"
 import {
+    DetailWorkspaceMeta,
     DetailWorkspaceSection,
     MoneyValue,
     PaperDocument,
@@ -14,12 +15,14 @@ import {
     UnifiedMaterialViewer,
     type MaterialFileItem,
 } from "@/components/business/unified-material-viewer"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogBody,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -268,17 +271,88 @@ export function RequestMaterials({
                     closeButtonId={`${idPrefix}-paper-close`}
                     className="bg-card"
                 >
-                    <DialogHeader>
-                        <DialogTitle className="min-w-0 truncate">
-                            {preview?.kind === "purchase"
-                                ? "采购单完整预览"
-                                : "销售单完整预览"}
-                        </DialogTitle>
-                        <DialogDescription className="sr-only">
-                            付款申请提交时的完整单据，按 Esc 或点击空白处关闭。
-                        </DialogDescription>
+                    <DialogHeader className="border-border/60 bg-card py-3 text-left print:hidden">
+                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                            <div className="min-w-0 flex-1 space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <DialogTitle className="min-w-0 truncate">
+                                        {preview?.kind === "purchase"
+                                            ? "采购单完整预览"
+                                            : "销售单完整预览"}
+                                    </DialogTitle>
+                                    {preview ? (
+                                        <Badge
+                                            variant="neutral"
+                                            className="num"
+                                        >
+                                            V
+                                            {preview.kind === "purchase"
+                                                ? preview.version
+                                                : preview.snapshot.revision_no}
+                                        </Badge>
+                                    ) : null}
+                                </div>
+                                <DialogDescription className="sr-only">
+                                    付款申请提交时的完整单据，按 Esc
+                                    或点击空白处关闭。
+                                </DialogDescription>
+                                {preview ? (
+                                    <DetailWorkspaceMeta
+                                        items={
+                                            preview.kind === "purchase"
+                                                ? [
+                                                      <span
+                                                          key="no"
+                                                          className="num"
+                                                      >
+                                                          {preview.number}
+                                                      </span>,
+                                                      preview.snapshot
+                                                          .supplier_name,
+                                                      preview.snapshot
+                                                          .payment_term_name,
+                                                  ]
+                                                : [
+                                                      <span
+                                                          key="no"
+                                                          className="num"
+                                                      >
+                                                          {
+                                                              preview.snapshot
+                                                                  .sales_order_no
+                                                          }
+                                                      </span>,
+                                                      preview.snapshot
+                                                          .customer_name,
+                                                      preview.snapshot
+                                                          .contract_no ??
+                                                          "无合同",
+                                                  ]
+                                        }
+                                    />
+                                ) : null}
+                            </div>
+                            {preview ? (
+                                <div className="shrink-0 text-left sm:text-right">
+                                    <div className="text-xs text-muted-foreground">
+                                        {preview.kind === "purchase"
+                                            ? "采购含税总额"
+                                            : "销售含税总额"}
+                                    </div>
+                                    <MoneyValue
+                                        display="exact"
+                                        value={
+                                            preview.kind === "purchase"
+                                                ? preview.snapshot.total_amount
+                                                : preview.snapshot.totals.gross
+                                        }
+                                        className="text-value-compact font-semibold tracking-tight text-foreground"
+                                    />
+                                </div>
+                            ) : null}
+                        </div>
                     </DialogHeader>
-                    <DialogBody className="bg-card p-6 sm:p-8">
+                    <DialogBody className="bg-card px-5 py-4">
                         {preview?.kind === "purchase" ? (
                             <PurchasePaper preview={preview} />
                         ) : preview ? (
@@ -288,6 +362,20 @@ export function RequestMaterials({
                             />
                         ) : null}
                     </DialogBody>
+                    <DialogFooter className="items-center border-border/60 bg-card py-2.5 sm:justify-between print:hidden">
+                        <p className="text-xs text-muted-foreground">
+                            付款申请提交时冻结的单据版本
+                        </p>
+                        <Button
+                            id={`${idPrefix}-paper-footer-close`}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPreview(null)}
+                        >
+                            关闭
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </>
@@ -326,6 +414,7 @@ function PurchasePaper({
     return (
         <PaperDocument
             frame="borderless"
+            compact
             title="采购单"
             subtitle="采购成本"
             documentNumber={preview.number}
@@ -348,6 +437,12 @@ function PurchasePaper({
                     label: "付款条件",
                     value: snapshot.payment_term_name,
                 },
+                {
+                    id: "lines",
+                    label: "明细行数",
+                    value: `${snapshot.items.length} 项`,
+                    numeric: true,
+                },
             ]}
             rows={snapshot.items}
             getRowId={(row) => row.id}
@@ -357,9 +452,11 @@ function PurchasePaper({
                     header: "采购项目 / 规格",
                     cell: (row) => (
                         <div>
-                            {row.item_name}
+                            <div className="font-medium text-foreground">
+                                {row.item_name}
+                            </div>
                             {row.spec && (
-                                <p className="text-xs text-muted-foreground">
+                                <p className="mt-0.5 text-xs text-muted-foreground">
                                     {row.spec}
                                 </p>
                             )}
@@ -370,6 +467,7 @@ function PurchasePaper({
                     id: "quantity",
                     header: "数量",
                     align: "end",
+                    numeric: true,
                     cell: (row) => (
                         <QuantityValue
                             value={row.quantity}
@@ -381,6 +479,7 @@ function PurchasePaper({
                     id: "cost",
                     header: "采购含税单价",
                     align: "end",
+                    numeric: true,
                     cell: (row) => (
                         <MoneyValue display="exact" value={row.unit_price} />
                     ),
@@ -389,14 +488,22 @@ function PurchasePaper({
                     id: "amount",
                     header: "采购含税金额",
                     align: "end",
-                    cell: (row) => <MoneyValue value={row.amount} />,
+                    numeric: true,
+                    cell: (row) => (
+                        <MoneyValue display="exact" value={row.amount} />
+                    ),
                 },
             ]}
             totals={[
                 {
                     id: "gross",
                     label: "采购含税总额",
-                    value: <MoneyValue value={snapshot.total_amount} />,
+                    value: (
+                        <MoneyValue
+                            display="exact"
+                            value={snapshot.total_amount}
+                        />
+                    ),
                     emphasized: true,
                 },
             ]}
@@ -409,6 +516,7 @@ function SalesPaper({ sales, payer }: { sales: SalesSnapshot; payer: string }) {
     return (
         <PaperDocument
             frame="borderless"
+            compact
             title="销售单"
             subtitle="客户成交金额"
             documentNumber={sales.sales_order_no}
@@ -422,20 +530,34 @@ function SalesPaper({ sales, payer }: { sales: SalesSnapshot; payer: string }) {
                     id: "contract",
                     label: "合同",
                     value: sales.contract_no ?? "—",
+                    numeric: true,
+                },
+                {
+                    id: "lines",
+                    label: "明细行数",
+                    value: `${sales.lines.length} 项`,
+                    numeric: true,
                 },
             ]}
             rows={sales.lines}
             getRowId={(row) => row.sales_order_revision_line_id}
             columns={[
-                { id: "line", header: "序号", cell: (row) => row.line_no },
+                {
+                    id: "line",
+                    header: "序号",
+                    numeric: true,
+                    cell: (row) => row.line_no,
+                },
                 {
                     id: "name",
                     header: "销售项目 / 规格",
                     cell: (row) => (
                         <div>
-                            {row.item_name}
+                            <div className="font-medium text-foreground">
+                                {row.item_name}
+                            </div>
                             {row.specification && (
-                                <p className="text-xs text-muted-foreground">
+                                <p className="mt-0.5 text-xs text-muted-foreground">
                                     {row.specification}
                                 </p>
                             )}
@@ -446,6 +568,7 @@ function SalesPaper({ sales, payer }: { sales: SalesSnapshot; payer: string }) {
                     id: "quantity",
                     header: "数量",
                     align: "end",
+                    numeric: true,
                     cell: (row) => (
                         <QuantityValue
                             value={row.quantity}
@@ -457,6 +580,7 @@ function SalesPaper({ sales, payer }: { sales: SalesSnapshot; payer: string }) {
                     id: "price",
                     header: "销售含税单价",
                     align: "end",
+                    numeric: true,
                     cell: (row) => (
                         <MoneyValue
                             display="exact"
@@ -468,25 +592,37 @@ function SalesPaper({ sales, payer }: { sales: SalesSnapshot; payer: string }) {
                     id: "gross",
                     header: "销售含税金额",
                     align: "end",
-                    cell: (row) => <MoneyValue value={row.gross_amount} />,
+                    numeric: true,
+                    cell: (row) => (
+                        <MoneyValue display="exact" value={row.gross_amount} />
+                    ),
                 },
             ]}
             totals={[
                 {
-                    id: "gross",
-                    label: "销售含税总额",
-                    value: <MoneyValue value={sales.totals.gross} />,
-                    emphasized: true,
-                },
-                {
                     id: "net",
                     label: "不含税金额",
-                    value: <MoneyValue value={sales.totals.net} />,
+                    value: (
+                        <MoneyValue display="exact" value={sales.totals.net} />
+                    ),
                 },
                 {
                     id: "tax",
                     label: "税额",
-                    value: <MoneyValue value={sales.totals.tax} />,
+                    value: (
+                        <MoneyValue display="exact" value={sales.totals.tax} />
+                    ),
+                },
+                {
+                    id: "gross",
+                    label: "销售含税总额",
+                    value: (
+                        <MoneyValue
+                            display="exact"
+                            value={sales.totals.gross}
+                        />
+                    ),
+                    emphasized: true,
                 },
             ]}
         />

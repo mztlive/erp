@@ -1,5 +1,7 @@
 "use client"
 
+import { GitBranchIcon } from "lucide-react"
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 import { useLeaderPreview } from "../hooks/use-leader-preview"
@@ -16,13 +18,36 @@ import type { ApprovalDefinitionBinding } from "../types"
 export function SubmissionRouteConfirmation({
     definition,
     fallbackDescription = "当前单据尚未展示审批路线，请刷新后再确认提交。",
+    compact = false,
 }: {
     definition?: ApprovalDefinitionBinding
     documentType?: string
     fallbackDescription?: string
+    compact?: boolean
 }) {
     const preview = useLeaderPreview(definition?.nodes ?? [])
     if (!definition || definition.nodes.length === 0) {
+        if (compact) {
+            return (
+                <div className="flex items-start gap-2 text-xs">
+                    <GitBranchIcon
+                        aria-hidden="true"
+                        className="mt-0.5 size-3.5 shrink-0 text-primary"
+                    />
+                    <div className="min-w-0 space-y-0.5">
+                        <span className="font-medium text-foreground">
+                            提交后将启动审批
+                        </span>
+                        <span className="mx-1.5 text-muted-foreground/50">
+                            ·
+                        </span>
+                        <span className="text-muted-foreground">
+                            {fallbackDescription}
+                        </span>
+                    </div>
+                </div>
+            )
+        }
         return (
             <Alert>
                 <AlertTitle>提交后将启动审批</AlertTitle>
@@ -32,6 +57,44 @@ export function SubmissionRouteConfirmation({
     }
 
     const route = displayRoute(preview.nodes)
+
+    if (compact) {
+        return (
+            <div className="flex items-start gap-2 text-xs">
+                <GitBranchIcon
+                    aria-hidden="true"
+                    className="mt-0.5 size-3.5 shrink-0 text-primary"
+                />
+                <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span className="font-medium text-foreground">
+                            审批路线
+                        </span>
+                        <span className="text-foreground/90">{route}</span>
+                        {preview.loading ? (
+                            <span className="text-muted-foreground">
+                                正在确认组织负责人…
+                            </span>
+                        ) : null}
+                        {preview.error ? (
+                            <span className="text-destructive">
+                                {getErrorMessage(
+                                    preview.error,
+                                    "负责人查询失败，请重试",
+                                )}
+                            </span>
+                        ) : null}
+                    </div>
+                    <p className="text-muted-foreground">
+                        {definition.nodes.some((node) => node.assigneeSource)
+                            ? "负责人以提交时组织配置为准；"
+                            : null}
+                        任一节点驳回将退回提交人处理，填写说明后可重新提交。
+                    </p>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <Alert>

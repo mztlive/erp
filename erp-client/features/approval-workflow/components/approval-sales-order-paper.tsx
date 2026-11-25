@@ -40,12 +40,14 @@ export function ApprovalSalesOrderPaper({
     documentNo,
     submitterName,
     hideDetailedDeliveryAddresses = false,
+    compact = false,
 }: {
     submission: ApprovalSalesSubmission | ApprovalSalesRevision
     documentNo: string
     submitterName: string | null
     /** 采购审批场景隐藏收货人/电话/街道明细，仅保留收货点数量提示。 */
     hideDetailedDeliveryAddresses?: boolean
+    compact?: boolean
 }) {
     const isSubmission = "submission_no" in submission
     const isCard = isSubmission
@@ -76,6 +78,7 @@ export function ApprovalSalesOrderPaper({
     return (
         <PaperDocument<ApprovalSalesSubmission["lines"][number]>
             frame="borderless"
+            compact={compact}
             title="销售单"
             documentNumber={documentNo}
             subtitle={isCard ? "卡券" : "实物及服务"}
@@ -189,7 +192,7 @@ export function ApprovalSalesOrderPaper({
                     header: "商品 / 规格",
                     cell: (row) => (
                         <div>
-                            <div>
+                            <div className="font-medium text-foreground">
                                 {displayReadableName(
                                     row.item_name_snapshot,
                                     row.sku_id,
@@ -199,7 +202,7 @@ export function ApprovalSalesOrderPaper({
                                 row.spec_snapshot,
                                 row.sku_id,
                             ) && (
-                                <div className="mt-1 text-xs text-muted-foreground">
+                                <div className="mt-0.5 text-xs text-muted-foreground">
                                     {displayBusinessText(
                                         row.spec_snapshot,
                                         row.sku_id,
@@ -207,7 +210,7 @@ export function ApprovalSalesOrderPaper({
                                 </div>
                             )}
                             {row.welfare_scenario && (
-                                <div className="mt-1 text-xs text-muted-foreground">
+                                <div className="mt-0.5 text-xs text-muted-foreground">
                                     {welfareScenarioLabel(row.welfare_scenario)}
                                 </div>
                             )}
@@ -218,7 +221,7 @@ export function ApprovalSalesOrderPaper({
                                         1 &&
                                         group &&
                                         group.uniqueAddressCount > 0 ? (
-                                        <p className="num mt-1 text-xs text-muted-foreground">
+                                        <p className="num mt-0.5 text-xs text-muted-foreground">
                                             收货：{group.uniqueAddressCount}{" "}
                                             处收货点
                                         </p>
@@ -229,7 +232,7 @@ export function ApprovalSalesOrderPaper({
                                     deliverySummary,
                                 )
                                 return hint ? (
-                                    <p className="mt-1 text-xs text-muted-foreground">
+                                    <p className="mt-0.5 text-xs text-muted-foreground">
                                         收货：{hint}
                                     </p>
                                 ) : null
@@ -241,6 +244,7 @@ export function ApprovalSalesOrderPaper({
                     id: "quantity",
                     header: "数量",
                     align: "end",
+                    numeric: true,
                     cell: (row) => (
                         <QuantityValue
                             value={row.quantity ?? String(row.card_count ?? 0)}
@@ -252,6 +256,7 @@ export function ApprovalSalesOrderPaper({
                     id: "price",
                     header: "含税单价",
                     align: "end",
+                    numeric: true,
                     cell: (row) => (
                         <MoneyValue
                             display="exact"
@@ -265,6 +270,7 @@ export function ApprovalSalesOrderPaper({
                               id: "face",
                               header: "面额",
                               align: "end" as const,
+                              numeric: true,
                               cell: (
                                   row: ApprovalSalesSubmission["lines"][number],
                               ) =>
@@ -299,6 +305,7 @@ export function ApprovalSalesOrderPaper({
                                   row: ApprovalSalesSubmission["lines"][number],
                               ) => (
                                   <SalesLinePriceComparison
+                                      compact
                                       prices={row}
                                       showSalesPrice={false}
                                       unit={approvalSalesUnit(
@@ -312,6 +319,7 @@ export function ApprovalSalesOrderPaper({
                           {
                               id: "due",
                               header: "交付日期",
+                              numeric: true,
                               cell: (
                                   row: ApprovalSalesSubmission["lines"][number],
                               ) => dateLabel(row.fulfillment_due_at),
@@ -321,6 +329,7 @@ export function ApprovalSalesOrderPaper({
                     id: "rate",
                     header: "税率",
                     align: "end",
+                    numeric: true,
                     cell: (row) => (
                         <RateValue
                             value={multiplyFixed(row.sales_tax_rate, "100", {
@@ -336,6 +345,7 @@ export function ApprovalSalesOrderPaper({
                     id: "tax",
                     header: "税额",
                     align: "end",
+                    numeric: true,
                     cell: (row) => (
                         <MoneyValue display="exact" value={row.tax_amount} />
                     ),
@@ -344,13 +354,14 @@ export function ApprovalSalesOrderPaper({
                     id: "gross",
                     header: "含税金额",
                     align: "end",
+                    numeric: true,
                     cell: (row) => (
                         <div>
                             <MoneyValue
                                 display="exact"
                                 value={row.gross_amount}
                             />
-                            <p className="mt-1 text-xs text-muted-foreground">
+                            <p className="mt-0.5 text-xs text-muted-foreground">
                                 不含税{" "}
                                 <MoneyValue
                                     display="exact"

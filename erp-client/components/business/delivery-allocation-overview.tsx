@@ -861,7 +861,7 @@ export function DeliveryAllocationPrintAppendix({
         return (
             <section
                 aria-label="收货地址"
-                className="space-y-1.5 border-t border-border/60 pt-5 text-body-compact"
+                className="space-y-1 border-t border-border/60 pt-4 text-body-compact"
             >
                 <h3 className="font-semibold text-foreground">
                     收货地址（整单统一收货）
@@ -886,7 +886,7 @@ export function DeliveryAllocationPrintAppendix({
     return (
         <section
             aria-label="收货地址明细"
-            className="space-y-2.5 border-t border-border/60 pt-5"
+            className="space-y-2 border-t border-border/60 pt-4"
         >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h3 className="text-body-compact font-semibold text-foreground">
@@ -899,7 +899,7 @@ export function DeliveryAllocationPrintAppendix({
             </div>
             <div className={detailWorkspaceStyles.inlineTableWrapper}>
                 <Table
-                    data-density="comfortable"
+                    data-density="compact"
                     aria-label="纸质单据收货地址明细"
                     className="w-full [&_:is(th,td):first-child]:ps-0"
                 >
@@ -916,10 +916,10 @@ export function DeliveryAllocationPrintAppendix({
                     <TableBody>
                         {summary.addressGroups.map((group, index) => (
                             <TableRow key={group.key}>
-                                <TableCell className="num py-2.5 align-top text-muted-foreground">
+                                <TableCell className="num py-2 align-top text-muted-foreground">
                                     {index + 1}
                                 </TableCell>
-                                <TableCell className="py-2.5 align-top whitespace-normal wrap-anywhere">
+                                <TableCell className="py-2 align-top whitespace-normal wrap-anywhere">
                                     <p className="font-medium">
                                         {group.recipient}
                                     </p>
@@ -927,14 +927,14 @@ export function DeliveryAllocationPrintAppendix({
                                         {group.phone}
                                     </p>
                                 </TableCell>
-                                <TableCell className="py-2.5 align-top whitespace-normal wrap-anywhere text-xs">
+                                <TableCell className="py-2 align-top whitespace-normal wrap-anywhere text-xs">
                                     <AddressText
                                         regionCode={group.regionCode}
                                         regionName={group.regionName}
                                         address={group.address}
                                     />
                                 </TableCell>
-                                <TableCell className="py-2.5 align-top whitespace-normal">
+                                <TableCell className="py-2 align-top whitespace-normal">
                                     <ul className="space-y-0.5 text-xs">
                                         {group.items.map((item) => (
                                             <li

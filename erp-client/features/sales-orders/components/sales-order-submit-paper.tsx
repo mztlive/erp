@@ -2,10 +2,19 @@
 
 import type { Ref } from "react"
 
-import { SalesOrderDeliverySummary } from "./sales-order-delivery-summary"
-
-import { MoneyValue, PaperDocument, QuantityValue } from "@/components/business"
+import {
+    DeliveryAllocationPrintAppendix,
+    MoneyValue,
+    PaperDocument,
+    QuantityValue,
+} from "@/components/business"
 import { paymentTermLabel, welfareScenarioLabel } from "@/lib/business-options"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import {
+    buildDeliveryAllocationSummary,
+    formatLineDeliveryHint,
+    type DeliveryAllocationLineInput,
+} from "@/lib/delivery-allocation-summary"
 import { NATURE_LABEL } from "@/features/sales-orders/lib/labels"
 import { deriveVoucherGiftPreview } from "@/features/sales-orders/lib/sales-order-create-model"
 import type {
@@ -23,42 +32,78 @@ function giftRateLabel(line: SalesOrderSubmitLineSnapshot): string {
     return preview ? `${preview.giftRatePercent}%` : "—"
 }
 
-function submitLineName(row: SalesOrderSubmitLineSnapshot) {
-    const name = row.name || "—"
-    return (
-        <div>
-            <div>{name}</div>
-            <SalesOrderDeliverySummary
-                variant="submit"
-                line={{
-                    id: row.rowKey,
-                    name,
-                    unitName: row.unit,
-                    deliveryAllocations: row.deliveryAllocations,
-                }}
-            />
-        </div>
-    )
-}
-
 /**
  * 提交确认用的销售单纸质稿，数据来自当前建单表单，不是已落库单据。
  */
 export function SalesOrderSubmitPaper({
     snapshot,
     paperRef,
+    compact = true,
+    onInspectAddresses,
 }: {
     snapshot: SalesOrderSubmitSnapshot
     paperRef?: Ref<HTMLElement>
+    compact?: boolean
+    onInspectAddresses?: (lineId?: string) => void
 }) {
     const isCard = snapshot.nature === "card_voucher"
     const paymentLabel =
         paymentTermLabel(snapshot.paymentTerms) || snapshot.paymentTerms || "—"
+    const deliveryLines: DeliveryAllocationLineInput[] = snapshot.lineItems.map(
+        (row, index) => ({
+            id: row.rowKey,
+            lineNo: index + 1,
+            itemName: row.name || "—",
+            unit: row.unit,
+            quantity: row.quantity,
+            allocations: row.deliveryAllocations,
+        }),
+    )
+    const deliverySummary = buildDeliveryAllocationSummary(deliveryLines)
+    const deliveryItemById = new Map(
+        deliverySummary.itemGroups.map((group) => [group.lineId, group]),
+    )
+
+    const submitLineName = (row: SalesOrderSubmitLineSnapshot) => {
+        const name = row.name || "—"
+        const group = deliveryItemById.get(row.rowKey)
+        const hint = formatLineDeliveryHint(group, deliverySummary)
+        return (
+            <div>
+                <div className="font-medium text-foreground">{name}</div>
+                {hint ||
+                (onInspectAddresses &&
+                    group &&
+                    group.uniqueAddressCount > 0) ? (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                        {hint ? <span>收货：{hint}</span> : null}
+                        {onInspectAddresses &&
+                        group &&
+                        group.uniqueAddressCount > 0 ? (
+                            <button
+                                id={`sales-order-submit-line-${toAutomationIdSegment(row.rowKey)}-addresses`}
+                                type="button"
+                                className={
+                                    hint
+                                        ? "ml-1.5 inline cursor-pointer text-xs font-medium text-primary hover:underline"
+                                        : "inline cursor-pointer text-xs font-medium text-primary hover:underline"
+                                }
+                                onClick={() => onInspectAddresses(row.rowKey)}
+                            >
+                                查看地址
+                            </button>
+                        ) : null}
+                    </p>
+                ) : null}
+            </div>
+        )
+    }
 
     return (
         <PaperDocument<SalesOrderSubmitLineSnapshot>
             ref={paperRef}
             frame="borderless"
+            compact={compact}
             title="销售单"
             subtitle={NATURE_LABEL[snapshot.nature]}
             documentNumber="提交预览"
@@ -68,7 +113,8 @@ export function SalesOrderSubmitPaper({
                 {
                     id: "seller",
                     label: "销售方",
-                    name: snapshot.ownerName || "—",
+                    name: snapshot.settlementEntity || "—",
+                    reference: "结算主体",
                     fields: [
                         {
                             id: "owner",
@@ -92,14 +138,14 @@ export function SalesOrderSubmitPaper({
                     reference: snapshot.contractLabel || "未关联归档合同",
                     fields: [
                         {
-                            id: "settlement",
-                            label: "结算主体",
-                            value: snapshot.settlementEntity || "—",
-                        },
-                        {
                             id: "contract",
                             label: "合同",
                             value: snapshot.contractLabel || "未关联归档合同",
+                        },
+                        {
+                            id: "invoice",
+                            label: "开票要求",
+                            value: snapshot.invoiceType || "—",
                         },
                     ],
                 },
@@ -111,11 +157,6 @@ export function SalesOrderSubmitPaper({
                     value: paymentLabel,
                 },
                 {
-                    id: "invoice",
-                    label: "开票要求",
-                    value: snapshot.invoiceType || "—",
-                },
-                {
                     id: "deadline",
                     label: isCard ? "卡券履约期限" : "客户承诺期限摘要",
                     value: snapshot.fulfillmentDeadline || "—",
@@ -125,6 +166,12 @@ export function SalesOrderSubmitPaper({
                     id: "scene",
                     label: "福利场景",
                     value: welfareScenarioLabel(snapshot.welfareScene) || "—",
+                },
+                {
+                    id: "lines",
+                    label: "明细行数",
+                    value: `${snapshot.lineCount} 项`,
+                    numeric: true,
                 },
             ]}
             lineItemLabel={isCard ? "卡券明细（唯一）" : "销售明细"}
@@ -293,6 +340,11 @@ export function SalesOrderSubmitPaper({
                 (isCard
                     ? "卡券履约在福利商城执行；本预览仅展示当前填写的销售数据。"
                     : "本预览按当前填写内容生成，确认提交后进入审批。")
+            }
+            appendix={
+                !onInspectAddresses && deliverySummary.totalRows > 0 ? (
+                    <DeliveryAllocationPrintAppendix lines={deliveryLines} />
+                ) : undefined
             }
         />
     )

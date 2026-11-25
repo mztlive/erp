@@ -1,13 +1,20 @@
 "use client"
 
 import type { MaterialReference } from "@/features/approval-workflow/hooks/use-approval-materials"
-import { BusinessFailureState } from "@/components/business"
+import { PrinterIcon } from "lucide-react"
+
+import {
+    BusinessFailureState,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogBody,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
@@ -62,6 +69,17 @@ export function WorkspaceDocumentPaperDialog({
                   ? `${target.title} ${target.kind === "approval_snapshot" ? "提交资料" : "纸质预览"}`
                   : "单据纸质预览"
 
+    const dialogDescription =
+        target?.materialsView === "current-source-sales"
+            ? "当前生效销售版本的完整明细与合同凭证"
+            : target?.materialsView === "source-sales"
+              ? "本次审批锁定的完整来源销售单及允许读取的附件"
+              : target?.materialsView === "attachments"
+                ? "本次审批允许读取的合同、业务凭证及附件"
+                : target?.kind === "approval_snapshot"
+                  ? "此次审批提交时保留的单据及附件，按当前审批访问资格读取"
+                  : "系统业务数据的打印件，金额与状态以系统记录为准"
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
@@ -70,34 +88,25 @@ export function WorkspaceDocumentPaperDialog({
                 closeButtonId={closeButtonId}
                 className="bg-card"
             >
-                <DialogHeader className="border-border/60 bg-card print:hidden">
+                <DialogHeader className="border-border/60 bg-card py-3 text-left print:hidden">
                     <DialogTitle className="min-w-0 truncate">
                         {dialogTitle}
                     </DialogTitle>
-                    <DialogDescription className="sr-only">
-                        {target?.materialsView === "current-source-sales"
-                            ? "当前生效销售版本的完整明细与合同凭证。"
-                            : target?.materialsView === "source-sales"
-                              ? "本次审批锁定的完整来源销售单及允许读取的附件。"
-                              : target?.materialsView === "attachments"
-                                ? "本次审批允许读取的合同、业务凭证及附件。"
-                                : target?.kind === "approval_snapshot"
-                                  ? "此次审批提交时保留的单据及附件，销售单包含全部提交明细，按当前审批访问资格读取。"
-                                  : "系统业务数据的打印件；金额与状态以系统记录为准。版本、附件和关联单据仍在对应工作面查看。"}
-                        按 Esc 或点击遮罩关闭。
-                    </DialogDescription>
+                    <DialogDescription>{dialogDescription}</DialogDescription>
                 </DialogHeader>
 
-                <DialogBody className="bg-card px-6 py-6">
+                <DialogBody className="bg-card px-5 py-4">
                     {target?.kind === "approval_snapshot" &&
                     target.materialsView === "current-source-sales" ? (
                         <ApprovalCurrentSalesMaterials
+                            bare
                             instanceId={target.objectId}
                             revisionId={target.sourceRevisionId}
                             enabled={open}
                         />
                     ) : target?.kind === "approval_snapshot" ? (
                         <ApprovalSubmittedMaterials
+                            bare
                             instanceId={target.objectId}
                             reference={reference}
                             enabled={open}
@@ -117,6 +126,31 @@ export function WorkspaceDocumentPaperDialog({
                         />
                     ) : null}
                 </DialogBody>
+
+                <DialogFooter className="items-center border-border/60 bg-card py-2.5 print:hidden">
+                    {target?.materialsView !== "attachments" ? (
+                        <Button
+                            id={`${closeButtonId}-print`}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className={detailWorkspaceStyles.quietButton}
+                            onClick={() => window.print()}
+                        >
+                            <PrinterIcon data-icon="inline-start" />
+                            打印
+                        </Button>
+                    ) : null}
+                    <Button
+                        id={`${closeButtonId}-footer`}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        关闭
+                    </Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     )
@@ -158,7 +192,7 @@ function WorkspacePaperBody({
             )
         }
         if (!salesQuery.data) return <PaperMissingState />
-        return <SalesOrderPaperDocument order={salesQuery.data} />
+        return <SalesOrderPaperDocument order={salesQuery.data} compact />
     }
 
     if (purchaseQuery.isPending) return <PaperLoadingState />
@@ -192,12 +226,12 @@ function WorkspacePaperBody({
             />
         )
     }
-    return <PurchaseOrderPaperDocument order={purchaseQuery.data} />
+    return <PurchaseOrderPaperDocument order={purchaseQuery.data} compact />
 }
 
 function PaperLoadingState() {
     return (
-        <div className="flex min-h-64 items-center justify-center py-12">
+        <div className="flex min-h-56 items-center justify-center py-10">
             <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Spinner aria-label="正在读取单据" />
                 正在读取单据…
