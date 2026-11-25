@@ -41,6 +41,11 @@
     --color-sidebar: var(--sidebar);
     --color-sidebar-rail: var(--sidebar-rail);
 
+    /* 应用壳层轻交互表面（顶栏/页签/侧栏统一悬停与激活底色） */
+    --color-shell-hover: var(--shell-hover);
+    --color-shell-active: var(--shell-active);
+    --color-shell-strong: var(--shell-strong);
+
     --color-chart-1: var(--chart-1);
     --color-chart-2: var(--chart-2);
     --color-chart-3: var(--chart-3);
@@ -377,6 +382,9 @@
     ); /* #1a57ce 飞书蓝选中文字 */
     --sidebar-border: oklch(0.926 0.003 255); /* #eaecef 轻盈 1px 细线 */
     --sidebar-ring: oklch(0.562 0.212 261 / 28%);
+    --shell-hover: oklch(0.252 0.011 255 / 4.5%);
+    --shell-active: oklch(0.252 0.011 255 / 6.5%);
+    --shell-strong: oklch(0.252 0.011 255 / 8.5%);
 
     --elevation-2xs: 0 1px 2px 0 rgb(31 35 41 / 0.04);
     --elevation-xs: 0 1px 3px 0 rgb(31 35 41 / 0.05);
@@ -509,6 +517,9 @@
     --sidebar-accent-foreground: oklch(0.84 0.095 258);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.66 0.18 260 / 32%);
+    --shell-hover: oklch(0.96 0.003 255 / 6%);
+    --shell-active: oklch(0.96 0.003 255 / 10%);
+    --shell-strong: oklch(0.96 0.003 255 / 13%);
 
     --elevation-2xs: 0 1px 2px 0 rgb(0 0 0 / 0.24);
     --elevation-xs: 0 1px 3px 0 rgb(0 0 0 / 0.3);

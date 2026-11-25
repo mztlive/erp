@@ -10,7 +10,8 @@ import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "@/components/ui/toast"
 import { useRouter } from "@/lib/navigation"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { backgroundJobKeys } from "@/features/background-jobs/queries"
+import { backgroundJobKeys } from "@/lib/background-jobs"
+import { SHELL_Z_INDEX } from "@/lib/shell-constants"
 import { createPortal } from "react-dom"
 
 import {
@@ -97,7 +98,8 @@ export function NavDeliveryOverlay() {
 
     return createPortal(
         <div
-            className="pointer-events-none fixed inset-0 z-[100]"
+            className="pointer-events-none fixed inset-0"
+            style={{ zIndex: SHELL_Z_INDEX.navDeliveryOverlay }}
             aria-hidden="true"
         >
             {pulse ? (

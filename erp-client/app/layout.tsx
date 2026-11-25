@@ -3,9 +3,9 @@ import { Suspense } from "react"
 import "@fontsource-variable/noto-sans-sc"
 import "./globals.css"
 import { cn } from "@/lib/utils"
-import { QueryProvider } from "@/components/providers/query-provider"
 import { AuthSessionProvider } from "@/components/providers/auth-session-provider"
 import { Toaster } from "@/components/ui/toast"
+import { AppQueryProvider } from "./app-query-provider"
 
 export const metadata: Metadata = {
     title: {
@@ -27,11 +27,11 @@ export default function RootLayout({
             suppressHydrationWarning
         >
             <body className="min-h-full flex flex-col">
-                <QueryProvider>
+                <AppQueryProvider>
                     <Suspense fallback={null}>
                         <AuthSessionProvider>{children}</AuthSessionProvider>
                     </Suspense>
-                </QueryProvider>
+                </AppQueryProvider>
                 <Toaster />
             </body>
         </html>

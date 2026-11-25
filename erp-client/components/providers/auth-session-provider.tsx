@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useQueryClient, type QueryClient } from "@tanstack/react-query"
 
 import { clearToken, isAuthenticated, onUnauthorized } from "@/lib/api/session"
+import { ADMIN_TOKEN_STORAGE_KEY } from "@/lib/shell-constants"
 
 /**
  * 全局鉴权会话：
@@ -64,7 +65,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
     // 再订阅一次 storage/401 后的本地变化：token 被 clear 后立刻挡回登录
     React.useEffect(() => {
         const onStorage = (event: StorageEvent) => {
-            if (event.key === "erp.token" && !event.newValue) {
+            if (event.key === ADMIN_TOKEN_STORAGE_KEY && !event.newValue) {
                 setAllowed(false)
                 router.replace("/login")
             }
@@ -81,7 +82,10 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
 
     if (!allowed) {
         return (
-            <div className="flex min-h-svh items-center justify-center bg-background text-body-compact text-muted-foreground">
+            <div
+                role="status"
+                className="flex min-h-svh items-center justify-center bg-background text-body-compact text-muted-foreground"
+            >
                 正在验证登录状态…
             </div>
         )
@@ -117,7 +121,10 @@ export function RedirectIfAuthenticated({
 
     if (!show) {
         return (
-            <div className="flex min-h-svh items-center justify-center bg-background text-body-compact text-muted-foreground">
+            <div
+                role="status"
+                className="flex min-h-svh items-center justify-center bg-background text-body-compact text-muted-foreground"
+            >
                 加载中…
             </div>
         )

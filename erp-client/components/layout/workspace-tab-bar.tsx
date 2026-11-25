@@ -178,10 +178,10 @@ export function WorkspaceTabBar({
                             <div
                                 key={tab.id}
                                 className={cn(
-                                    "group/workspace-tab relative flex h-7 max-w-[min(14rem,100cqi)] shrink-0 items-center rounded-md motion-safe:transition-colors",
+                                    "group/workspace-tab relative flex h-control-sm max-w-[min(14rem,100cqi)] shrink-0 items-center rounded-md motion-safe:transition-colors",
                                     selected
-                                        ? "bg-foreground/[0.065] text-foreground dark:bg-foreground/[0.1]"
-                                        : "text-muted-foreground hover:bg-foreground/[0.038] hover:text-foreground",
+                                        ? "bg-shell-active text-foreground"
+                                        : "text-muted-foreground hover:bg-shell-hover hover:text-foreground",
                                 )}
                             >
                                 <button
@@ -233,7 +233,7 @@ export function WorkspaceTabBar({
                                                 : undefined
                                         }
                                         className={cn(
-                                            "flex size-4.5 items-center justify-center rounded-sm outline-none hover:bg-foreground/[0.08] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring motion-safe:transition-[opacity,background-color,color]",
+                                            "flex size-4.5 items-center justify-center rounded-sm outline-none hover:bg-shell-strong focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring motion-safe:transition-[opacity,background-color,color]",
                                             selected
                                                 ? "text-muted-foreground/75 opacity-70 hover:text-foreground hover:opacity-100"
                                                 : "text-muted-foreground opacity-0 group-hover/workspace-tab:opacity-70 group-hover/workspace-tab:hover:text-foreground group-hover/workspace-tab:hover:opacity-100 group-focus-within/workspace-tab:opacity-70 [@media(hover:none)]:opacity-70",
@@ -261,7 +261,7 @@ export function WorkspaceTabBar({
                             aria-label="向左滚动页签"
                             title="向左滚动页签"
                             disabled={!scroll.left}
-                            className="hidden text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground sm:inline-flex"
+                            className="hidden text-muted-foreground hover:bg-shell-hover hover:text-foreground sm:inline-flex"
                             onClick={() => scrollBy(-1)}
                         >
                             <ChevronLeftIcon className="size-3.5" />
@@ -273,7 +273,7 @@ export function WorkspaceTabBar({
                             aria-label="向右滚动页签"
                             title="向右滚动页签"
                             disabled={!scroll.right}
-                            className="hidden text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground sm:inline-flex"
+                            className="hidden text-muted-foreground hover:bg-shell-hover hover:text-foreground sm:inline-flex"
                             onClick={() => scrollBy(1)}
                         >
                             <ChevronRightIcon className="size-3.5" />
@@ -287,7 +287,7 @@ export function WorkspaceTabBar({
                             <Button
                                 variant="ghost"
                                 size="icon-sm"
-                                className="text-muted-foreground/80 hover:bg-foreground/[0.05] hover:text-foreground"
+                                className="text-muted-foreground/80 hover:bg-shell-hover hover:text-foreground"
                                 aria-label={`页签操作，已打开 ${tabs.length} 个页面`}
                                 title="查看已打开的页面"
                             />
@@ -301,7 +301,8 @@ export function WorkspaceTabBar({
                     >
                         <DropdownMenuGroup>
                             <DropdownMenuLabel>
-                                已打开的页面 · {tabs.length}
+                                已打开的页面 ·{" "}
+                                <span className="num">{tabs.length}</span>
                             </DropdownMenuLabel>
                             <div className="max-h-72 overflow-y-auto">
                                 {tabs.map((tab) => {

@@ -134,7 +134,7 @@ export function SystemFeedbackPanel() {
                 </SheetHeader>
                 <div className="px-sheet-inline pb-4">
                     <div
-                        className="grid grid-cols-2 gap-1 rounded-xl bg-muted/70 p-1"
+                        className="grid grid-cols-2 gap-1 rounded-lg bg-muted/70 p-1"
                         role="group"
                         aria-label="提示范围"
                     >
@@ -143,7 +143,7 @@ export function SystemFeedbackPanel() {
                             size="sm"
                             variant="ghost"
                             aria-pressed={!all}
-                            className="text-muted-foreground aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:shadow-xs"
+                            className="text-muted-foreground focus-visible:relative focus-visible:z-10 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:shadow-xs"
                             onClick={() => setAll(false)}
                         >
                             当前工作页
@@ -153,7 +153,7 @@ export function SystemFeedbackPanel() {
                             size="sm"
                             variant="ghost"
                             aria-pressed={all}
-                            className="text-muted-foreground aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:shadow-xs"
+                            className="text-muted-foreground focus-visible:relative focus-visible:z-10 focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:shadow-xs"
                             onClick={() => setAll(true)}
                         >
                             本次会话
@@ -208,7 +208,7 @@ function ProblemCard({ problem }: { problem: SystemProblem }) {
     return (
         <article
             aria-labelledby={`${id}-title`}
-            className="min-w-0 rounded-xl border border-border/80 bg-card shadow-xs"
+            className="min-w-0 rounded-lg border border-border/80 bg-card shadow-xs"
         >
             <div className="space-y-3 px-4 pt-4 pb-3">
                 <div className="flex items-start gap-3">
@@ -224,11 +224,11 @@ function ProblemCard({ problem }: { problem: SystemProblem }) {
                     <div className="min-w-0 flex-1 space-y-1 pt-0.5">
                         <h3
                             id={`${id}-title`}
-                            className="text-body-compact leading-5 font-semibold wrap-anywhere"
+                            className="text-body-compact font-semibold wrap-anywhere"
                         >
                             {problem.title}
                         </h3>
-                        <p className="text-xs leading-relaxed wrap-anywhere text-muted-foreground">
+                        <p className="text-xs wrap-anywhere text-muted-foreground">
                             {source}
                         </p>
                     </div>
@@ -269,7 +269,7 @@ function ProblemCard({ problem }: { problem: SystemProblem }) {
                         {copied ? systemFeedbackText.copied : ""}
                     </span>
                 </div>
-                <p className="text-body-compact leading-relaxed wrap-anywhere text-muted-foreground">
+                <p className="text-body-compact wrap-anywhere text-muted-foreground">
                     {problem.description}
                 </p>
                 {problem.requiredPermission && (
@@ -355,7 +355,7 @@ function ProblemCard({ problem }: { problem: SystemProblem }) {
                 >
                     <summary
                         id={`${id}-technical`}
-                        className="flex cursor-pointer list-none items-center gap-1.5 py-2.5 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-ring [&::-webkit-details-marker]:hidden"
+                        className="-mx-1.5 flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-transparent px-1.5 py-2.5 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:border-primary focus-visible:ring-3 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
                     >
                         <ChevronDownIcon
                             className="size-3 -rotate-90 group-open/technical:rotate-0"

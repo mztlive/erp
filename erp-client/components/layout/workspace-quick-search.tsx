@@ -14,13 +14,9 @@ import {
     CommandList,
     CommandSeparator,
 } from "@/components/ui/command"
+import { Kbd } from "@/components/ui/kbd"
 import { SidebarMenuButton } from "@/components/ui/sidebar"
-import { useAccountProfileQuery } from "@/features/auth/queries"
-import { listWorkItems } from "@/features/work-items/api"
-import type { WorkItemDto } from "@/features/work-items/types"
-import { workspaceTypeLabel } from "@/features/workspace/api/work-item-meta"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { displayBusinessText, displayName } from "@/lib/display-name"
 import { useRouter } from "@/lib/navigation"
 import { hasPermission } from "@/lib/permissions"
 import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
@@ -28,6 +24,7 @@ import {
     filterNavGroupsByPermissions,
     WORKSPACE_NAV_GROUPS,
 } from "@/lib/workspace-registry"
+import { useWorkspaceShellBridge } from "@/lib/workspace-shell-bridge"
 import {
     isWorkspaceQuickSearchShortcut,
     workspaceHost,
@@ -44,36 +41,13 @@ export function dispatchWorkspaceQuickSearch(): void {
     window.dispatchEvent(new Event(QUICK_SEARCH_EVENT))
 }
 
-function resolveWorkItemDisplay(item: WorkItemDto): {
-    primary: string
-    secondary?: string
-    typeLabel: string
-} {
-    const typeLabel = workspaceTypeLabel(
-        item.work_item_type,
-        item.business_object_type,
-    )
-    const counterparty = displayName(item.counterparty_label)
-    const objectLabel = displayBusinessText(
-        item.business_object_label,
-        item.business_object_id,
-        item.root_business_object_id,
-        item.id,
-    )
-    const primary = counterparty || objectLabel || typeLabel
-    const secondary =
-        counterparty && objectLabel && objectLabel !== counterparty
-            ? objectLabel
-            : undefined
-    return { primary, secondary, typeLabel }
-}
-
 export function WorkspaceQuickSearch() {
     const [open, setOpen] = React.useState(false)
     const [search, setSearch] = React.useState("")
     const [debouncedQuery, setDebouncedQuery] = React.useState("")
     const router = useRouter()
-    const profileQuery = useAccountProfileQuery()
+    const { profile: profileQuery, searchQuickTasks } =
+        useWorkspaceShellBridge()
     const permissions = profileQuery.data?.permissions
     const canListWorkItems = hasPermission(permissions, "work_item:list")
     const { tabs: openTabs, selectTab } = useWorkspaceOpenTabs()
@@ -119,20 +93,16 @@ export function WorkspaceQuickSearch() {
             debouncedQuery,
         ],
         queryFn: () =>
-            listWorkItems({
-                scope: "mine",
+            searchQuickTasks({
                 query: debouncedQuery,
-                timezone: "Asia/Shanghai",
-                sort: "priority_due",
-                page: 1,
-                pageSize: TASK_SEARCH_LIMIT,
+                limit: TASK_SEARCH_LIMIT,
             }),
         enabled: open && canListWorkItems && debouncedQuery.length > 0,
         staleTime: 15_000,
         retry: false,
     })
 
-    const matchedTasks = taskSearchQuery.data?.items ?? []
+    const matchedTasks = taskSearchQuery.data ?? []
     const showTaskGroup =
         canListWorkItems &&
         debouncedQuery.length > 0 &&
@@ -176,7 +146,7 @@ export function WorkspaceQuickSearch() {
                 type="button"
                 tooltip="快速跳转页签、任务与菜单 (⌘K)"
                 aria-label="快速跳转"
-                className="h-7.5 border-0 bg-foreground/[0.045] text-muted-foreground/85 shadow-none hover:bg-foreground/[0.075] hover:text-foreground"
+                className="h-control-sm border-0 bg-shell-hover text-muted-foreground/85 shadow-none hover:bg-shell-strong hover:text-foreground"
                 onClick={() => setOpen(true)}
             >
                 <SearchIcon
@@ -184,12 +154,9 @@ export function WorkspaceQuickSearch() {
                     aria-hidden="true"
                 />
                 <span className="flex-1 truncate text-xs">快速跳转</span>
-                <span
-                    aria-hidden="true"
-                    className="ml-auto font-mono text-xs text-muted-foreground/65"
-                >
+                <Kbd aria-hidden="true" className="ml-auto">
                     ⌘K
-                </span>
+                </Kbd>
             </SidebarMenuButton>
             <CommandDialog
                 open={open}
@@ -257,8 +224,6 @@ export function WorkspaceQuickSearch() {
                                         </div>
                                     ) : (
                                         matchedTasks.map((task) => {
-                                            const display =
-                                                resolveWorkItemDisplay(task)
                                             const href =
                                                 buildWorkspaceDetailHref(
                                                     "tasks",
@@ -269,13 +234,13 @@ export function WorkspaceQuickSearch() {
                                                     },
                                                 )
                                             const matchHints = (
-                                                task.search_matches ?? []
+                                                task.searchMatches ?? []
                                             ).join(" ")
                                             return (
                                                 <CommandItem
                                                     key={`task-${task.id}`}
                                                     id={`workspace-quick-search-task-${toAutomationIdSegment(task.id)}`}
-                                                    value={`${search} ${debouncedQuery} ${display.primary} ${display.secondary ?? ""} ${display.typeLabel} ${matchHints}`}
+                                                    value={`${search} ${debouncedQuery} ${task.primary} ${task.secondary ?? ""} ${task.typeLabel} ${matchHints}`}
                                                     onSelect={() =>
                                                         handleSelect(href)
                                                     }
@@ -283,18 +248,16 @@ export function WorkspaceQuickSearch() {
                                                     <ClipboardCheckIcon aria-hidden="true" />
                                                     <div className="flex min-w-0 flex-1 flex-col">
                                                         <span className="truncate text-body-compact text-foreground">
-                                                            {display.primary}
+                                                            {task.primary}
                                                         </span>
-                                                        {display.secondary ? (
-                                                            <span className="num truncate text-tiny text-muted-foreground">
-                                                                {
-                                                                    display.secondary
-                                                                }
+                                                        {task.secondary ? (
+                                                            <span className="num truncate text-xs text-muted-foreground">
+                                                                {task.secondary}
                                                             </span>
                                                         ) : null}
                                                     </div>
-                                                    <span className="shrink-0 rounded-sm bg-muted/75 px-1.5 py-0.5 text-tiny text-muted-foreground">
-                                                        {display.typeLabel}
+                                                    <span className="shrink-0 rounded-sm bg-muted/75 px-1.5 py-0.5 text-xs text-muted-foreground">
+                                                        {task.typeLabel}
                                                     </span>
                                                 </CommandItem>
                                             )

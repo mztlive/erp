@@ -2,15 +2,6 @@
 
 import * as React from "react"
 import { usePathname, useSearchParams } from "@/lib/navigation"
-import { useAccountProfileQuery } from "@/features/auth/queries"
-import { useCopies } from "@/features/approval-copies/queries"
-import { useBackgroundJobActiveCountQuery } from "@/features/background-jobs/queries"
-import {
-    useInquiryFeedbackCountQuery,
-    useProcurementInquiryCountQuery,
-} from "@/features/sales-inquiries/hooks/queries"
-import { useActionableBookCountQuery } from "@/features/sales-selection/hooks/queries"
-import { useWorkspaceNavigationCounts } from "@/features/workspace/hooks/queries"
 import { getErrorMessage } from "@/lib/api/errors"
 import { isNavItemActive } from "@/lib/nav-active"
 import { hasPermission } from "@/lib/permissions"
@@ -22,16 +13,12 @@ import {
     type WorkspaceNavDomain,
     type WorkspaceNavGroup,
 } from "@/lib/workspace-registry"
+import {
+    useWorkspaceShellBridge,
+    type WorkspaceNavBadgeCounts,
+} from "@/lib/workspace-shell-bridge"
 
-export type NavBadgeCounts = {
-    backgroundJobs: number | undefined
-    started?: number
-    copied?: number
-    todo: number | undefined
-    selectionActionable: number
-    inquiryFeedback: number | undefined
-    procurementInquiry: number | undefined
-}
+export type NavBadgeCounts = WorkspaceNavBadgeCounts
 
 export function badgeCountFor(
     key: WorkspaceNavBadgeKey,
@@ -113,7 +100,7 @@ export function WorkspaceSidebarProvider({
         ? (returnTo?.split("?")[1] ?? "")
         : searchParams.toString()
 
-    const profileQuery = useAccountProfileQuery()
+    const { profile: profileQuery, navBadges } = useWorkspaceShellBridge()
     const permissions = profileQuery.data?.permissions
     const accountKind = profileQuery.data?.account_kind
 
@@ -180,67 +167,16 @@ export function WorkspaceSidebarProvider({
         [routeKey],
     )
 
-    const navigationCounts = useWorkspaceNavigationCounts(profileQuery.data)
-    const copyCountQuery = useCopies()
     const canViewSelectionBooklets = hasPermission(
         permissions,
         "sales_selection_booklet:list",
-    )
-    const selectionCountQuery = useActionableBookCountQuery(
-        canViewSelectionBooklets,
-    )
-    const inquiryFeedbackCountQuery = useInquiryFeedbackCountQuery(
-        hasPermission(permissions, "sales_inquiry:list"),
-    )
-    const procurementInquiryCountQuery = useProcurementInquiryCountQuery(
-        hasPermission(permissions, "procurement_inquiry:list"),
     )
     const canViewBackgroundJobs = hasPermission(
         permissions,
         "background_job:list",
     )
-    const backgroundJobCountQuery = useBackgroundJobActiveCountQuery(
-        canViewBackgroundJobs,
-    )
 
-    const counts: NavBadgeCounts = React.useMemo(
-        () => ({
-            backgroundJobs: backgroundJobCountQuery.isError
-                ? undefined
-                : backgroundJobCountQuery.data,
-            todo: navigationCounts.inbox.isError
-                ? undefined
-                : navigationCounts.inbox.data,
-            started: navigationCounts.started.isError
-                ? undefined
-                : navigationCounts.started.data,
-            copied: copyCountQuery.isError
-                ? undefined
-                : copyCountQuery.data?.unread_count,
-            selectionActionable: selectionCountQuery.data ?? 0,
-            inquiryFeedback: inquiryFeedbackCountQuery.isError
-                ? undefined
-                : inquiryFeedbackCountQuery.data,
-            procurementInquiry: procurementInquiryCountQuery.isError
-                ? undefined
-                : procurementInquiryCountQuery.data,
-        }),
-        [
-            backgroundJobCountQuery.data,
-            backgroundJobCountQuery.isError,
-            copyCountQuery.data?.unread_count,
-            copyCountQuery.isError,
-            inquiryFeedbackCountQuery.data,
-            inquiryFeedbackCountQuery.isError,
-            navigationCounts.inbox.data,
-            navigationCounts.inbox.isError,
-            navigationCounts.started.data,
-            navigationCounts.started.isError,
-            procurementInquiryCountQuery.data,
-            procurementInquiryCountQuery.isError,
-            selectionCountQuery.data,
-        ],
-    )
+    const counts = navBadges.counts
 
     const domainBadgeFor = React.useCallback(
         (domain: WorkspaceNavDomain): { count: number; urgent: boolean } => {
@@ -278,32 +214,12 @@ export function WorkspaceSidebarProvider({
     const badgeErrorFor = React.useCallback<BadgeErrorLookup>(
         (key, label) => {
             if (!key) return undefined
-            const query =
-                key === "todo-count"
-                    ? navigationCounts.inbox
-                    : key === "approval-started-unread-count"
-                      ? navigationCounts.started
-                      : key === "copy-unread-count"
-                        ? copyCountQuery
-                        : key === "inquiry-feedback-count"
-                          ? inquiryFeedbackCountQuery
-                          : key === "procurement-inquiry-count"
-                            ? procurementInquiryCountQuery
-                            : key === "background-job-active-count"
-                              ? backgroundJobCountQuery
-                              : undefined
-            return query?.isError
-                ? `${label}数量加载失败：${getErrorMessage(query.error, "请稍后重试")}`
+            const state = navBadges.errors[key]
+            return state?.isError
+                ? `${label}数量加载失败：${getErrorMessage(state.error, "请稍后重试")}`
                 : undefined
         },
-        [
-            backgroundJobCountQuery,
-            copyCountQuery,
-            inquiryFeedbackCountQuery,
-            navigationCounts.inbox,
-            navigationCounts.started,
-            procurementInquiryCountQuery,
-        ],
+        [navBadges.errors],
     )
 
     const value = React.useMemo<WorkspaceSidebarContextValue>(

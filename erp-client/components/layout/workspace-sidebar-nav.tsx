@@ -237,7 +237,7 @@ export function WorkspaceSidebarNav() {
                     "group/rail-btn relative flex w-11.5 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg py-1.5 transition-[background-color,color,box-shadow] duration-150 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
                     selected
                         ? "bg-card text-primary shadow-2xs ring-1 ring-sidebar-border/80"
-                        : "text-sidebar-foreground/75 hover:bg-foreground/[0.045] hover:text-foreground",
+                        : "text-sidebar-foreground/75 hover:bg-shell-hover hover:text-foreground",
                 )}
             >
                 <Icon
@@ -340,7 +340,7 @@ export function WorkspaceSidebarNav() {
                                         ? "bg-destructive-soft text-destructive-soft-foreground"
                                         : isActive
                                           ? "bg-card text-foreground shadow-2xs"
-                                          : "bg-foreground/[0.06] text-muted-foreground",
+                                          : "bg-shell-active text-muted-foreground",
                             )}
                         >
                             {badgeError ? "!" : badgeCount}
@@ -358,7 +358,7 @@ export function WorkspaceSidebarNav() {
             {/* 左栏 60px：品牌徽标 + 7 大业务域主轨（常驻清晰、1 键直达） */}
             <aside
                 aria-label="业务域主轨"
-                className="flex h-full w-15 shrink-0 flex-col items-center border-r border-sidebar-border/60 bg-sidebar-rail"
+                className="flex h-full w-nav-icon shrink-0 flex-col items-center border-r border-sidebar-border/60 bg-sidebar-rail"
             >
                 <div className="flex h-workspace-topbar w-full shrink-0 items-center justify-center">
                     <Link
@@ -387,7 +387,7 @@ export function WorkspaceSidebarNav() {
                                     type="button"
                                     aria-label="快速跳转菜单"
                                     onClick={dispatchWorkspaceQuickSearch}
-                                    className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-sidebar-foreground/75 transition-colors outline-none hover:bg-foreground/[0.05] hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                                    className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-sidebar-foreground/75 transition-colors outline-none hover:bg-shell-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
                                 />
                             }
                         >
@@ -427,7 +427,7 @@ export function WorkspaceSidebarNav() {
                         <SidebarTrigger
                             id="workspace-topbar-navigation-trigger"
                             title="折叠导航栏 (⌘B)"
-                            className="size-7 shrink-0 text-muted-foreground/65 hover:bg-foreground/[0.05] hover:text-foreground"
+                            className="size-control-sm shrink-0 text-muted-foreground/65 hover:bg-shell-hover hover:text-foreground"
                         />
                     ) : null}
                 </div>

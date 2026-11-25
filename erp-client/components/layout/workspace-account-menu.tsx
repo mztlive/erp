@@ -16,9 +16,9 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { logoutAndRedirect } from "@/components/providers/auth-session-provider"
-import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useRouter } from "@/lib/navigation"
 import { hasPermission } from "@/lib/permissions"
+import { useWorkspaceShellBridge } from "@/lib/workspace-shell-bridge"
 
 function displayInitial(
     name: string | undefined,
@@ -31,7 +31,7 @@ function displayInitial(
 export function WorkspaceAccountMenu() {
     const router = useRouter()
     const queryClient = useQueryClient()
-    const profileQuery = useAccountProfileQuery()
+    const { profile: profileQuery } = useWorkspaceShellBridge()
 
     const canViewBackgroundJobs = hasPermission(
         profileQuery.data?.permissions,

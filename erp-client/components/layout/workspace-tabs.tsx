@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { dispatchNavDelivery } from "@/lib/nav-delivery"
+import { ADMIN_TOKEN_STORAGE_KEY } from "@/lib/shell-constants"
 import {
     applyWorkspaceViewportDensity,
     handleWorkspaceCloseShortcut,
@@ -479,7 +480,7 @@ export function WorkspaceTabs({
         }
         const pop = () => navigate(null, window.location.href, false, true)
         const sessionChanged = (event: StorageEvent) => {
-            if (event.key === "erp.token" || event.key === null)
+            if (event.key === ADMIN_TOKEN_STORAGE_KEY || event.key === null)
                 window.location.replace("/login")
         }
         const unload = (event: BeforeUnloadEvent) => {

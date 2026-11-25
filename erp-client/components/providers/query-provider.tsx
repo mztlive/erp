@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { QueryClientProvider } from "@tanstack/react-query"
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query"
 // import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
 import { toast } from "@/components/ui/toast"
 import {
@@ -12,10 +12,11 @@ import {
 } from "@/lib/system-feedback"
 import { fieldErrorMessages } from "@/lib/api/field-errors"
 import { getErrorPresentation } from "@/lib/api/errors"
-import { subscribeScopeCache } from "@/features/data-scope/cache"
 import { trackNavDeliveryOrigin } from "@/lib/nav-delivery"
 import { makeQueryClient } from "@/lib/query-client"
 import { isWorkspaceFrame, workspaceHost } from "@/lib/workspace-tabs"
+
+export type QueryCacheSubscriber = (client: QueryClient) => (() => void) | void
 
 /** 父页面先记录变更，后续业务回调关闭来源页签也不影响交付。 */
 const notifyMutationSuccess = () => {
@@ -46,7 +47,13 @@ const notifyMutationError = (error: unknown) => {
  * 本项目是纯 SPA：所有网络请求必须通过 useQuery / useMutation / useInfiniteQuery 等，
  * 禁止在组件内直接 fetch/axios 后自管 loading/error，禁止 Server Components 拉数。
  */
-export function QueryProvider({ children }: { children: React.ReactNode }) {
+export function QueryProvider({
+    children,
+    subscribeCache,
+}: {
+    children: React.ReactNode
+    subscribeCache?: QueryCacheSubscriber
+}) {
     // 客户端单例：避免每次 render 新建 QueryClient 导致缓存丢失
     const [queryClient] = useState(() =>
         makeQueryClient(notifyMutationError, notifyMutationSuccess),
@@ -94,7 +101,10 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         }
     }, [queryClient])
 
-    useEffect(() => subscribeScopeCache(queryClient), [queryClient])
+    useEffect(
+        () => subscribeCache?.(queryClient),
+        [queryClient, subscribeCache],
+    )
     useEffect(trackNavDeliveryOrigin, [])
 
     return (
