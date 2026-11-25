@@ -28,7 +28,7 @@ export function ChangeOrderBlockers({
     const active = new Set(blocked.split(","))
     return (
         <p
-            role="status"
+            role="alert"
             className="flex flex-wrap items-center text-xs text-destructive"
         >
             待处理：
@@ -40,7 +40,7 @@ export function ChangeOrderBlockers({
                         <button
                             id={`${id}-blocker-${key}`}
                             type="button"
-                            className="underline underline-offset-2"
+                            className="cursor-pointer rounded-xs underline underline-offset-2 outline-none hover:text-destructive/80 focus-visible:ring-3 focus-visible:ring-ring"
                             onClick={() =>
                                 document
                                     .getElementById(`${id}-${key}-title`)

@@ -712,7 +712,7 @@ function AddressGroupRow({
                     <p
                         className={cn(
                             "text-xs wrap-anywhere text-foreground/80",
-                            compact ? "min-w-0" : "leading-5",
+                            compact && "min-w-0",
                         )}
                     >
                         <AddressText

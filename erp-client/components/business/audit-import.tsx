@@ -9,6 +9,7 @@ import {
     LoaderCircleIcon,
 } from "lucide-react"
 
+import { STATUS_LABEL_FALLBACK } from "@/components/business/values"
 import { Badge } from "@/components/ui/badge"
 import {
     Item,
@@ -261,7 +262,7 @@ export function BusinessDiffPanel({
         <section
             data-slot="business-diff-panel"
             className={cn(
-                "overflow-hidden rounded-2xl border bg-card",
+                "overflow-hidden rounded-lg border bg-card",
                 className,
             )}
             {...props}
@@ -270,7 +271,9 @@ export function BusinessDiffPanel({
                 <h3 className="text-body-compact font-semibold text-card-foreground">
                     {title}
                 </h3>
-                <Badge variant="neutral">{badgeCount} 项</Badge>
+                <Badge variant="neutral" className="num">
+                    {badgeCount} 项
+                </Badge>
             </header>
             <Table>
                 <TableCaption className="sr-only">{caption}</TableCaption>
@@ -491,7 +494,7 @@ export function ImportStageIndicator({
             data-slot="import-stage-indicator"
             aria-label={ariaLabel}
             className={cn(
-                "grid overflow-hidden rounded-2xl border bg-card divide-y divide-border lg:grid-cols-6 lg:divide-x lg:divide-y-0",
+                "grid overflow-hidden rounded-lg border bg-card divide-y divide-border lg:grid-cols-6 lg:divide-x lg:divide-y-0",
                 className,
             )}
             {...props}
@@ -541,10 +544,12 @@ export type ImportIssue = Readonly<{
 }>
 
 /**
- * 导入/批量结果的问题类型中文映射。优先覆盖常见枚举，
+ * 导入/批量结果的问题类型中文映射。
+ * 通用状态枚举统一复用 `STATUS_LABEL_FALLBACK`（单一数据源），此处仅补充导入专项错误码；
  * 未命中的全大写英文码兜底为「其他异常」，避免把原始枚举码直接上屏。
  */
 const IMPORT_CODE_LABEL: Readonly<Record<string, string>> = {
+    ...STATUS_LABEL_FALLBACK,
     CUSTOMER_NOT_FOUND: "客户不存在",
     AMOUNT_PRECISION: "金额小数位数超限",
     STOCK_QTY_INVALID: "库存数量无效",
@@ -566,9 +571,6 @@ const IMPORT_CODE_LABEL: Readonly<Record<string, string>> = {
     IMPORT_CONFIRMATION_CONTEXT_MISMATCH: "确认范围与任务入口不一致",
     PENDING_MAPPING: "待资料匹配",
     CONFLICT: "资料冲突",
-    FAILED: "处理失败",
-    SKIPPED: "已跳过",
-    SUCCEEDED: "处理成功",
     INQUIRY_IMPORT_INVALID: "导入数据校验未通过",
     PERMISSION_DENIED: "暂无权限",
     REQUEST_FIELD_INVALID: "填写内容有误",
@@ -578,11 +580,6 @@ const IMPORT_CODE_LABEL: Readonly<Record<string, string>> = {
     TIMEOUT: "处理超时",
     INVALID: "内容不符合要求",
     ERROR: "处理异常",
-    UNKNOWN: "其他异常",
-    REJECTED: "未通过",
-    BLOCKED: "暂不可操作",
-    CANCELLED: "已取消",
-    PENDING: "待处理",
 }
 
 const rawCodeTokenPattern = /^(?:[A-Z]{4,}|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)$/
@@ -625,7 +622,7 @@ export function ImportIssueTable({
         <div
             data-slot="import-issue-table"
             className={cn(
-                "overflow-hidden rounded-2xl border bg-card",
+                "overflow-hidden rounded-lg border bg-card",
                 className,
             )}
             {...props}
@@ -727,6 +724,24 @@ export function BatchOperationResult({
     ...props
 }: BatchOperationResultProps) {
     const titleId = React.useId()
+    const renderItemCodeBadge = (
+        code: string,
+        tone: StatusTone,
+        icon: typeof CircleCheckIcon,
+    ) => {
+        const resolved = codeLabel(code)
+        if (typeof resolved === "string" || typeof resolved === "number") {
+            return (
+                <StatusBadge
+                    tone={tone}
+                    icon={icon}
+                    label={String(resolved)}
+                    className="ml-2"
+                />
+            )
+        }
+        return <span className="ml-2 inline-flex items-center">{resolved}</span>
+    }
 
     return (
         <section
@@ -742,11 +757,24 @@ export function BatchOperationResult({
                 >
                     {title}
                 </h3>
-                <Badge variant="success">成功 {succeeded.length}</Badge>
-                <Badge variant="neutral">跳过 {skipped.length}</Badge>
-                <Badge variant={failed.length > 0 ? "destructive" : "neutral"}>
-                    失败 {failed.length}
-                </Badge>
+                <StatusBadge
+                    tone="success"
+                    icon={CircleCheckIcon}
+                    label={`成功 ${succeeded.length}`}
+                    className="num"
+                />
+                <StatusBadge
+                    tone="neutral"
+                    icon={CircleDashedIcon}
+                    label={`跳过 ${skipped.length}`}
+                    className="num"
+                />
+                <StatusBadge
+                    tone={failed.length > 0 ? "destructive" : "neutral"}
+                    icon={failed.length > 0 ? CircleXIcon : CircleDashedIcon}
+                    label={`失败 ${failed.length}`}
+                    className="num"
+                />
             </header>
             <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
                 <section className="rounded-lg border border-border bg-card p-3 text-body-compact">
@@ -765,14 +793,13 @@ export function BatchOperationResult({
                                         <span className="font-medium text-foreground">
                                             {item.label}
                                         </span>
-                                        {item.code ? (
-                                            <Badge
-                                                variant="success"
-                                                className="ml-2"
-                                            >
-                                                {codeLabel(item.code)}
-                                            </Badge>
-                                        ) : null}
+                                        {item.code
+                                            ? renderItemCodeBadge(
+                                                  item.code,
+                                                  "success",
+                                                  CircleCheckIcon,
+                                              )
+                                            : null}
                                         {item.detail ? (
                                             <span className="mt-1 block">
                                                 {item.detail}
@@ -802,14 +829,13 @@ export function BatchOperationResult({
                                         <span className="font-medium text-foreground">
                                             {item.label}
                                         </span>
-                                        {item.code ? (
-                                            <Badge
-                                                variant="neutral"
-                                                className="ml-2"
-                                            >
-                                                {codeLabel(item.code)}
-                                            </Badge>
-                                        ) : null}
+                                        {item.code
+                                            ? renderItemCodeBadge(
+                                                  item.code,
+                                                  "neutral",
+                                                  CircleDashedIcon,
+                                              )
+                                            : null}
                                         {item.detail ? (
                                             <span className="mt-1 block">
                                                 {item.detail}
@@ -844,14 +870,13 @@ export function BatchOperationResult({
                                         <span className="font-medium text-foreground">
                                             {item.label}
                                         </span>
-                                        {item.code ? (
-                                            <Badge
-                                                variant="destructive"
-                                                className="ml-2"
-                                            >
-                                                {codeLabel(item.code)}
-                                            </Badge>
-                                        ) : null}
+                                        {item.code
+                                            ? renderItemCodeBadge(
+                                                  item.code,
+                                                  "destructive",
+                                                  CircleXIcon,
+                                              )
+                                            : null}
                                         {item.detail ? (
                                             <span className="mt-1 block">
                                                 {item.detail}

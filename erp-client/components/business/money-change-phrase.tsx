@@ -18,6 +18,8 @@ export function MoneyChangePhrase({ delta }: { delta: string | null }) {
                     {direction > 0 ? "增加 " : "减少 "}
                     <MoneyValue
                         value={delta.replace(/^-/, "")}
+                        display="compact"
+                        showHint={false}
                         className="text-foreground"
                     />
                 </>

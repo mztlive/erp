@@ -28,7 +28,7 @@ export function ChangeOrderSection({
                         {title}
                     </h3>
                     {description ? (
-                        <p className="text-xs leading-relaxed text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                             {description}
                         </p>
                     ) : null}

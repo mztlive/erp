@@ -3,6 +3,7 @@
 import { Trash2Icon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { detailWorkspaceStyles } from "./detail-workspace-styles"
 import { FormalActionConfirmDialog } from "./workflow"
 
 /**
@@ -35,7 +36,7 @@ export function ChangeOrderVoidButton({
             confirmLabel="确认作废"
             cancelLabel="暂不作废"
             fromStatus={{ label: "草稿", tone: "neutral" }}
-            toStatus={{ label: "已作废", tone: "destructive" }}
+            toStatus={{ label: "已作废", tone: "void" }}
             effects={[
                 `${sourceLabel}保持当前生效版本，不受本次改单影响`,
                 "作废后可以重新发起改单",
@@ -47,7 +48,9 @@ export function ChangeOrderVoidButton({
                 <Button
                     id={`${id}-trigger`}
                     type="button"
-                    variant="outline"
+                    variant="ghost"
+                    size="sm"
+                    className={detailWorkspaceStyles.quietDangerButton}
                     disabled={pending}
                 >
                     <Trash2Icon data-icon="inline-start" aria-hidden="true" />

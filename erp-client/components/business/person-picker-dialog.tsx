@@ -4,6 +4,10 @@ import * as React from "react"
 import { SearchIcon, UsersIcon, XIcon } from "lucide-react"
 
 import {
+    BusinessEmptyState,
+    BusinessFailureState,
+} from "@/components/business/feedback-states"
+import {
     buildPersonPickerModel,
     filterPersonPickerModel,
     personMatchesQuery,
@@ -15,13 +19,16 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { RadioGroup } from "@/components/ui/radio-group"
+import { Spinner } from "@/components/ui/spinner"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { listFilterText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
@@ -175,103 +182,114 @@ function PersonPickerSession(props: PersonPickerDialogProps) {
     return (
         <DialogContent
             id={`${id}-dialog`}
+            size="lg"
+            scroll="body"
             closeButtonId={`${id}-close`}
             initialFocus={searchRef}
-            className={cn(
-                "flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0",
-                multiple ? "sm:max-w-4xl" : "sm:max-w-lg",
-            )}
         >
-            <DialogHeader className="px-6 pt-6 pr-14">
+            <DialogHeader>
                 <DialogTitle>{props.title || "选择人员"}</DialogTitle>
                 {props.description ? (
                     <DialogDescription>{props.description}</DialogDescription>
                 ) : null}
             </DialogHeader>
-            <div className="relative mx-6 my-5">
-                <SearchIcon
-                    aria-hidden="true"
-                    className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-                />
-                <Input
-                    ref={searchRef}
-                    id={`${id}-search`}
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="搜索姓名或部门"
-                    aria-label="搜索姓名或部门"
-                    className="pr-10 pl-9"
-                />
-                {query && (
-                    <Button
-                        id={`${id}-search-clear`}
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="absolute top-1/2 right-1 -translate-y-1/2"
-                        aria-label="清除搜索"
-                        onClick={() => {
-                            setQuery("")
-                            searchRef.current?.focus()
-                        }}
-                    >
-                        <XIcon />
-                    </Button>
-                )}
+            <div className="shrink-0 border-b border-border/60 px-overlay-padding py-3">
+                <div className="relative">
+                    <SearchIcon
+                        aria-hidden="true"
+                        className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <Input
+                        ref={searchRef}
+                        id={`${id}-search`}
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                        placeholder="搜索姓名或部门"
+                        aria-label="搜索姓名或部门"
+                        className="pr-8 pl-8"
+                    />
+                    {query && (
+                        <Button
+                            id={`${id}-search-clear`}
+                            type="button"
+                            variant="ghost"
+                            size="icon-xs"
+                            className="absolute top-1/2 right-1 -translate-y-1/2"
+                            aria-label="清除搜索"
+                            onClick={() => {
+                                setQuery("")
+                                searchRef.current?.focus()
+                            }}
+                        >
+                            <XIcon aria-hidden="true" />
+                        </Button>
+                    )}
+                </div>
             </div>
-            <div
+            <DialogBody
                 className={cn(
-                    "min-h-0 flex-1 overflow-y-auto px-6",
                     multiple &&
-                        "grid sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] sm:overflow-hidden",
+                        "grid gap-4 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] sm:gap-0 sm:overflow-hidden sm:py-0",
                 )}
             >
                 <section
                     className={cn(
                         "flex min-h-0 flex-col",
-                        multiple && "sm:pr-5",
+                        multiple && "sm:py-4 sm:pr-5",
                     )}
                     aria-labelledby={`${id}-tree-title`}
                     aria-busy={loading}
                 >
-                    <h3 id={`${id}-tree-title`} className="mb-3 font-semibold">
+                    <h3
+                        id={`${id}-tree-title`}
+                        className="mb-2.5 font-semibold"
+                    >
                         组织架构
                     </h3>
-                    <div className="h-80 min-h-0 overflow-auto pb-4 sm:h-[min(26rem,45dvh)]">
+                    <div className="h-72 min-h-0 overflow-auto sm:h-[min(24rem,45dvh)]">
                         {error ? (
-                            <div
-                                role="alert"
-                                className="space-y-3 px-3 py-10 text-center text-body-compact"
-                            >
-                                <p className="text-destructive">{error}</p>
-                                {onRetry && (
-                                    <Button
-                                        id={`${id}-retry`}
-                                        type="button"
-                                        variant="outline"
-                                        disabled={loading}
-                                        onClick={onRetry}
-                                    >
-                                        重新加载
-                                    </Button>
-                                )}
-                            </div>
+                            <BusinessFailureState
+                                kind="system"
+                                title="人员加载失败"
+                                description={error}
+                                action={
+                                    onRetry ? (
+                                        <Button
+                                            id={`${id}-retry`}
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={loading}
+                                            onClick={onRetry}
+                                        >
+                                            重新加载
+                                        </Button>
+                                    ) : undefined
+                                }
+                            />
                         ) : loading ? (
-                            <p
+                            <div
                                 role="status"
-                                className="py-10 text-center text-muted-foreground"
+                                className="flex items-center justify-center gap-2 py-10 text-muted-foreground"
                             >
-                                正在加载人员…
-                            </p>
+                                <Spinner aria-hidden="true" />
+                                <span>正在加载人员…</span>
+                            </div>
                         ) : !hasResults ? (
-                            <p
-                                role="status"
-                                className="py-10 text-center text-muted-foreground"
-                            >
-                                {query.trim()
-                                    ? "没有符合条件的人员或部门"
-                                    : "暂无可选择的人员"}
-                            </p>
+                            <BusinessEmptyState
+                                kind={query.trim() ? "filter" : "no-data"}
+                                title={
+                                    query.trim()
+                                        ? "没有符合条件的人员或部门"
+                                        : "暂无可选择的人员"
+                                }
+                                description={
+                                    query.trim()
+                                        ? "没有符合当前关键词的人员或部门，请更换关键词或清除搜索。"
+                                        : "当前范围内没有可选择的人员。"
+                                }
+                                className="py-8"
+                            />
                         ) : multiple ? (
                             tree
                         ) : (
@@ -292,16 +310,16 @@ function PersonPickerSession(props: PersonPickerDialogProps) {
                 </section>
                 {multiple && (
                     <section
-                        className="flex min-h-0 flex-col border-t pt-4 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-5"
+                        className="flex min-h-0 flex-col border-t border-border/60 pt-4 sm:border-t-0 sm:border-l sm:py-4 sm:pl-5"
                         aria-labelledby={`${id}-selected-title`}
                     >
-                        <div className="mb-3 flex items-center justify-between gap-2">
+                        <div className="mb-2.5 flex items-center justify-between gap-2">
                             <h3
                                 id={`${id}-selected-title`}
                                 className="font-semibold"
                             >
                                 已选人员{" "}
-                                <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
+                                <span className="num ml-1 rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
                                     {draft.length}
                                 </span>
                             </h3>
@@ -316,78 +334,107 @@ function PersonPickerSession(props: PersonPickerDialogProps) {
                                 {listFilterText.clear}
                             </Button>
                         </div>
-                        <ul className="max-h-60 min-h-0 divide-y overflow-auto pb-4 sm:max-h-none sm:flex-1">
-                            {draft.map((personId) => {
-                                const person = model.byId.get(personId)
-                                const name =
-                                    person?.name ||
-                                    (busy ? "正在核对人员" : "人员信息不可用")
-                                return (
-                                    <li
-                                        key={personId}
-                                        className="flex items-center gap-3 py-3"
-                                    >
-                                        <Avatar aria-hidden="true">
-                                            <AvatarFallback>
-                                                {person?.name.slice(0, 1) || (
-                                                    <UsersIcon className="size-4" />
-                                                )}
-                                            </AvatarFallback>
-                                        </Avatar>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="break-words font-medium">
-                                                {name}
-                                            </p>
-                                            <p className="mt-0.5 break-words text-xs text-muted-foreground">
-                                                {person
-                                                    ? model.departmentLabel(
-                                                          person,
-                                                      )
-                                                    : busy
-                                                      ? "人员信息加载后可核对"
-                                                      : "请移除后重新选择"}
-                                            </p>
-                                            {person?.disabled && (
-                                                <p className="mt-0.5 text-xs text-destructive">
-                                                    {person.disabledReason ||
-                                                        "不可选择"}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <Button
-                                            id={itemId("remove", personId)}
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon-sm"
-                                            aria-label={`移除${name}`}
-                                            onClick={() => remove(personId)}
-                                        >
-                                            <XIcon />
-                                        </Button>
-                                    </li>
-                                )
-                            })}
-                            {!draft.length && (
-                                <li className="py-10 text-center text-muted-foreground">
-                                    请从组织架构中选择人员
-                                </li>
+                        <div className="max-h-60 min-h-0 overflow-auto sm:h-[min(24rem,45dvh)] sm:max-h-none">
+                            {draft.length > 0 ? (
+                                <ul className="divide-y divide-border/60">
+                                    {draft.map((personId) => {
+                                        const person = model.byId.get(personId)
+                                        const name =
+                                            person?.name ||
+                                            (busy
+                                                ? "正在核对人员"
+                                                : "人员信息不可用")
+                                        return (
+                                            <li
+                                                key={personId}
+                                                className="flex items-center gap-2.5 py-2"
+                                            >
+                                                <Avatar
+                                                    size="sm"
+                                                    aria-hidden="true"
+                                                >
+                                                    <AvatarFallback>
+                                                        {person?.name.slice(
+                                                            0,
+                                                            1,
+                                                        ) || (
+                                                            <UsersIcon className="size-3.5" />
+                                                        )}
+                                                    </AvatarFallback>
+                                                </Avatar>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="break-words font-medium">
+                                                        {name}
+                                                    </p>
+                                                    <p className="mt-0.5 break-words text-xs text-muted-foreground">
+                                                        {person
+                                                            ? model.departmentLabel(
+                                                                  person,
+                                                              )
+                                                            : busy
+                                                              ? "人员信息加载后可核对"
+                                                              : "请移除后重新选择"}
+                                                    </p>
+                                                    {person?.disabled && (
+                                                        <p className="mt-0.5 text-xs text-destructive">
+                                                            {person.disabledReason ||
+                                                                "不可选择"}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <Button
+                                                    id={itemId(
+                                                        "remove",
+                                                        personId,
+                                                    )}
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon-xs"
+                                                    aria-label={`移除${name}`}
+                                                    onClick={() =>
+                                                        remove(personId)
+                                                    }
+                                                >
+                                                    <XIcon aria-hidden="true" />
+                                                </Button>
+                                            </li>
+                                        )
+                                    })}
+                                </ul>
+                            ) : (
+                                <BusinessEmptyState
+                                    kind="no-data"
+                                    icon={UsersIcon}
+                                    title="尚未选择人员"
+                                    description="请从组织架构中选择人员"
+                                    className="py-8"
+                                />
                             )}
-                        </ul>
+                        </div>
                     </section>
                 )}
-            </div>
+            </DialogBody>
             {!busy && invalidSelection && (
-                <p role="alert" className="px-6 pt-3 text-xs text-destructive">
+                <p
+                    role="alert"
+                    className="shrink-0 border-t border-destructive-border bg-destructive-soft/75 px-overlay-padding py-2 text-xs text-destructive-soft-foreground"
+                >
                     部分已选人员不可用，请移除或重新选择后确认。
                 </p>
             )}
-            <div className="mx-6 mt-4 flex flex-wrap items-center justify-between gap-3 border-t py-4">
+            <DialogFooter className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div
                     className="min-w-0 flex-1 text-body-compact"
                     aria-live="polite"
                 >
                     {multiple ? (
-                        `已选择 ${draft.length} 人`
+                        <span>
+                            已选择{" "}
+                            <span className="num font-medium">
+                                {draft.length}
+                            </span>{" "}
+                            人
+                        </span>
                     ) : draft.length ? (
                         <div className="flex items-center gap-2">
                             <div className="min-w-0">
@@ -408,11 +455,11 @@ function PersonPickerSession(props: PersonPickerDialogProps) {
                                 id={`${id}-clear`}
                                 type="button"
                                 variant="ghost"
-                                size="icon-sm"
+                                size="icon-xs"
                                 aria-label="清除已选人员"
                                 onClick={() => setDraft([])}
                             >
-                                <XIcon />
+                                <XIcon aria-hidden="true" />
                             </Button>
                         </div>
                     ) : (
@@ -421,7 +468,7 @@ function PersonPickerSession(props: PersonPickerDialogProps) {
                         </span>
                     )}
                 </div>
-                <div className="ml-auto flex items-center gap-2">
+                <div className="ml-auto flex shrink-0 items-center gap-2">
                     <Button
                         id={`${id}-cancel`}
                         type="button"
@@ -442,10 +489,17 @@ function PersonPickerSession(props: PersonPickerDialogProps) {
                             props.onOpenChange(false)
                         }}
                     >
-                        {multiple ? `确认选择（${draft.length}）` : "确认选择"}
+                        {multiple ? (
+                            <>
+                                确认选择（
+                                <span className="num">{draft.length}</span>）
+                            </>
+                        ) : (
+                            "确认选择"
+                        )}
                     </Button>
                 </div>
-            </div>
+            </DialogFooter>
         </DialogContent>
     )
 }

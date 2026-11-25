@@ -1,9 +1,13 @@
 "use client"
 
 import * as React from "react"
+import { useStore } from "@tanstack/react-form"
+import { CircleAlertIcon, TriangleAlertIcon } from "lucide-react"
 import { z } from "zod"
-import { useAppForm } from "@/components/form"
+import { toFieldErrors, useAppForm } from "@/components/form"
+import { ReasonTextareaField } from "@/components/business/reason-textarea-field"
 import { MoneyValue } from "@/components/business/values"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
@@ -17,8 +21,20 @@ import {
 import { SubmissionResultUnknownError } from "@/lib/submission-result"
 import { compareDecimal, parseDecimal } from "@/lib/fixed-decimal"
 import { getErrorMessage } from "@/lib/api/errors"
+import {
+    BPM_REASON_MAX_UTF8_BYTES,
+    bpmReasonSchema,
+} from "@/lib/validation/reason-length"
 
-const schema = z.object({ reason: z.string().trim().min(1, "请填写原因") })
+const schema = z.object({
+    reason: bpmReasonSchema({ required: true, label: "原因" }),
+})
+
+function firstFieldErrorMessage(
+    errors: unknown[] | undefined,
+): string | undefined {
+    return toFieldErrors(errors).find((item) => item?.message)?.message
+}
 
 /** Keep source, amount, reason and final submission in one modal; amount editing is opt-in. */
 export function FinancialRequestDialog({
@@ -94,15 +110,31 @@ export function FinancialRequestDialog({
             }
         },
     })
+    const wasOpenRef = React.useRef(false)
+    const initialAmountRef = React.useRef(amount)
     React.useEffect(() => {
-        if (!open) return
-        form.reset({ reason: "", refundAmount: amount ?? "" })
+        initialAmountRef.current = amount
+    }, [amount])
+    React.useEffect(() => {
+        const opening = open && !wasOpenRef.current
+        wasOpenRef.current = open
+        if (!opening) return
+        form.reset({ reason: "", refundAmount: initialAmountRef.current ?? "" })
         setError(null)
         setUnknown(false)
-    }, [open, sourceLabel, amount, form])
+    }, [open, form])
+    const submissionAttempts = useStore(
+        form.store,
+        (state) => state.submissionAttempts,
+    )
     const close = () => {
         if (!pending && !submitting.current && !unknown) onOpenChange(false)
     }
+    const handleCtrlEnterSubmit = React.useCallback(() => {
+        if (!pending && !unknown && !submitting.current) {
+            void form.handleSubmit()
+        }
+    }, [form, pending, unknown])
     return (
         <Dialog
             open={open}
@@ -129,9 +161,11 @@ export function FinancialRequestDialog({
                 >
                     <DialogBody className="space-y-4">
                         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-lg bg-muted/50 p-3 text-body-compact">
-                            <dt className="text-muted-foreground">原单</dt>
-                            <dd>{sourceLabel || "—"}</dd>
-                            <dt className="text-muted-foreground">
+                            <dt className="text-xs font-medium text-muted-foreground">
+                                原单
+                            </dt>
+                            <dd className="num">{sourceLabel || "—"}</dd>
+                            <dt className="text-xs font-medium text-muted-foreground">
                                 {editableAmount ? "可退金额上限" : "全额金额"}
                             </dt>
                             <dd>
@@ -158,34 +192,47 @@ export function FinancialRequestDialog({
                                 )}
                             />
                         ) : null}
-                        <form.AppField
+                        <form.Field
                             name="reason"
                             children={(field) => (
-                                <field.TextareaField
+                                <ReasonTextareaField
                                     id={`${id}-reason`}
+                                    name={field.name}
+                                    mode="utf8-bytes"
+                                    max={BPM_REASON_MAX_UTF8_BYTES}
                                     label="原因"
                                     required
                                     disabled={pending || unknown}
                                     placeholder="说明本次退款或纠错原因"
+                                    value={field.state.value}
+                                    onChange={field.handleChange}
+                                    onBlur={field.handleBlur}
+                                    error={
+                                        field.state.meta.isTouched ||
+                                        submissionAttempts > 0
+                                            ? firstFieldErrorMessage(
+                                                  field.state.meta.errors,
+                                              )
+                                            : undefined
+                                    }
+                                    onCtrlEnterSubmit={handleCtrlEnterSubmit}
                                 />
                             )}
                         />
                         {approvalContent}
                         {error ? (
-                            <p
-                                role="alert"
-                                className="text-body-compact text-destructive"
-                            >
-                                {error}
-                            </p>
+                            <Alert variant="destructive">
+                                <TriangleAlertIcon aria-hidden="true" />
+                                <AlertDescription>{error}</AlertDescription>
+                            </Alert>
                         ) : null}
                         {unknown ? (
-                            <p
-                                role="status"
-                                className="text-body-compact text-muted-foreground"
-                            >
-                                提交结果尚未确定，请保持原内容并核对结果。
-                            </p>
+                            <Alert variant="warning">
+                                <CircleAlertIcon aria-hidden="true" />
+                                <AlertDescription>
+                                    提交结果尚未确定，请保持原内容并核对结果。
+                                </AlertDescription>
+                            </Alert>
                         ) : null}
                     </DialogBody>
                     <DialogFooter>

@@ -105,35 +105,38 @@ function BatchImpactPreview({
 
             <CardContent className="space-y-4">
                 <dl className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-xl border border-border bg-muted p-4">
-                        <dt className="flex items-center gap-2 text-body-compact font-medium text-foreground">
-                            <FilterIcon aria-hidden="true" className="size-4" />
+                    <div className="rounded-lg border border-border bg-muted p-4">
+                        <dt className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                            <FilterIcon
+                                aria-hidden="true"
+                                className="size-3.5"
+                            />
                             当前筛选
                         </dt>
-                        <dd className="mt-2 text-body-compact text-muted-foreground">
+                        <dd className="mt-2 text-body-compact text-foreground">
                             {filterSummary}
                         </dd>
                     </div>
-                    <div className="rounded-xl border border-border bg-muted p-4">
-                        <dt className="flex items-center gap-2 text-body-compact font-medium text-foreground">
+                    <div className="rounded-lg border border-border bg-muted p-4">
+                        <dt className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                             <ShieldCheckIcon
                                 aria-hidden="true"
-                                className="size-4"
+                                className="size-3.5"
                             />
                             选择范围
                         </dt>
-                        <dd className="mt-2 text-body-compact text-muted-foreground">
+                        <dd className="mt-2 text-body-compact text-foreground">
                             {selectionScope}
                         </dd>
                     </div>
                 </dl>
 
-                <dl className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3">
+                <dl className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3">
                     <div className="bg-card p-4">
-                        <dt className="flex items-center gap-2 text-body-compact text-muted-foreground">
+                        <dt className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                             <ListChecksIcon
                                 aria-hidden="true"
-                                className="size-4"
+                                className="size-3.5"
                             />
                             {estimatedLabel}
                         </dt>
@@ -142,10 +145,10 @@ function BatchImpactPreview({
                         </dd>
                     </div>
                     <div className="bg-card p-4">
-                        <dt className="flex items-center gap-2 text-body-compact text-muted-foreground">
+                        <dt className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                             <CircleCheckIcon
                                 aria-hidden="true"
-                                className="size-4"
+                                className="size-3.5"
                             />
                             {processableLabel}
                         </dt>
@@ -154,10 +157,10 @@ function BatchImpactPreview({
                         </dd>
                     </div>
                     <div className="bg-card p-4">
-                        <dt className="flex items-center gap-2 text-body-compact text-muted-foreground">
+                        <dt className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                             <TriangleAlertIcon
                                 aria-hidden="true"
-                                className="size-4"
+                                className="size-3.5"
                             />
                             {skippedLabel}
                         </dt>
@@ -165,7 +168,7 @@ function BatchImpactPreview({
                             {skipped.toLocaleString("zh-CN")}
                         </dd>
                         {skippedReason != null ? (
-                            <div className="mt-2 text-body-compact text-muted-foreground">
+                            <div className="mt-2 text-xs text-muted-foreground">
                                 {skippedReason}
                             </div>
                         ) : null}
@@ -253,9 +256,9 @@ function ConflictResolutionDialog({
         >
             {trigger ? <DialogTrigger render={trigger} /> : null}
             <DialogContent
+                size="lg"
                 closeButtonId={`${baseId}-close`}
                 showCloseButton={!isPending}
-                className="sm:max-w-2xl"
             >
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
@@ -270,8 +273,8 @@ function ConflictResolutionDialog({
 
                 <div className="space-y-4">
                     <dl className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-xl border border-border bg-muted p-4">
-                            <dt className="text-body-compact font-medium text-muted-foreground">
+                        <div className="rounded-lg border border-border bg-muted p-4">
+                            <dt className="text-xs font-medium text-muted-foreground">
                                 当前系统版本
                             </dt>
                             <dd className="mt-2 flex flex-wrap items-center gap-2">
@@ -285,8 +288,8 @@ function ConflictResolutionDialog({
                                 </span>
                             </dd>
                         </div>
-                        <div className="rounded-xl border border-border bg-muted p-4">
-                            <dt className="text-body-compact font-medium text-muted-foreground">
+                        <div className="rounded-lg border border-border bg-muted p-4">
+                            <dt className="text-xs font-medium text-muted-foreground">
                                 你输入的内容版本
                             </dt>
                             <dd className="mt-2 flex flex-wrap items-center gap-2">
@@ -326,7 +329,7 @@ function ConflictResolutionDialog({
                             />
                             版本差异
                         </h3>
-                        <div className="mt-2 rounded-xl border border-border bg-card p-4">
+                        <div className="mt-2 rounded-lg border border-border bg-card p-4">
                             {diff}
                         </div>
                     </section>

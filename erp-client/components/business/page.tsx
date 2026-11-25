@@ -26,7 +26,7 @@ function MetricDetailTooltip({
             <Tooltip>
                 <TooltipTrigger
                     render={
-                        <span className="inline-flex cursor-help rounded-sm underline decoration-dotted decoration-muted-foreground/60 underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                        <span className="inline-flex cursor-help rounded-sm underline decoration-dotted decoration-muted-foreground/60 underline-offset-2 outline-none focus-visible:ring-3 focus-visible:ring-ring" />
                     }
                 >
                     {children}
@@ -204,7 +204,7 @@ function MetricItem({
                     {value}
                 </div>
                 {showInlineDetail ? (
-                    <span className="text-xs leading-relaxed text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                         {detail}
                     </span>
                 ) : null}

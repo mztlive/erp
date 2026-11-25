@@ -2,9 +2,11 @@
 
 import * as React from "react"
 import {
+    CheckIcon,
     CircleCheckIcon,
     CircleDashedIcon,
     CircleXIcon,
+    CopyIcon,
     EyeIcon,
     EyeOffIcon,
     LoaderCircleIcon,
@@ -33,6 +35,7 @@ import {
     ProgressValue,
 } from "@/components/ui/progress"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
+import { toast } from "@/components/ui/toast"
 import { resultText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 import {
@@ -232,12 +235,11 @@ function ValidationSummary({
 }
 
 /**
- * 页面通用「表单动作结果」状态，用 optional 吸收各页面历史变体：
- * - facts：部分页面 value 为 string，部分为 ReactNode
- * - outcome：随各业务域类型参数化（默认 unknown）
- * - 扩展字段（pendingIdempotencyKey / jobId / w12Href / returnTo 等）均为可选
+ * 页面通用「表单动作结果」核心结构。
+ * 统一以 `pendingIdempotencyKey` 承接未知结果的幂等核对键；
+ * 各业务域如需扩展额外元数据，可通过第二个泛型参数 `TExtra` 声明。
  */
-type ResultState<TOutcome = unknown> = {
+type ResultStateBase<TOutcome = unknown> = {
     status:
         | "succeeded"
         | "failed"
@@ -248,21 +250,34 @@ type ResultState<TOutcome = unknown> = {
     title: string
     description: string
     reference?: string
-    facts?: Array<{ label: string; value: string | React.ReactNode }>
+    facts?: Array<{ label: string; value: React.ReactNode }>
     pendingIdempotencyKey?: string
-    pendingRequestId?: string
-    pendingKey?: string
     outcome?: TOutcome
     stayOnItem?: boolean
-    terminal?: boolean
-    jobId?: string
-    jobNo?: string
-    payableNo?: string
-    w12Href?: string
     returnTo?: string
-    w29Href?: string
-    stayUnknown?: boolean
-} | null
+}
+
+/**
+ * 历史页面私有/重名字段兼容层（供存量 `features/*` 过渡期编译兼容，新页面请通过 `ResultState<TOutcome, TExtra>` 自行扩展）。
+ * 已清理零引用死字段 `pendingRequestId` / `terminal` / `w29Href` / `stayUnknown`。
+ */
+type LegacyResultStateExtra = {
+    /** @deprecated 请改用 `pendingIdempotencyKey`（存量 `customer-receivables` 迁移后移除）。 */
+    pendingKey?: string
+    /** @deprecated 业务私有字段（存量 `supplier-api-connections` 迁移后移除）。 */
+    jobId?: string
+    /** @deprecated 业务私有字段（存量 `supplier-api-connections` 迁移后移除）。 */
+    jobNo?: string
+    /** @deprecated 业务私有字段（存量 `supplier-settlements` 迁移后移除）。 */
+    payableNo?: string
+    /** @deprecated 业务私有字段（存量 `supplier-settlements` 迁移后移除）。 */
+    w12Href?: string
+}
+
+type ResultState<
+    TOutcome = unknown,
+    TExtra extends Record<string, unknown> = LegacyResultStateExtra,
+> = (ResultStateBase<TOutcome> & TExtra) | null
 
 type FormalActionResultStatus =
     | "succeeded"
@@ -484,7 +499,7 @@ function BackgroundJobProgress({
             data-status={status}
             aria-live="polite"
             className={cn(
-                "flex flex-col gap-4 rounded-2xl border bg-card p-4 text-body-compact",
+                "flex flex-col gap-4 rounded-lg border bg-card p-4 text-body-compact",
                 className,
             )}
         >
@@ -524,15 +539,15 @@ function BackgroundJobProgress({
 
             {mode === "partialAllowed" ? (
                 <dl className="grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-2xl bg-success-soft p-2 text-success-soft-foreground">
+                    <div className="rounded-md bg-success-soft p-2 text-success-soft-foreground">
                         <dt className="text-xs">成功</dt>
                         <dd className="num font-medium">{successCount}</dd>
                     </div>
-                    <div className="rounded-2xl bg-neutral-soft p-2 text-neutral-soft-foreground">
+                    <div className="rounded-md bg-neutral-soft p-2 text-neutral-soft-foreground">
                         <dt className="text-xs">跳过</dt>
                         <dd className="num font-medium">{skippedCount}</dd>
                     </div>
-                    <div className="rounded-2xl bg-destructive-soft p-2 text-destructive-soft-foreground">
+                    <div className="rounded-md bg-destructive-soft p-2 text-destructive-soft-foreground">
                         <dt className="text-xs">失败</dt>
                         <dd className="num font-medium">{failedCount}</dd>
                     </div>
@@ -550,6 +565,8 @@ type SensitiveValueProps = {
     maskedValue: string
     label?: string
     onReveal?: () => Promise<string>
+    /** 是否展示一键复制按钮（仅在存在 `onReveal` 权限回调时生效，避免复制脱敏占位文本）。默认 `true`。 */
+    copyable?: boolean
     autoHideAfterMs?: number
     className?: string
     id?: string
@@ -557,14 +574,17 @@ type SensitiveValueProps = {
 }
 
 const defaultSensitiveValueAutoHideMs = 15_000
+const sensitiveValueCopiedResetMs = 2_000
 
 /**
- * 敏感值默认只接收脱敏文本。明文只能在用户主动操作后异步取得，并按时清除本地状态。
+ * 敏感值默认只接收脱敏文本。明文只能在用户主动操作后异步取得，并按时清除本地状态；
+ * 具备查看权限时同步提供一键复制（始终复制明文而非脱敏占位文本）。
  */
 function SensitiveValue({
     maskedValue,
     label = "敏感信息",
     onReveal,
+    copyable = true,
     autoHideAfterMs = defaultSensitiveValueAutoHideMs,
     className,
     id,
@@ -575,14 +595,25 @@ function SensitiveValue({
         null,
     )
     const [isRevealing, setIsRevealing] = React.useState(false)
+    const [isCopying, setIsCopying] = React.useState(false)
+    const [copied, setCopied] = React.useState(false)
     const [revealFailed, setRevealFailed] = React.useState(false)
     const requestSequence = React.useRef(0)
+    const copiedTimerRef = React.useRef<number | null>(null)
+
+    const clearCopiedTimer = React.useCallback(() => {
+        if (copiedTimerRef.current !== null) {
+            window.clearTimeout(copiedTimerRef.current)
+            copiedTimerRef.current = null
+        }
+    }, [])
 
     React.useEffect(() => {
         return () => {
             requestSequence.current += 1
+            clearCopiedTimer()
         }
-    }, [])
+    }, [clearCopiedTimer])
 
     React.useEffect(() => {
         if (revealedValue === null || autoHideAfterMs <= 0) return
@@ -597,9 +628,12 @@ function SensitiveValue({
 
     const hide = () => {
         requestSequence.current += 1
+        clearCopiedTimer()
         setRevealedValue(null)
         setRevealFailed(false)
         setIsRevealing(false)
+        setIsCopying(false)
+        setCopied(false)
     }
 
     const reveal = async () => {
@@ -626,6 +660,64 @@ function SensitiveValue({
         }
     }
 
+    const copy = async () => {
+        if (!onReveal || isCopying || isRevealing) return
+
+        const request = requestSequence.current + 1
+        requestSequence.current = request
+        setIsCopying(true)
+        setRevealFailed(false)
+
+        let plainText: string
+        try {
+            plainText = revealedValue ?? (await onReveal())
+        } catch {
+            if (requestSequence.current === request) {
+                setRevealFailed(true)
+                setIsCopying(false)
+            }
+            return
+        }
+
+        if (requestSequence.current !== request) return
+
+        if (typeof navigator === "undefined" || !navigator.clipboard) {
+            setRevealedValue(plainText)
+            setIsCopying(false)
+            toast.add({
+                title: "当前环境不支持一键复制，已显示明文请手动复制",
+                type: "warning",
+            })
+            return
+        }
+
+        try {
+            await navigator.clipboard.writeText(plainText)
+            if (requestSequence.current !== request) return
+            setCopied(true)
+            clearCopiedTimer()
+            copiedTimerRef.current = window.setTimeout(() => {
+                setCopied(false)
+                copiedTimerRef.current = null
+            }, sensitiveValueCopiedResetMs)
+            toast.add({
+                title: `已复制${label}`,
+                type: "success",
+            })
+        } catch {
+            if (requestSequence.current !== request) return
+            setRevealedValue(plainText)
+            toast.add({
+                title: "复制失败，已显示明文请手动选中复制",
+                type: "error",
+            })
+        } finally {
+            if (requestSequence.current === request) {
+                setIsCopying(false)
+            }
+        }
+    }
+
     const isRevealed = revealedValue !== null
     const displayValue = isRevealed ? revealedValue : maskedValue
 
@@ -639,37 +731,75 @@ function SensitiveValue({
             )}
         >
             <span className="sr-only">{label}：</span>
-            <code className="num rounded-xl bg-muted px-2 py-1 font-mono text-body-compact">
+            <code
+                className={cn(
+                    "num rounded-md bg-muted px-2 py-1 font-mono text-body-compact",
+                    isRevealed && "select-all",
+                )}
+            >
                 {displayValue}
             </code>
             {onReveal ? (
-                <Button
-                    id={baseId ? `${baseId}-toggle` : undefined}
-                    type="button"
-                    variant="ghost"
-                    size="xs"
-                    aria-pressed={isRevealed}
-                    aria-label={isRevealed ? `隐藏${label}` : `显示${label}`}
-                    disabled={isRevealing}
-                    onClick={() => {
-                        if (isRevealed) {
-                            hide()
-                            return
+                <>
+                    <Button
+                        id={baseId ? `${baseId}-toggle` : undefined}
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        aria-pressed={isRevealed}
+                        aria-label={
+                            isRevealed ? `隐藏${label}` : `显示${label}`
                         }
+                        disabled={isRevealing || isCopying}
+                        onClick={() => {
+                            if (isRevealed) {
+                                hide()
+                                return
+                            }
 
-                        void reveal()
-                    }}
-                >
-                    {isRevealed ? (
-                        <EyeOffIcon
-                            data-icon="inline-start"
-                            aria-hidden="true"
-                        />
-                    ) : (
-                        <EyeIcon data-icon="inline-start" aria-hidden="true" />
-                    )}
-                    {isRevealing ? "读取中" : isRevealed ? "隐藏" : "显示"}
-                </Button>
+                            void reveal()
+                        }}
+                    >
+                        {isRevealed ? (
+                            <EyeOffIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                        ) : (
+                            <EyeIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
+                        )}
+                        {isRevealing ? "读取中" : isRevealed ? "隐藏" : "显示"}
+                    </Button>
+                    {copyable ? (
+                        <Button
+                            id={baseId ? `${baseId}-copy` : undefined}
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            aria-label={`复制${label}`}
+                            disabled={isRevealing || isCopying}
+                            onClick={() => {
+                                void copy()
+                            }}
+                        >
+                            {copied ? (
+                                <CheckIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                            ) : (
+                                <CopyIcon
+                                    data-icon="inline-start"
+                                    aria-hidden="true"
+                                />
+                            )}
+                            {isCopying ? "复制中" : copied ? "已复制" : "复制"}
+                        </Button>
+                    ) : null}
+                </>
             ) : (
                 <LockKeyholeIcon
                     className="size-4 text-muted-foreground"
@@ -678,7 +808,11 @@ function SensitiveValue({
             )}
             {isRevealed && autoHideAfterMs > 0 ? (
                 <span className="text-xs text-muted-foreground">
-                    将在 {Math.ceil(autoHideAfterMs / 1000)} 秒后自动隐藏
+                    将在{" "}
+                    <span className="num">
+                        {Math.ceil(autoHideAfterMs / 1000)}
+                    </span>{" "}
+                    秒后自动隐藏
                 </span>
             ) : null}
             {revealFailed ? (
@@ -785,7 +919,9 @@ export {
     type FormalActionResultProps,
     type FormalActionResultStatus,
     type GuardedBusinessActionProps,
+    type LegacyResultStateExtra,
     type ResultState,
+    type ResultStateBase,
     type SensitiveValueProps,
     type ValidationIssue,
     type ValidationSummaryProps,

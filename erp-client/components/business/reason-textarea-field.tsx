@@ -3,7 +3,14 @@
 import type { KeyboardEvent, Ref } from "react"
 
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
+import {
+    Field,
+    FieldDescription,
+    FieldError,
+    FieldLabel,
+} from "@/components/ui/field"
+import { Kbd, KbdGroup } from "@/components/ui/kbd"
+import { RequiredMark } from "@/components/ui/required-mark"
 import { Textarea } from "@/components/ui/textarea"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
@@ -126,16 +133,17 @@ export function ReasonTextareaField({
     }
 
     return (
-        <div className={cn("flex w-full flex-col gap-2", className)}>
+        <Field
+            data-slot="reason-textarea-field"
+            data-invalid={isInvalid || undefined}
+            data-disabled={disabled ? "true" : undefined}
+            className={cn("gap-2", className)}
+        >
             {label ? (
-                <Label htmlFor={id} className="gap-1">
+                <FieldLabel htmlFor={id}>
                     <span>{label}</span>
-                    {required ? (
-                        <span aria-hidden="true" className="text-destructive">
-                            *
-                        </span>
-                    ) : null}
-                </Label>
+                    {required ? <RequiredMark /> : null}
+                </FieldLabel>
             ) : null}
 
             {uniquePhrases.length > 0 ? (
@@ -179,24 +187,24 @@ export function ReasonTextareaField({
             />
 
             {description ? (
-                <p id={descriptionId} className="text-xs text-muted-foreground">
+                <FieldDescription id={descriptionId}>
                     {description}
-                </p>
+                </FieldDescription>
             ) : null}
 
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                 <div className="min-w-0 flex-1">
                     {error ? (
-                        <p
-                            id={errorId}
-                            role="alert"
-                            className="text-xs text-destructive"
-                        >
-                            {error}
-                        </p>
+                        <FieldError id={errorId}>{error}</FieldError>
                     ) : onCtrlEnterSubmit ? (
-                        <span className="text-xs text-muted-foreground">
-                            按 Ctrl/⌘ + Enter 快速提交
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                            <span>按</span>
+                            <KbdGroup>
+                                <Kbd>Ctrl/⌘</Kbd>
+                                <span>+</span>
+                                <Kbd>Enter</Kbd>
+                            </KbdGroup>
+                            <span>快速提交</span>
                         </span>
                     ) : null}
                 </div>
@@ -215,6 +223,6 @@ export function ReasonTextareaField({
                     {counterText}
                 </span>
             </div>
-        </div>
+        </Field>
     )
 }

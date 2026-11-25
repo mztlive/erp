@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query"
 import { useStore } from "@tanstack/react-form"
+import { CircleAlertIcon, TriangleAlertIcon } from "lucide-react"
 import { z } from "zod"
 
 import { ReasonTextareaField } from "@/components/business/reason-textarea-field"
@@ -11,6 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
     DialogClose,
     DialogContent,
     DialogDescription,
@@ -625,27 +627,46 @@ export function WorkItemResponsibilityDialog({
         (option) => option.code === formValues.reasonCode,
     )
 
-    const resolvedTitle =
+    const resolvedTitle: React.ReactNode =
         title ??
-        (mode === "reassign"
-            ? isBatch
-                ? `批量转交 ${targets.length} 项任务`
-                : "转交任务"
-            : isBatch
-              ? `批量关闭 ${targets.length} 项任务`
-              : "关闭任务")
+        (mode === "reassign" ? (
+            isBatch ? (
+                <>
+                    批量转交 <span className="num">{targets.length}</span>{" "}
+                    项任务
+                </>
+            ) : (
+                "转交任务"
+            )
+        ) : isBatch ? (
+            <>
+                批量关闭 <span className="num">{targets.length}</span> 项任务
+            </>
+        ) : (
+            "关闭任务"
+        ))
 
-    const resolvedDescription =
+    const resolvedDescription: React.ReactNode =
         description ??
-        (mode === "reassign"
-            ? singleTarget?.currentOwnerLabel
-                ? `当前责任人：${singleTarget.currentOwnerLabel}。请从符合处理资格的人员中选择新责任人并填写转交原因。`
-                : isBatch
-                  ? `已选择 ${targets.length} 项任务，仅可转交给同时具备全部所选任务处理权限的接收人。`
-                  : "请从符合处理资格的人员中选择新责任人并填写转交原因。"
-            : isBatch
-              ? `已选择 ${targets.length} 项任务。关闭后任务将退出待处理队列，原业务记录保持不变；重复任务合并请单条关闭。`
-              : "受控关闭仅终结无效异常任务，不改变已登记的业务记录。")
+        (mode === "reassign" ? (
+            singleTarget?.currentOwnerLabel ? (
+                `当前责任人：${singleTarget.currentOwnerLabel}。请从符合处理资格的人员中选择新责任人并填写转交原因。`
+            ) : isBatch ? (
+                <>
+                    已选择 <span className="num">{targets.length}</span>{" "}
+                    项任务，仅可转交给同时具备全部所选任务处理权限的接收人。
+                </>
+            ) : (
+                "请从符合处理资格的人员中选择新责任人并填写转交原因。"
+            )
+        ) : isBatch ? (
+            <>
+                已选择 <span className="num">{targets.length}</span>{" "}
+                项任务。关闭后任务将退出待处理队列，原业务记录保持不变；重复任务合并请单条关闭。
+            </>
+        ) : (
+            "受控关闭仅终结无效异常任务，不改变已登记的业务记录。"
+        ))
 
     const canSubmitReassign =
         mode === "reassign" &&
@@ -698,6 +719,8 @@ export function WorkItemResponsibilityDialog({
         >
             <DialogContent
                 id={`${resolvedPrefix}-dialog${idSuffix}`}
+                size="md"
+                scroll="body"
                 closeButtonId={`${resolvedPrefix}-close${idSuffix}`}
                 showCloseButton={!batchMutation.isPending}
             >
@@ -707,222 +730,244 @@ export function WorkItemResponsibilityDialog({
                 </DialogHeader>
 
                 <form
-                    className="space-y-4"
+                    className="flex min-h-0 flex-1 flex-col overflow-hidden"
                     onSubmit={(event) => {
                         event.preventDefault()
                         void form.handleSubmit()
                     }}
                 >
-                    {isBatch ? (
-                        <div className="rounded-md border border-border/70 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                            <p className="font-medium text-foreground">
-                                待处理目标（{targets.length} 项）
-                            </p>
-                            <ul className="mt-1 max-h-24 space-y-0.5 overflow-y-auto">
-                                {targets.map((target) => (
-                                    <li
-                                        key={target.workItemId}
-                                        className="truncate"
-                                        title={target.label}
-                                    >
-                                        {target.label}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    ) : null}
-
-                    {candidateErrorQuery ? (
-                        <Alert variant="destructive">
-                            <AlertTitle>候选人员加载失败</AlertTitle>
-                            <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
-                                <span>
-                                    {getErrorMessage(
-                                        candidateErrorQuery.error,
-                                        "请刷新候选人员后重试",
-                                    )}
-                                </span>
-                                <Button
-                                    id={`${resolvedPrefix}-retry-candidates${idSuffix}`}
-                                    type="button"
-                                    size="xs"
-                                    variant="outline"
-                                    onClick={() => void refetchCandidates()}
-                                >
-                                    重新加载
-                                </Button>
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-
-                    {emptyBatchIntersection ? (
-                        <Alert variant="warning">
-                            <AlertTitle>没有共同的合格接收人</AlertTitle>
-                            <AlertDescription>
-                                所选任务的权限范围不一致，没有同时具备全部任务处理资格的接收人，请按任务类型分批转交。
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
-
-                    {submitError ? (
-                        <Alert variant="destructive">
-                            <AlertTitle>
-                                {mode === "reassign"
-                                    ? "转交未完成"
-                                    : "关闭未完成"}
-                            </AlertTitle>
-                            <AlertDescription>{submitError}</AlertDescription>
-                        </Alert>
-                    ) : null}
-
-                    {submitFailures.length > 1 ||
-                    (submitFailures.length === 1 && !submitError) ? (
-                        <Alert variant="destructive">
-                            <AlertTitle>
-                                以下 {submitFailures.length} 项未完成
-                            </AlertTitle>
-                            <AlertDescription>
-                                <ul className="mt-1 max-h-28 list-disc space-y-1 overflow-y-auto pl-4">
-                                    {submitFailures.map((failure) => (
-                                        <li key={failure.id}>
-                                            <span className="font-medium">
-                                                {failure.label}
-                                            </span>
-                                            ：{failure.message}
+                    <DialogBody className="space-y-4">
+                        {isBatch ? (
+                            <div className="rounded-md border border-border/70 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                                <p className="font-medium text-foreground">
+                                    待处理目标（
+                                    <span className="num">
+                                        {targets.length}
+                                    </span>{" "}
+                                    项）
+                                </p>
+                                <ul className="mt-1 max-h-24 space-y-0.5 overflow-y-auto">
+                                    {targets.map((target) => (
+                                        <li
+                                            key={target.workItemId}
+                                            className="truncate"
+                                            title={target.label}
+                                        >
+                                            {target.label}
                                         </li>
                                     ))}
                                 </ul>
-                            </AlertDescription>
-                        </Alert>
-                    ) : null}
+                            </div>
+                        ) : null}
 
-                    {mode === "reassign" ? (
-                        <FieldGroup>
-                            <form.AppField name="targetUserId">
-                                {(field) => (
-                                    <field.SelectField
-                                        id={`${resolvedPrefix}-target${idSuffix}`}
-                                        label="新责任人"
-                                        options={candidateOptions}
-                                        onRefresh={refetchCandidates}
-                                        placeholder="选择接收人"
-                                        emptyLabel={
-                                            isBatch
-                                                ? "暂无共同符合处理权限的员工"
-                                                : "暂无符合处理权限的员工"
-                                        }
-                                        loading={candidatesFetching}
-                                        disabled={
-                                            batchMutation.isPending ||
-                                            candidatesPending ||
-                                            emptyBatchIntersection
-                                        }
-                                        allowClear={false}
-                                        required
-                                    />
-                                )}
-                            </form.AppField>
+                        {candidateErrorQuery ? (
+                            <Alert variant="destructive">
+                                <TriangleAlertIcon aria-hidden="true" />
+                                <AlertTitle>候选人员加载失败</AlertTitle>
+                                <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+                                    <span>
+                                        {getErrorMessage(
+                                            candidateErrorQuery.error,
+                                            "请刷新候选人员后重试",
+                                        )}
+                                    </span>
+                                    <Button
+                                        id={`${resolvedPrefix}-retry-candidates${idSuffix}`}
+                                        type="button"
+                                        size="xs"
+                                        variant="outline"
+                                        onClick={() => void refetchCandidates()}
+                                    >
+                                        重新加载
+                                    </Button>
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
 
-                            <form.Field name="reason">
-                                {(field) => (
-                                    <ReasonTextareaField
-                                        id={`${resolvedPrefix}-reason${idSuffix}`}
-                                        name={field.name}
-                                        mode="chars"
-                                        max={
-                                            WORK_ITEM_REASSIGN_REASON_MAX_CHARS
-                                        }
-                                        label="转交原因"
-                                        required
-                                        rows={3}
-                                        placeholder="说明本次责任调整依据"
-                                        value={field.state.value}
-                                        onChange={field.handleChange}
-                                        onBlur={field.handleBlur}
-                                        disabled={batchMutation.isPending}
-                                        error={
-                                            field.state.meta.isTouched
-                                                ? firstFieldErrorMessage(
-                                                      field.state.meta.errors,
-                                                  )
-                                                : undefined
-                                        }
-                                        onCtrlEnterSubmit={
-                                            handleCtrlEnterSubmit
-                                        }
-                                    />
-                                )}
-                            </form.Field>
-                        </FieldGroup>
-                    ) : (
-                        <FieldGroup>
-                            <form.AppField name="reasonCode">
-                                {(field) => (
-                                    <field.SelectField
-                                        id={`${resolvedPrefix}-reason-code${idSuffix}`}
-                                        label="关闭原因"
-                                        options={closeOptionItems}
-                                        placeholder="选择关闭原因"
-                                        emptyLabel="暂无可用关闭原因"
-                                        disabled={batchMutation.isPending}
-                                        allowClear={false}
-                                        required
-                                    />
-                                )}
-                            </form.AppField>
+                        {emptyBatchIntersection ? (
+                            <Alert variant="warning">
+                                <CircleAlertIcon aria-hidden="true" />
+                                <AlertTitle>没有共同的合格接收人</AlertTitle>
+                                <AlertDescription>
+                                    所选任务的权限范围不一致，没有同时具备全部任务处理资格的接收人，请按任务类型分批转交。
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
 
-                            {selectedCloseOption?.requiresReplacement &&
-                            !isBatch ? (
-                                <form.AppField name="replacementWorkItemId">
+                        {submitError ? (
+                            <Alert variant="destructive">
+                                <TriangleAlertIcon aria-hidden="true" />
+                                <AlertTitle>
+                                    {mode === "reassign"
+                                        ? "转交未完成"
+                                        : "关闭未完成"}
+                                </AlertTitle>
+                                <AlertDescription>
+                                    {submitError}
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+
+                        {submitFailures.length > 1 ||
+                        (submitFailures.length === 1 && !submitError) ? (
+                            <Alert variant="destructive">
+                                <TriangleAlertIcon aria-hidden="true" />
+                                <AlertTitle>
+                                    以下{" "}
+                                    <span className="num">
+                                        {submitFailures.length}
+                                    </span>{" "}
+                                    项未完成
+                                </AlertTitle>
+                                <AlertDescription>
+                                    <ul className="mt-1 max-h-28 list-disc space-y-1 overflow-y-auto pl-4">
+                                        {submitFailures.map((failure) => (
+                                            <li key={failure.id}>
+                                                <span className="font-medium">
+                                                    {failure.label}
+                                                </span>
+                                                ：{failure.message}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+
+                        {mode === "reassign" ? (
+                            <FieldGroup>
+                                <form.AppField name="targetUserId">
                                     {(field) => (
-                                        <field.TextField
-                                            id={`${resolvedPrefix}-replacement${idSuffix}`}
-                                            label="替代任务编号"
-                                            placeholder="输入同类型有效替代任务的编号"
-                                            description="仅可关联同一异常类别的开放正式任务，不能填写当前任务自身。"
-                                            disabled={batchMutation.isPending}
+                                        <field.SelectField
+                                            id={`${resolvedPrefix}-target${idSuffix}`}
+                                            label="新责任人"
+                                            options={candidateOptions}
+                                            onRefresh={refetchCandidates}
+                                            placeholder="选择接收人"
+                                            emptyLabel={
+                                                isBatch
+                                                    ? "暂无共同符合处理权限的员工"
+                                                    : "暂无符合处理权限的员工"
+                                            }
+                                            loading={candidatesFetching}
+                                            disabled={
+                                                batchMutation.isPending ||
+                                                candidatesPending ||
+                                                emptyBatchIntersection
+                                            }
+                                            allowClear={false}
                                             required
                                         />
                                     )}
                                 </form.AppField>
-                            ) : null}
 
-                            <form.Field name="comment">
-                                {(field) => (
-                                    <ReasonTextareaField
-                                        id={`${resolvedPrefix}-comment${idSuffix}`}
-                                        name={field.name}
-                                        mode="chars"
-                                        max={WORK_ITEM_CLOSE_COMMENT_MAX_CHARS}
-                                        label="关闭说明"
-                                        required={Boolean(
-                                            selectedCloseOption?.requiresComment,
+                                <form.Field name="reason">
+                                    {(field) => (
+                                        <ReasonTextareaField
+                                            id={`${resolvedPrefix}-reason${idSuffix}`}
+                                            name={field.name}
+                                            mode="chars"
+                                            max={
+                                                WORK_ITEM_REASSIGN_REASON_MAX_CHARS
+                                            }
+                                            label="转交原因"
+                                            required
+                                            rows={3}
+                                            placeholder="说明本次责任调整依据"
+                                            value={field.state.value}
+                                            onChange={field.handleChange}
+                                            onBlur={field.handleBlur}
+                                            disabled={batchMutation.isPending}
+                                            error={
+                                                field.state.meta.isTouched
+                                                    ? firstFieldErrorMessage(
+                                                          field.state.meta
+                                                              .errors,
+                                                      )
+                                                    : undefined
+                                            }
+                                            onCtrlEnterSubmit={
+                                                handleCtrlEnterSubmit
+                                            }
+                                        />
+                                    )}
+                                </form.Field>
+                            </FieldGroup>
+                        ) : (
+                            <FieldGroup>
+                                <form.AppField name="reasonCode">
+                                    {(field) => (
+                                        <field.SelectField
+                                            id={`${resolvedPrefix}-reason-code${idSuffix}`}
+                                            label="关闭原因"
+                                            options={closeOptionItems}
+                                            placeholder="选择关闭原因"
+                                            emptyLabel="暂无可用关闭原因"
+                                            disabled={batchMutation.isPending}
+                                            allowClear={false}
+                                            required
+                                        />
+                                    )}
+                                </form.AppField>
+
+                                {selectedCloseOption?.requiresReplacement &&
+                                !isBatch ? (
+                                    <form.AppField name="replacementWorkItemId">
+                                        {(field) => (
+                                            <field.TextField
+                                                id={`${resolvedPrefix}-replacement${idSuffix}`}
+                                                label="替代任务编号"
+                                                placeholder="输入同类型有效替代任务的编号"
+                                                description="仅可关联同一异常类别的开放正式任务，不能填写当前任务自身。"
+                                                disabled={
+                                                    batchMutation.isPending
+                                                }
+                                                required
+                                            />
                                         )}
-                                        rows={3}
-                                        placeholder={
-                                            selectedCloseOption?.requiresComment
-                                                ? "说明分派错误或无效原因（必填）"
-                                                : "可选填写核实说明"
-                                        }
-                                        value={field.state.value}
-                                        onChange={field.handleChange}
-                                        onBlur={field.handleBlur}
-                                        disabled={batchMutation.isPending}
-                                        error={
-                                            field.state.meta.isTouched
-                                                ? firstFieldErrorMessage(
-                                                      field.state.meta.errors,
-                                                  )
-                                                : undefined
-                                        }
-                                        onCtrlEnterSubmit={
-                                            handleCtrlEnterSubmit
-                                        }
-                                    />
-                                )}
-                            </form.Field>
-                        </FieldGroup>
-                    )}
+                                    </form.AppField>
+                                ) : null}
+
+                                <form.Field name="comment">
+                                    {(field) => (
+                                        <ReasonTextareaField
+                                            id={`${resolvedPrefix}-comment${idSuffix}`}
+                                            name={field.name}
+                                            mode="chars"
+                                            max={
+                                                WORK_ITEM_CLOSE_COMMENT_MAX_CHARS
+                                            }
+                                            label="关闭说明"
+                                            required={Boolean(
+                                                selectedCloseOption?.requiresComment,
+                                            )}
+                                            rows={3}
+                                            placeholder={
+                                                selectedCloseOption?.requiresComment
+                                                    ? "说明分派错误或无效原因（必填）"
+                                                    : "可选填写核实说明"
+                                            }
+                                            value={field.state.value}
+                                            onChange={field.handleChange}
+                                            onBlur={field.handleBlur}
+                                            disabled={batchMutation.isPending}
+                                            error={
+                                                field.state.meta.isTouched
+                                                    ? firstFieldErrorMessage(
+                                                          field.state.meta
+                                                              .errors,
+                                                      )
+                                                    : undefined
+                                            }
+                                            onCtrlEnterSubmit={
+                                                handleCtrlEnterSubmit
+                                            }
+                                        />
+                                    )}
+                                </form.Field>
+                            </FieldGroup>
+                        )}
+                    </DialogBody>
 
                     <DialogFooter>
                         <DialogClose

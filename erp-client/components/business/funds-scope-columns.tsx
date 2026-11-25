@@ -23,6 +23,8 @@ export function wholeUnallocatedCell({
                 </span>
                 <MoneyValue
                     value={unallocated}
+                    display="compact"
+                    showHint={false}
                     unavailableReason={unavailableReason}
                 />
             </div>
@@ -30,6 +32,8 @@ export function wholeUnallocatedCell({
                 <span className="mr-2 text-xs text-muted-foreground">整单</span>
                 <MoneyValue
                     value={whole}
+                    display="compact"
+                    showHint={false}
                     unavailableReason={unavailableReason}
                 />
             </div>

@@ -1,9 +1,12 @@
-import { MoneyValue } from "./values"
-import { Badge } from "@/components/ui/badge"
+import { TrendingDownIcon, TrendingUpIcon } from "lucide-react"
+
+import { StatusBadge } from "@/components/ui/status-badge"
+import { describeMoney } from "@/lib/money-display"
 import {
     salesLinePriceComparison,
     type SalesLinePrices,
 } from "@/lib/sales-line-prices"
+import { MoneyValue } from "./values"
 
 /** 采购和审批共用的含税价格对比；提醒不改变办理资格。 */
 export function SalesLinePriceComparison({
@@ -30,6 +33,8 @@ export function SalesLinePriceComparison({
     if (compact) {
         const hasWarningChange = change != null
         const isUnchanged = adjustment === "unchanged"
+        const formattedChange =
+            change != null ? (describeMoney(change)?.exact ?? change) : null
 
         return (
             <div className="min-w-44 space-y-1 whitespace-normal text-xs">
@@ -39,18 +44,17 @@ export function SalesLinePriceComparison({
                         value={prices.procurement_supply_price_gross}
                         className="text-body-compact font-semibold"
                     />
-                    {hasWarningChange ? (
-                        <Badge variant="warning" className="text-xs">
-                            {adjustment === "increased" ? "调高" : "调低"}
-                            <span className="inline-flex items-baseline">
-                                <MoneyValue
-                                    display="exact"
-                                    value={change}
-                                    className="[&_[data-slot=money-value-number]]:text-inherit"
-                                />
-                                {unit ? `/${unit}` : ""}
-                            </span>
-                        </Badge>
+                    {hasWarningChange && formattedChange ? (
+                        <StatusBadge
+                            tone="warning"
+                            icon={
+                                adjustment === "increased"
+                                    ? TrendingUpIcon
+                                    : TrendingDownIcon
+                            }
+                            label={`${adjustment === "increased" ? "调高" : "调低"} ${formattedChange}${unit ? `/${unit}` : ""}`}
+                            className="num"
+                        />
                     ) : (
                         <span className="text-muted-foreground">
                             {isUnchanged ? (

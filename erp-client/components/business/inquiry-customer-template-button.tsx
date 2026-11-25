@@ -3,7 +3,8 @@
 import type * as React from "react"
 import { useMutation } from "@tanstack/react-query"
 import { DownloadIcon } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import type { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { getErrorMessage } from "@/lib/api/errors"
 import {
     downloadInquiryCustomerWorkbook,
@@ -39,27 +40,28 @@ export function InquiryCustomerTemplateButton({
         },
     })
     return (
-        <div className="space-y-2">
-            <Button
+        <span className="inline-flex flex-wrap items-center gap-2">
+            <LoadingButton
                 id={id}
                 type="button"
                 variant={variant}
                 size={size}
                 className={buttonClassName}
-                disabled={disabled || productCount === 0 || download.isPending}
+                loading={download.isPending}
+                disabled={disabled || productCount === 0}
                 onClick={() => download.mutate()}
             >
-                <DownloadIcon data-icon="inline-start" />
+                <DownloadIcon data-icon="inline-start" aria-hidden="true" />
                 {download.isPending ? "正在生成…" : "下载客户选品模板"}
-            </Button>
+            </LoadingButton>
             {download.isError ? (
-                <p role="alert" className="text-body-compact text-destructive">
+                <span role="alert" className="text-xs text-destructive">
                     {getErrorMessage(
                         download.error,
                         "模板下载失败，请重新获取商品后重试",
                     )}
-                </p>
+                </span>
             ) : null}
-        </div>
+        </span>
     )
 }

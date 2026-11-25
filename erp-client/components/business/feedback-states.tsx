@@ -107,18 +107,31 @@ function GuardedBusinessAction({
                 {disabled ? (
                     <TooltipTrigger
                         render={
-                            <span
-                                className="inline-flex cursor-not-allowed"
-                                tabIndex={0}
-                                role="button"
+                            <LoadingButton
+                                id={baseId}
+                                {...buttonProps}
+                                type="button"
                                 aria-disabled="true"
-                                aria-label={`操作不可用：${explanation}`}
+                                data-disabled="true"
+                                className={cn(
+                                    "cursor-not-allowed opacity-50",
+                                    buttonProps.className,
+                                )}
+                                onClick={(event) => {
+                                    event.preventDefault()
+                                }}
+                                onKeyDown={(event) => {
+                                    if (
+                                        event.key === "Enter" ||
+                                        event.key === " "
+                                    ) {
+                                        event.preventDefault()
+                                    }
+                                }}
                             />
                         }
                     >
-                        <LoadingButton id={baseId} disabled {...buttonProps}>
-                            {children}
-                        </LoadingButton>
+                        {children}
                     </TooltipTrigger>
                 ) : (
                     <TooltipTrigger
@@ -575,7 +588,7 @@ function AsyncSectionState({
             {showActivity && hasChildren ? (
                 <div
                     role="status"
-                    className="flex items-center gap-2 rounded-2xl bg-surface-sunken px-3 py-2 text-body-compact text-muted-foreground"
+                    className="flex items-center gap-2 rounded-lg bg-surface-sunken px-3 py-2 text-body-compact text-muted-foreground"
                 >
                     <Spinner
                         aria-label={

@@ -2,7 +2,6 @@
 
 import { ChevronDownIcon, ShieldAlertIcon, ShieldCheckIcon } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Popover,
@@ -11,6 +10,7 @@ import {
     PopoverTitle,
     PopoverTrigger,
 } from "@/components/ui/popover"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { scopeText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 import { MoneyValue } from "./values"
@@ -74,13 +74,12 @@ export function FundsScopeBanner({
                 ) : null}
             </div>
             {permissionLimited ? (
-                <Badge
-                    variant="warning"
+                <StatusBadge
+                    tone="warning"
+                    label="部分受限 · 仅显示本人权限内金额"
                     title={limitDetail}
                     className="shrink-0"
-                >
-                    部分受限 · 仅显示本人权限内金额
-                </Badge>
+                />
             ) : null}
         </div>
     )
@@ -189,7 +188,10 @@ export function FundsScopeSummaryBar({
                                         />
                                     }
                                 >
-                                    +{overflowCount} 人
+                                    <span className="num">
+                                        +{overflowCount}
+                                    </span>{" "}
+                                    人
                                     <ChevronDownIcon
                                         className="size-3"
                                         aria-hidden="true"
@@ -198,7 +200,11 @@ export function FundsScopeSummaryBar({
                                 <PopoverContent align="end" className="w-80">
                                     <PopoverHeader>
                                         <PopoverTitle>
-                                            全部负责人份额（{groups.length}）
+                                            全部负责人份额（
+                                            <span className="num">
+                                                {groups.length}
+                                            </span>
+                                            ）
                                         </PopoverTitle>
                                     </PopoverHeader>
                                     <ul className="max-h-64 divide-y divide-border/60 overflow-y-auto text-xs">
@@ -247,7 +253,7 @@ export function scopeQueryFrameHeading(
                 往来账款汇总列表
                 <span
                     aria-live="polite"
-                    className="font-normal text-muted-foreground"
+                    className="num font-normal text-muted-foreground"
                 >
                     {(total ?? 0).toLocaleString("zh-CN")} 条
                 </span>
@@ -264,13 +270,12 @@ export function scopeQueryFrameHeading(
 /** 部分受限行的统一标记；金额统一用 MoneyValue 空值展示，不写零。 */
 export function LimitedBadge({ id, className }: LimitedBadgeProps) {
     return (
-        <Badge
+        <StatusBadge
             id={id}
-            variant="warning"
+            tone="warning"
+            label="部分受限"
             title={scopeText.limitedOnlyVisibleShare}
             className={cn("shrink-0", className)}
-        >
-            部分受限
-        </Badge>
+        />
     )
 }

@@ -8,14 +8,6 @@ import { PlusIcon, Trash2Icon, TriangleAlertIcon } from "lucide-react"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
-import {
     DescriptionDetails,
     DescriptionItem,
     DescriptionList,
@@ -129,12 +121,12 @@ function StickyTotalBar({
         <aside
             data-slot="sticky-total-bar"
             className={cn(
-                "sticky bottom-0 z-20 border-t border-border bg-card px-0 py-4",
+                "@container/sticky-total sticky bottom-0 z-20 border-t border-border bg-card px-0 py-4",
                 className,
             )}
             {...props}
         >
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="flex flex-col gap-3 @3xl/sticky-total:flex-row @3xl/sticky-total:items-center">
                 {leftActions ? (
                     <div className="flex shrink-0 flex-wrap gap-2">
                         {leftActions}
@@ -144,8 +136,8 @@ function StickyTotalBar({
                     className={cn(
                         "grid min-w-0 flex-1 gap-3",
                         layout === "inline"
-                            ? "lg:justify-items-end"
-                            : "sm:grid-cols-3",
+                            ? "@3xl/sticky-total:justify-items-end"
+                            : "@xl/sticky-total:grid-cols-3",
                     )}
                 >
                     {items.map((item) => (
@@ -154,7 +146,7 @@ function StickyTotalBar({
                             className={cn(
                                 "min-w-0",
                                 layout === "inline" &&
-                                    "flex flex-wrap items-baseline gap-x-3 gap-y-1 lg:justify-end",
+                                    "flex flex-wrap items-baseline gap-x-3 gap-y-1 @3xl/sticky-total:justify-end",
                             )}
                         >
                             <div className="text-xs text-muted-foreground">
@@ -173,7 +165,7 @@ function StickyTotalBar({
                                     className={cn(
                                         "mt-0.5 text-xs text-muted-foreground",
                                         layout === "inline" &&
-                                            "w-full lg:text-right",
+                                            "w-full @3xl/sticky-total:text-right",
                                     )}
                                 >
                                     {item.description}
@@ -183,7 +175,7 @@ function StickyTotalBar({
                     ))}
                 </div>
                 {note ? (
-                    <div className="text-xs text-muted-foreground lg:max-w-sm">
+                    <div className="text-xs text-muted-foreground @3xl/sticky-total:max-w-sm">
                         {note}
                     </div>
                 ) : null}
@@ -529,71 +521,71 @@ function AllocationWorkspace<TAllocation>({
         <section
             data-slot="allocation-workspace"
             id={baseId}
-            className={className}
+            className={cn("min-w-0 space-y-5 bg-card", className)}
             {...props}
         >
-            <Card>
-                <CardHeader className="border-b border-border">
-                    <CardTitle>{title}</CardTitle>
-                    {description ? (
-                        <CardDescription>{description}</CardDescription>
-                    ) : null}
-                </CardHeader>
-
-                <CardContent className="space-y-5">
-                    <DescriptionList columns="three" aria-label="分配数量摘要">
-                        <DescriptionItem>
-                            <DescriptionTerm>待分配总量</DescriptionTerm>
-                            <DescriptionDetails className="num text-section-title font-medium">
-                                {summary.totalToAllocate}
-                            </DescriptionDetails>
-                        </DescriptionItem>
-                        <DescriptionItem>
-                            <DescriptionTerm>已分配</DescriptionTerm>
-                            <DescriptionDetails className="num text-section-title font-medium">
-                                {summary.allocated}
-                            </DescriptionDetails>
-                        </DescriptionItem>
-                        <DescriptionItem>
-                            <DescriptionTerm>差额</DescriptionTerm>
-                            <DescriptionDetails className="num text-section-title font-medium">
-                                {summary.difference}
-                            </DescriptionDetails>
-                        </DescriptionItem>
-                    </DescriptionList>
-
-                    {statusNotice}
-
-                    <EditableLineItemTable
-                        id={baseId ? `${baseId}-table` : undefined}
-                        items={allocations}
-                        columns={columns}
-                        getRowId={getRowId}
-                        mode="edit"
-                        disabled={disabled}
-                        caption="分配明细"
-                        emptyContent="暂无分配明细，可新增一行后填写。"
-                        addLabel={addLabel}
-                        addDisabledReason={addDisabledReason}
-                        onAddItem={onAddAllocation}
-                        onRemoveItem={onRemoveAllocation}
-                        getRemoveDisabledReason={getRemoveDisabledReason}
-                        getRowErrors={getRowErrors}
-                    />
-                </CardContent>
-
-                {actions ? (
-                    <WorkspaceTaskFooter
-                        fallback={
-                            <CardFooter className="justify-end gap-2 border-t border-border">
-                                {actions}
-                            </CardFooter>
-                        }
-                    >
-                        {actions}
-                    </WorkspaceTaskFooter>
+            <header className="space-y-1 border-b border-border/60 pb-3">
+                <h2 className="font-heading text-section-title font-semibold tracking-tight text-foreground">
+                    {title}
+                </h2>
+                {description ? (
+                    <p className="text-xs text-muted-foreground">
+                        {description}
+                    </p>
                 ) : null}
-            </Card>
+            </header>
+
+            <DescriptionList columns="three" aria-label="分配数量摘要">
+                <DescriptionItem>
+                    <DescriptionTerm>待分配总量</DescriptionTerm>
+                    <DescriptionDetails className="num text-value-compact font-semibold tracking-tight text-foreground">
+                        {summary.totalToAllocate}
+                    </DescriptionDetails>
+                </DescriptionItem>
+                <DescriptionItem>
+                    <DescriptionTerm>已分配</DescriptionTerm>
+                    <DescriptionDetails className="num text-value-compact font-semibold tracking-tight text-foreground">
+                        {summary.allocated}
+                    </DescriptionDetails>
+                </DescriptionItem>
+                <DescriptionItem>
+                    <DescriptionTerm>差额</DescriptionTerm>
+                    <DescriptionDetails className="num text-value-compact font-semibold tracking-tight text-foreground">
+                        {summary.difference}
+                    </DescriptionDetails>
+                </DescriptionItem>
+            </DescriptionList>
+
+            {statusNotice}
+
+            <EditableLineItemTable
+                id={baseId ? `${baseId}-table` : undefined}
+                items={allocations}
+                columns={columns}
+                getRowId={getRowId}
+                mode="edit"
+                disabled={disabled}
+                caption="分配明细"
+                emptyContent="暂无分配明细，可新增一行后填写。"
+                addLabel={addLabel}
+                addDisabledReason={addDisabledReason}
+                onAddItem={onAddAllocation}
+                onRemoveItem={onRemoveAllocation}
+                getRemoveDisabledReason={getRemoveDisabledReason}
+                getRowErrors={getRowErrors}
+            />
+
+            {actions ? (
+                <WorkspaceTaskFooter
+                    fallback={
+                        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/60 pt-4">
+                            {actions}
+                        </div>
+                    }
+                >
+                    {actions}
+                </WorkspaceTaskFooter>
+            ) : null}
         </section>
     )
 }

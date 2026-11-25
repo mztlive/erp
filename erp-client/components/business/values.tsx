@@ -28,15 +28,17 @@ interface BusinessStatusBadgeProps extends Omit<
 }
 
 /**
- * 兜底中文映射：调用方误把枚举原值（PENDING 等）当 label 传入时，替换成业务词，
- * 禁止原值上屏。仅命中「全大写 + 下划线」形态的原值 token，中文标签不受影响。
+ * 全站通用状态枚举兜底中文映射（唯一数据源，供状态徽章与导入/批处理结果共用）：
+ * 调用方误把枚举原值（PENDING 等）当 label 传入时，替换成业务词，禁止原值上屏。
+ * 仅命中「全大写 + 下划线」形态的原值 token，中文标签不受影响。
  */
-const statusLabelFallback: Record<string, string> = {
+const STATUS_LABEL_FALLBACK: Readonly<Record<string, string>> = {
     PENDING: "待处理",
     IN_PROGRESS: "处理中",
     PROCESSING: "处理中",
     COMPLETED: "已完成",
     SUCCEEDED: "已完成",
+    SKIPPED: "已跳过",
     FAILED: "处理失败",
     REJECTED: "未通过",
     BLOCKED: "暂不可操作",
@@ -57,7 +59,7 @@ const rawStatusTokenPattern = /^[A-Z][A-Z0-9_]*$/
 
 function resolveStatusLabel(label: string): string {
     return rawStatusTokenPattern.test(label)
-        ? (statusLabelFallback[label] ?? label)
+        ? (STATUS_LABEL_FALLBACK[label] ?? label)
         : label
 }
 
@@ -90,7 +92,7 @@ function BusinessStatusBadge({
                 <Tooltip>
                     <TooltipTrigger
                         render={
-                            <span className="inline-flex cursor-help rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                            <span className="inline-flex cursor-help rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring" />
                         }
                     >
                         {badge}
@@ -681,7 +683,9 @@ export {
     MoneyValue,
     QuantityValue,
     RateValue,
+    STATUS_LABEL_FALLBACK,
     StatusTrackSummary,
+    resolveStatusLabel,
     type BusinessStatus,
     type BusinessStatusBadgeProps,
     type BusinessStatusContext,

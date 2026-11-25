@@ -176,7 +176,7 @@ function PrepaymentGate({
                         <button
                             type="button"
                             className={cn(
-                                "inline-flex rounded-2xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                                "inline-flex rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring",
                                 className,
                             )}
                             aria-label={`${text.title}：${resultLabel}`}

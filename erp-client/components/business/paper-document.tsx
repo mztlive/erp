@@ -437,7 +437,7 @@ function PaperDocument<Row>({
                                 <h2 className="text-xs font-medium text-muted-foreground">
                                     备注
                                 </h2>
-                                <div className="mt-1 text-xs leading-5 text-foreground/85">
+                                <div className="mt-1 text-xs text-foreground/85">
                                     {remarks}
                                 </div>
                             </section>

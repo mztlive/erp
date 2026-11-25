@@ -47,10 +47,11 @@ export function PersonPickerTree({
                     id={`${controlId}-label`}
                     htmlFor={controlId}
                     className={cn(
-                        "flex min-h-10 cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent/60",
-                        selected.has(person.id) && "bg-accent",
+                        "flex min-h-control cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-1.5 transition-colors hover:bg-muted/70",
+                        selected.has(person.id) &&
+                            "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent",
                         person.disabled &&
-                            "cursor-not-allowed text-muted-foreground",
+                            "cursor-not-allowed text-muted-foreground hover:bg-transparent",
                     )}
                 >
                     {multiple ? (
@@ -110,7 +111,7 @@ export function PersonPickerTree({
                     type="button"
                     aria-expanded={expanded}
                     aria-controls={contentId}
-                    className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2 py-2 text-left font-medium outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex min-h-control w-full items-center gap-2 rounded-md px-2 py-1.5 text-left font-medium transition-colors outline-none hover:bg-muted/70 focus-visible:ring-3 focus-visible:ring-ring"
                     onClick={() => {
                         // 搜索结果保持展开，清除搜索后恢复用户原来的折叠状态。
                         if (query.trim()) return
@@ -164,7 +165,7 @@ export function PersonPickerTree({
             ].map(({ label, group }) => {
                 return group.length ? (
                     <li key={label}>
-                        <div className="flex min-h-10 items-center gap-2 px-2 font-medium">
+                        <div className="flex min-h-control items-center gap-2 px-2 py-1.5 font-medium">
                             <UsersIcon aria-hidden="true" className="size-4" />
                             {label}
                         </div>

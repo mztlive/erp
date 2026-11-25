@@ -148,7 +148,7 @@ function DocumentSection({
                         <div className="flex shrink-0 items-center gap-2">
                             {action}
                             <CollapsibleTrigger
-                                className="group inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                className="group inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring"
                                 aria-label={`展开或收起${title}`}
                             >
                                 <ChevronDownIcon
@@ -344,22 +344,22 @@ function RelatedDocumentList({
     const nameFirst = layout === "name-first"
     const columns = nameFirst
         ? "grid-cols-[minmax(0,1fr)_auto] @xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(7rem,0.6fr)_4rem_4rem]"
-        : "md:grid-cols-12"
+        : "@3xl:grid-cols-12"
     const identityColumn = nameFirst
         ? "col-span-2 @xl:col-span-1"
         : hasTracks
-          ? "md:col-span-3"
-          : "md:col-span-4"
+          ? "@3xl:col-span-3"
+          : "@3xl:col-span-4"
     const statusColumn = nameFirst
         ? "row-span-3 @xl:row-span-1"
         : hasTracks
-          ? "md:col-span-4"
-          : "md:col-span-2"
+          ? "@3xl:col-span-4"
+          : "@3xl:col-span-2"
     const ownerColumn = nameFirst
         ? "text-right @xl:text-left"
         : hasTracks
-          ? "md:col-span-1"
-          : "md:col-span-2"
+          ? "@3xl:col-span-1"
+          : "@3xl:col-span-2"
 
     return (
         <div
@@ -374,7 +374,7 @@ function RelatedDocumentList({
                         className={cn(
                             "hidden gap-3 border-b border-grid pb-2 text-xs font-medium text-muted-foreground",
                             columns,
-                            nameFirst ? "@xl:grid" : "md:grid",
+                            nameFirst ? "@xl:grid" : "@3xl:grid",
                         )}
                     >
                         <span className={identityColumn}>{identityLabel}</span>
@@ -382,7 +382,9 @@ function RelatedDocumentList({
                             {hasTracks ? "状态 / 进度" : "状态"}
                         </span>
                         <span
-                            className={nameFirst ? "text-right" : "col-span-2"}
+                            className={
+                                nameFirst ? "text-right" : "@3xl:col-span-2"
+                            }
                         >
                             {columnMeasureLabel ?? "金额或数量"}
                         </span>
@@ -390,7 +392,7 @@ function RelatedDocumentList({
                         <span
                             className={cn(
                                 "text-right",
-                                !nameFirst && "col-span-2",
+                                !nameFirst && "@3xl:col-span-2",
                             )}
                         >
                             操作
@@ -413,7 +415,7 @@ function RelatedDocumentList({
                                         columns,
                                         nameFirst
                                             ? "@xl:items-center"
-                                            : "md:items-center",
+                                            : "@3xl:items-center",
                                     )}
                                 >
                                     <div
@@ -459,7 +461,7 @@ function RelatedDocumentList({
                                                 "mb-1 block text-xs text-muted-foreground",
                                                 nameFirst
                                                     ? "@xl:hidden"
-                                                    : "md:hidden",
+                                                    : "@3xl:hidden",
                                             )}
                                         >
                                             {hasTracks ? "状态 / 进度" : "状态"}
@@ -493,7 +495,7 @@ function RelatedDocumentList({
                                         className={
                                             nameFirst
                                                 ? "text-right"
-                                                : "md:col-span-2"
+                                                : "@3xl:col-span-2"
                                         }
                                     >
                                         <div
@@ -530,7 +532,7 @@ function RelatedDocumentList({
                                                 "text-xs text-muted-foreground",
                                                 nameFirst
                                                     ? "@xl:hidden"
-                                                    : "md:hidden",
+                                                    : "@3xl:hidden",
                                             )}
                                         >
                                             责任人
@@ -547,7 +549,7 @@ function RelatedDocumentList({
                                             "flex",
                                             nameFirst
                                                 ? "col-start-2 justify-end @xl:col-start-auto"
-                                                : "md:col-span-2 md:justify-end",
+                                                : "@3xl:col-span-2 @3xl:justify-end",
                                         )}
                                     >
                                         {document.openAction}
