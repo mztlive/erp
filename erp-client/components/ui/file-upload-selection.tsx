@@ -65,7 +65,8 @@ function SelectedFile({
                         {file.name}
                     </AttachmentTitle>
                     <AttachmentDescription className="whitespace-normal">
-                        {description} · {formatFileSize(file.size)}
+                        {description} ·{" "}
+                        <span className="num">{formatFileSize(file.size)}</span>
                     </AttachmentDescription>
                 </AttachmentContent>
                 <AttachmentActions>
@@ -100,7 +101,7 @@ function SelectedFile({
             {url ? (
                 <Dialog open={open} onOpenChange={setOpen}>
                     <DialogContent
-                        className="sm:max-w-4xl"
+                        size="xl"
                         closeButtonId={
                             baseId ? `${baseId}-preview-close` : undefined
                         }
@@ -171,7 +172,7 @@ export function FileUploadSelection({
         <div className="space-y-1">
             {multiple ? (
                 <p className="text-xs text-muted-foreground" role="status">
-                    已选择 {files.length} 个文件
+                    已选择 <span className="num">{files.length}</span> 个文件
                 </p>
             ) : null}
             <AttachmentGroup className="flex-col overflow-visible">

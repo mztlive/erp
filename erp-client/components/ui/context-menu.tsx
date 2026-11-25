@@ -112,7 +112,7 @@ function ContextMenuItem({
             data-inset={inset}
             data-variant={variant}
             className={cn(
-                "group/context-menu-item relative flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-body-compact outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-inset:pl-7 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 focus:*:[svg]:text-accent-foreground data-[variant=destructive]:*:[svg]:text-destructive",
+                "group/context-menu-item relative flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-body-compact outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-inset:pl-7 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive-soft data-[variant=destructive]:focus:text-destructive data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 focus:*:[svg]:text-accent-foreground data-[variant=destructive]:*:[svg]:text-destructive",
                 className,
             )}
             {...props}
@@ -154,13 +154,15 @@ function ContextMenuSubTrigger({
 }
 
 function ContextMenuSubContent({
+    className,
+    side = "right",
     ...props
 }: React.ComponentProps<typeof ContextMenuContent>) {
     return (
         <ContextMenuContent
             data-slot="context-menu-sub-content"
-            className="shadow-lg"
-            side="right"
+            side={side}
+            className={cn("shadow-lg", className)}
             {...props}
         />
     )
@@ -262,7 +264,7 @@ function ContextMenuShortcut({
         <span
             data-slot="context-menu-shortcut"
             className={cn(
-                "ml-auto text-xs tracking-widest text-muted-foreground group-focus/context-menu-item:text-accent-foreground",
+                "ml-auto text-tiny tracking-widest text-muted-foreground group-focus/context-menu-item:text-accent-foreground",
                 className,
             )}
             {...props}

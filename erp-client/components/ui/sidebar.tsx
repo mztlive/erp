@@ -184,7 +184,8 @@ function Sidebar({
                     data-sidebar="sidebar"
                     data-slot="sidebar"
                     data-mobile="true"
-                    className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+                    showCloseButton={false}
+                    className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground"
                     style={
                         {
                             "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -255,7 +256,7 @@ function Sidebar({
                 <div
                     data-sidebar="sidebar"
                     data-slot="sidebar-inner"
-                    className="flex size-full flex-col bg-sidebar group-data-[variant=sidebar]:border-r group-data-[variant=sidebar]:border-sidebar-border/80 group-data-[variant=floating]:rounded-2xl group-data-[variant=floating]:bg-card group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-border"
+                    className="flex size-full flex-col bg-sidebar group-data-[variant=sidebar]:border-r group-data-[variant=sidebar]:border-sidebar-border/80 group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:bg-card group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-border"
                 >
                     {children}
                 </div>
@@ -328,7 +329,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
             data-slot="sidebar-inset"
             className={cn(
                 // 主区与画布同色，由页面内白卡片浮起；inset 变体再包圆角白面
-                "relative flex w-full flex-1 flex-col bg-transparent md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-2xl md:peer-data-[variant=inset]:bg-card md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
+                "relative flex w-full flex-1 flex-col bg-transparent md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-lg md:peer-data-[variant=inset]:bg-card md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
                 className,
             )}
             {...props}
@@ -428,7 +429,7 @@ function SidebarGroupLabel({
             {
                 className: cn(
                     // 飞书侧栏分组标题：低噪音小号字，避免与可点击项抢戏
-                    "flex h-6 shrink-0 items-center rounded-md px-2.5 text-xs font-medium text-muted-foreground/80 ring-sidebar-ring outline-hidden transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:-mt-6 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-3 [&>svg]:size-4 [&>svg]:shrink-0",
+                    "flex h-6 shrink-0 items-center rounded-md px-2.5 text-xs font-medium text-muted-foreground/80 outline-hidden transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:-mt-6 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-3 focus-visible:ring-sidebar-ring [&>svg]:size-4 [&>svg]:shrink-0",
                     className,
                 ),
             },
@@ -452,7 +453,7 @@ function SidebarGroupAction({
         props: mergeProps<"button">(
             {
                 className: cn(
-                    "absolute top-3.5 right-3 flex aspect-square w-5 items-center justify-center rounded-xl p-0 text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform group-data-[collapsible=icon]:hidden after:absolute after:-inset-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0",
+                    "absolute top-3.5 right-3 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground outline-hidden transition-transform group-data-[collapsible=icon]:hidden after:absolute after:-inset-2 hover:bg-accent/70 hover:text-foreground focus-visible:ring-3 focus-visible:ring-sidebar-ring md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0",
                     className,
                 ),
             },
@@ -504,16 +505,16 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
 
 const sidebarMenuButtonVariants = cva(
     // 轻盈冷白侧栏导航项：无边框柔灰选中胶囊 + 深墨黑字重 + 左侧 2px 品牌蓝指示条
-    "peer/menu-button group/menu-button relative flex w-full items-center gap-2 overflow-hidden rounded-md px-2.5 py-1.5 text-left text-body-compact whitespace-nowrap text-sidebar-foreground ring-sidebar-ring outline-hidden transition-[width,height,padding,background-color,color] duration-150 group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! hover:bg-foreground/[0.038] hover:text-foreground focus-visible:ring-2 active:bg-foreground/[0.065] active:text-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-foreground/[0.038] data-open:hover:text-foreground data-active:bg-foreground/[0.06] data-active:font-medium data-active:text-foreground data-active:hover:bg-foreground/[0.075] data-active:hover:text-foreground dark:data-active:bg-foreground/[0.09] before:pointer-events-none before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-primary before:opacity-0 before:transition-opacity data-active:before:opacity-100 group-data-[collapsible=icon]:before:hidden [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:stroke-[1.75] [&_svg]:text-muted-foreground/75 hover:[&_svg]:text-foreground/85 data-active:[&_svg]:text-primary [&>span:last-child]:truncate",
+    "peer/menu-button group/menu-button relative flex w-full items-center gap-2 overflow-hidden rounded-md px-2.5 py-1.5 text-left text-body-compact whitespace-nowrap text-sidebar-foreground outline-hidden transition-[width,height,padding,background-color,color] duration-150 group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0! hover:bg-accent/70 hover:text-foreground focus-visible:ring-3 focus-visible:ring-sidebar-ring active:bg-accent active:text-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-accent/70 data-open:hover:text-foreground data-active:bg-accent/90 data-active:font-medium data-active:text-foreground data-active:hover:bg-accent data-active:hover:text-foreground before:pointer-events-none before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-r-full before:bg-primary before:opacity-0 before:transition-opacity data-active:before:opacity-100 group-data-[collapsible=icon]:before:hidden [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:stroke-[1.75] [&_svg]:text-muted-foreground/75 hover:[&_svg]:text-foreground/85 data-active:[&_svg]:text-primary [&>span:last-child]:truncate",
     {
         variants: {
             variant: {
-                default: "hover:bg-foreground/[0.038] hover:text-foreground",
+                default: "hover:bg-accent/70 hover:text-foreground",
                 outline:
-                    "bg-transparent shadow-none ring-1 ring-border hover:bg-foreground/[0.038] hover:text-foreground hover:ring-border",
+                    "bg-transparent shadow-none ring-1 ring-border hover:bg-accent/70 hover:text-foreground hover:ring-border",
             },
             size: {
-                default: "h-8 text-body-compact",
+                default: "h-control text-body-compact",
                 sm: "h-7.5 text-body-compact",
                 lg: "h-11 px-2.5 text-body-compact group-data-[collapsible=icon]:p-0!",
             },
@@ -596,9 +597,9 @@ function SidebarMenuAction({
         props: mergeProps<"button">(
             {
                 className: cn(
-                    "absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-xl p-0 text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform group-data-[collapsible=icon]:hidden peer-hover/menu-button:text-sidebar-accent-foreground peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1 after:absolute after:-inset-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0",
+                    "absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground outline-hidden transition-transform group-data-[collapsible=icon]:hidden peer-hover/menu-button:text-foreground peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1 after:absolute after:-inset-2 hover:bg-accent/70 hover:text-foreground focus-visible:ring-3 focus-visible:ring-sidebar-ring md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0",
                     showOnHover &&
-                        "group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 peer-data-active/menu-button:text-sidebar-accent-foreground aria-expanded:opacity-100 md:opacity-0",
+                        "group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 peer-data-active/menu-button:text-foreground aria-expanded:opacity-100 md:opacity-0",
                     className,
                 ),
             },
@@ -621,7 +622,7 @@ function SidebarMenuBadge({
             data-slot="sidebar-menu-badge"
             data-sidebar="menu-badge"
             className={cn(
-                "pointer-events-none absolute right-1 flex h-5 min-w-5 items-center justify-center rounded-xl px-1 text-xs font-medium text-sidebar-foreground tabular-nums select-none group-data-[collapsible=icon]:hidden peer-hover/menu-button:text-sidebar-accent-foreground peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1 peer-data-active/menu-button:text-sidebar-accent-foreground",
+                "num pointer-events-none absolute right-1 flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-tiny font-medium text-sidebar-foreground select-none group-data-[collapsible=icon]:hidden peer-hover/menu-button:text-foreground peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1 peer-data-active/menu-button:text-foreground",
                 className,
             )}
             {...props}
@@ -646,14 +647,14 @@ function SidebarMenuSkeleton({
             data-slot="sidebar-menu-skeleton"
             data-sidebar="menu-skeleton"
             className={cn(
-                "flex h-8 items-center gap-2 rounded-xl px-2",
+                "flex h-8 items-center gap-2 rounded-md px-2",
                 className,
             )}
             {...props}
         >
             {showIcon && (
                 <Skeleton
-                    className="size-4 rounded-xl"
+                    className="size-4 rounded-md"
                     data-sidebar="menu-skeleton-icon"
                 />
             )}
@@ -714,7 +715,7 @@ function SidebarMenuSubButton({
         props: mergeProps<"a">(
             {
                 className: cn(
-                    "flex h-7 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-xl px-3 text-sidebar-foreground ring-sidebar-ring outline-hidden group-data-[collapsible=icon]:hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:text-body-compact data-[size=sm]:text-xs data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
+                    "flex h-control-sm min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-3 text-sidebar-foreground outline-hidden transition-colors duration-150 group-data-[collapsible=icon]:hidden hover:bg-accent/70 hover:text-foreground focus-visible:ring-3 focus-visible:ring-sidebar-ring active:bg-accent active:text-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:text-body-compact data-[size=sm]:text-xs data-active:bg-accent/90 data-active:font-medium data-active:text-foreground data-active:hover:bg-accent data-active:hover:text-foreground [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground/75 hover:[&>svg]:text-foreground/85 data-active:[&>svg]:text-primary",
                     className,
                 ),
             },

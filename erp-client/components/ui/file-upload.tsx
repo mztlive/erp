@@ -305,7 +305,7 @@ function FileUpload({
                 data-slot="file-upload"
                 data-dragging={dragging || undefined}
                 className={cn(
-                    "group/upload relative flex min-w-0 items-center justify-center rounded-lg border border-dashed bg-surface-sunken transition-colors data-dragging:border-ring data-dragging:bg-accent",
+                    "group/upload relative flex min-w-0 items-center justify-center rounded-lg border border-dashed bg-surface-sunken transition-colors data-dragging:border-primary data-dragging:bg-accent data-dragging:ring-3 data-dragging:ring-ring",
                     effectiveDensity === "hero"
                         ? "min-h-64 flex-col gap-5 px-5 py-10 text-center sm:min-h-72 lg:min-h-90"
                         : effectiveDensity === "button"
@@ -316,10 +316,10 @@ function FileUpload({
                               ? "flex-row gap-2 p-2 text-left"
                               : "flex-col gap-3 p-6 text-center",
                     activePreview &&
-                        "overflow-hidden border-solid border-border/80 bg-card p-0",
+                        "overflow-hidden border-solid border-border/80 bg-card p-0 has-[button:focus-visible]:border-primary",
                     !activePreview &&
                         effectiveDensity !== "button" &&
-                        "has-[button:enabled:hover]:border-ring has-[button:enabled:hover]:bg-accent has-[button:focus-visible]:border-ring has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-ring",
+                        "has-[button:enabled:hover]:border-primary/55 has-[button:enabled:hover]:bg-accent has-[button:focus-visible]:border-primary has-[button:focus-visible]:ring-3 has-[button:focus-visible]:ring-ring",
                     readOnly && !activePreview && "hidden",
                     disabled && "cursor-not-allowed opacity-50",
                     controlClassName,
@@ -381,7 +381,7 @@ function FileUpload({
                             id={idPrefix ? `${idPrefix}-preview` : undefined}
                             type="button"
                             className={cn(
-                                "group relative flex w-full items-center justify-center overflow-hidden bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                                "group relative flex w-full items-center justify-center overflow-hidden bg-muted outline-none focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset",
                                 density === "tile"
                                     ? "aspect-square w-full"
                                     : density === "compact"
@@ -421,7 +421,7 @@ function FileUpload({
                                 </div>
                             )}
                             {activePreview.src ? (
-                                <span className="absolute inset-0 flex items-center justify-center bg-overlay/0 text-primary-foreground opacity-0 transition group-hover:bg-overlay/50 group-hover:opacity-100 group-focus-visible:bg-overlay/50 group-focus-visible:opacity-100">
+                                <span className="absolute inset-0 flex items-center justify-center bg-overlay text-primary-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                                     <Maximize2Icon
                                         className="size-4"
                                         aria-hidden="true"
@@ -430,7 +430,7 @@ function FileUpload({
                             ) : null}
                         </button>
                         {previewActions === "overlay" && !readOnly ? (
-                            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center justify-end gap-0.5 bg-gradient-to-t from-overlay/65 via-overlay/20 to-transparent p-1 opacity-0 transition-opacity duration-150 group-hover/upload:opacity-100 group-focus-within/upload:opacity-100 [@media(hover:none)]:opacity-100">
+                            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center justify-end gap-0.5 bg-gradient-to-t from-overlay to-transparent p-1 opacity-0 transition-opacity duration-150 group-hover/upload:opacity-100 group-focus-within/upload:opacity-100 [@media(hover:none)]:opacity-100">
                                 <div className="pointer-events-auto flex items-center gap-0.5">
                                     {previewActionButtons}
                                 </div>
@@ -589,7 +589,7 @@ function FileUpload({
                 <p
                     id={errorId}
                     role="alert"
-                    className="text-body-compact text-destructive"
+                    className="text-xs text-destructive"
                 >
                     {selectionError}
                 </p>
@@ -597,10 +597,11 @@ function FileUpload({
             {activePreview?.src ? (
                 <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
                     <DialogContent
+                        size="xl"
                         closeButtonId={
                             idPrefix ? `${idPrefix}-preview-close` : undefined
                         }
-                        className="gap-4 p-4 sm:max-w-4xl"
+                        className="gap-4 p-4"
                     >
                         <DialogHeader className="pr-10">
                             <DialogTitle>{activePreview.name}</DialogTitle>
