@@ -222,7 +222,7 @@ import { DetailFormGrid } from "@/components/business"
   - `"inline"`：套用 `detailWorkspaceStyles.inlineTableWrapper`（`w-full max-w-full border-y border-border/70`）；
   - `"scroll"`：套用 `detailWorkspaceStyles.dataTableWrapper`（`w-full max-w-full overflow-x-auto border-y border-border/70`），推荐宽明细表使用；
   - `"none"`：不加外层上下细线，适配已有边界的嵌套子表。
-- `insetCells?: boolean`（默认 `false`）：默认首尾列外沿贴齐容器（取消首列 `ps-0` / 末列 `pe-0`）；传 `true` 时输出 `data-inset-cells` 保留首尾列左右内边距。
+- `insetCells?: boolean`（默认 `false`）：默认首尾列外沿贴齐容器（首列 `ps-0` / 末列 `pe-0` 去除外沿内边距）；传 `true` 时输出 `data-inset-cells` 保留首尾列左右内边距。
 
 ```tsx
 import { DetailInlineTable } from "@/components/business"
