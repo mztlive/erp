@@ -33,7 +33,7 @@
 ### 八条黄金法则
 
 1. **纯白通栏零套娃，空间只服务业务判断**
-   - 作业面铺满 `bg-card` 纯白通栏，取消浅灰背景画布与多层嵌套白卡边框；页头、分区、双栏分界、底栏统一仅靠 `1px` `border-border/60` 细线与 `--scaffold-px`（`<768px: 16px` / `768~1199px: 20px` / `≥1200px: 24px`）左沿对齐建立秩序。
+   - 作业面铺满 `bg-card` 纯白通栏，取消浅灰背景画布与多层嵌套白卡边框；页头、分区、双栏分界、底栏统一仅靠 `1px` `border-border/60` 细线与 `--scaffold-px`（`<768px` 视口 `16px` / `≥768px` 视口且工作区容器 `<70rem` 为 `20px` / `@container workspace (min-width: 70rem)` 即 `1120px` 容器 ≈ `1360px` 视口为 `24px`）左沿对齐建立秩序。
    - 顶部页头压缩至 `56px` 单行（`min-h-14`），底部操作栏压缩至 `48px` 单行（`min-h-12`）；全宽审批页直接隐藏顶部审批路线进度条（已停靠右侧 `审批记录` 轨），把首屏 100% 让位给风险横幅、核心决策信息与业务内容。
    - **去套娃绝不等于削弱信息可读性**：去掉的是冗余灰底和外框，不是把核心业务字段压缩成难以扫视的小字。
 2. **首屏即真相：异常前置、合规退后、重提讲变化**
@@ -49,7 +49,7 @@
    - 20% 的复杂长尾场景（多地址拆单、多供应商比价、50 处收货地址核对）下沉至全屏双栏精调工作台（`Dialog size="full"`）或双视角专题弹窗（`Dialog size="lg"`），且弹窗内必须支持连续切换上下项、原地预览，彻底禁止 Dialog 叠 Sheet 或弹窗套弹窗。
 5. **同源色彩与双编码，不靠单一颜色或隐性符号传意**
    - 盈亏金额同时使用中文前缀与语义色（`赚 ¥120.00` 绿色 / `亏 ¥50.00` 红色 / `¥0.00` 中性），不靠极小的 `-` 号赌视力。
-   - 多来源编制场景建立「路径色（4 种履约模式）× 来源序号色（5 档 `chart-1..5`）」同源色标体系（[`source-palette.ts`](../erp-client/features/purchase-orders/lib/sourcing/source-palette.ts)），顶部配平堆叠条、左侧来源卡、右侧地址过滤胶囊与行内分配按钮 100% 共用同一索引色，视线扫过即可瞬时建立空间映射。
+   - 多来源编制场景建立「路径色（4 种履约模式）× 来源序号色（5 档 `chart-1..5`）」同源色标体系（[`source-palette.ts`](../erp-client/components/business/task/source-palette.ts)），顶部配平堆叠条、左侧来源卡、右侧地址过滤胶囊与行内分配按钮 100% 共用同一索引色，视线扫过即可瞬时建立空间映射。
    - 所有数字、金额、单号、税号、账号、联行号、日期、百分比一律挂载 `.num`（`tabular-nums lining-nums slashed-zero`），并使用 `MoneyValue` / `QuantityValue` / `RateValue` 原语输出。
 6. **跨区双向定位与原地闭环，拒绝人工肉眼找行**
    - 任何存在「主视图 ↔ 对照视图」或「告警/汇总 ↔ 细项/要素」关系的任务页，必须提供程序化定位能力：点击风险项或来源对照行直接定位并脉冲高亮目标行或目标核验区块（`2.2s` 高亮，自动清筛选、自动切页、平滑滚动）；点击底栏异常胶囊或预览弹窗「回改」按钮直达问题项。
@@ -180,19 +180,19 @@ ERP 任务页同时运行于大屏、中屏、768px 抽屉和分栏队列检查�
 
 ### 3.3 高信噪比信息编码规范
 
-#### 1. 盈亏双编码（`PurchaseProfitValue`）
+#### 1. 盈亏双编码（[`ProfitValue`](../erp-client/components/business/task/profit-value.tsx)，兼容别名 `PurchaseProfitValue`）
 禁止仅靠红色或极小的 `-` 号表达亏损。所有利润/价差单元格统一采用「显式中文前缀 + 语义色 + 零值降噪」：
-- 正利润：`赚 ¥120.00`（`text-success-foreground`）
-- 负利润/倒挂：`亏 ¥50.00`（`text-destructive font-medium`）
+- 正利润：`赚 ¥120.00`（`text-success-soft-foreground`）
+- 负利润/倒挂：`亏 ¥50.00`（`text-destructive-soft-foreground`）
 - 持平零值：`¥0.00`（`text-muted-foreground`）
 
-#### 2. 同源履约路径与多源色标体系（[`source-palette.ts`](../erp-client/features/purchase-orders/lib/sourcing/source-palette.ts)）
+#### 2. 同源履约路径与多源色标体系（[`source-palette.ts`](../erp-client/components/business/task/source-palette.ts) × [`FulfillmentRouteBadge`](../erp-client/components/business/task/fulfillment-route-badge.tsx)）
 在供给分配等多来源调度页面，将「履约路径语义色」与「多源序号色」解耦并全域复用：
-- **4 类履约路径徽章（`FulfillmentRouteBadge`）**：
-  - `stock`（现有库存）→ `teal`（`bg-teal-soft text-teal-foreground border-teal-border`）
-  - `warehouse`（采购入仓）→ `orange`（`bg-orange-soft text-orange-foreground border-orange-border`）
-  - `direct_dropship`（代发直发）→ `info`（`bg-info-soft text-info-foreground border-info-border`）
-  - `direct_bulk`（集采直发）→ `violet`（`bg-violet-soft text-violet-foreground border-violet-border`）
+- **4 类履约路径徽章（`FulfillmentRouteBadge`，兜底 `other` → `neutral`）**：
+  - `stock`（现有库存）→ `teal`（`bg-teal-soft text-teal-soft-foreground border-teal-border`）
+  - `warehouse`（采购入仓）→ `orange`（`bg-orange-soft text-orange-soft-foreground border-orange-border`）
+  - `direct_dropship`（代发直发）→ `info`（`bg-info-soft text-info-soft-foreground border-info-border`）
+  - `direct_bulk`（集采直发）→ `violet`（`bg-violet-soft text-violet-soft-foreground border-violet-border`）
 - **5 档多源序号色（`sourceAccentForIndex`）**：
   - 源 1 → `chart-1`（飞书蓝 / `info`）
   - 源 2 → `chart-2`（琥珀橙 / `orange`）
@@ -201,10 +201,10 @@ ERP 任务页同时运行于大屏、中屏、768px 抽屉和分栏队列检查�
   - 源 5 → `chart-3`（酸橙绿 / `lime`）
   - **一致性规则**：顶部堆叠配平条的区段色、左侧来源卡的左色条与编号徽章、右侧地址表筛选胶囊及行内归属按钮必须读取同一个 `sourceAccentForIndex(index)`，绝不各自配色。
 
-#### 3. 零图表库轻量微可视化（Micro-Visualizations）
+#### 3. 零图表库轻量微可视化（[`micro-visualizations.tsx`](../erp-client/components/business/task/micro-visualizations.tsx)）
 任务页拒绝引入重型 ECharts/Recharts 占位大卡片，而是用纯 CSS Flexbox + 语义令牌构建 `4px~8px` 高的微可视化条，紧贴数值本身：
-- **覆配覆盖进度条**：`h-1.5` 多段横向条，区分满配（`bg-success`）、部分（`bg-warning`）、超配/不匹配（`bg-destructive`）、未覆盖（`bg-muted`），配圆点图例。
-- **成本-毛利结构条**：以销售总额为 `100%`，串联 `bg-primary/75`（货品采购成本）+ `bg-warning`（附加费用）+ `bg-success/75`（毛利空间）；若发生整单亏损则整条转 `bg-destructive` 并标注溢亏比例。
+- **覆配覆盖进度条（`CoverageRatioBar`）**：`h-1.5` 多段横向条，区分满配（`bg-success`）、部分（`bg-warning`）、超配/不匹配（`bg-destructive`）、未覆盖（`bg-muted`），配圆点图例。
+- **成本-毛利结构条（`CostMarginBar`）**：以销售总额为 `100%`，串联 `bg-primary/75`（货品采购成本）+ `bg-warning`（附加费用）+ `bg-success/75`（毛利空间）；若发生整单亏损则整条转 `bg-destructive` 并标注溢亏比例。
 - **三级价格传导链**：单行展示 `采购价 → 供给价 → 对外价`（`text-tiny num`），在节点间用微箭头与红绿差额直接暴露倒挂环节。
 
 ---
@@ -305,15 +305,15 @@ ERP 任务页同时运行于大屏、中屏、768px 抽屉和分栏队列检查�
 ### 4.2 六大核心模式详解
 
 #### 模式 A1：零浪费条件顶栏（重提对照 + 风险聚合直达）
-1. **重提对照横幅（[`WorkspaceApprovalResubmissionBanner`](../erp-client/features/workspace/components/workspace-approval-resubmission-banner.tsx)）**：
+1. **重提对照横幅（[`WorkspaceApprovalResubmissionBanner`](../erp-client/components/business/task/workspace-approval-resubmission-banner.tsx)）**：
    - 仅在第 `>= 2` 轮提交时出现；将「轮次徽章 + 对比基准版本号 + 经办人重提说明 + 字段级 diff 胶囊（`旧值` 删除线 `→` `新值` 加粗）+ 上轮驳回人及原文」收敛在一个轻量柔底条内。
    - 目的：审批人**无需先翻看历史审批日志**就能确认驳回意见是否已落实。
-2. **可操作风险聚合条（`purchase-approval-risk-strip` / 各类财务风险条）**：
-   - 仅在 `riskCount > 0` 时渲染；使用 `border-l-2` 区分严重级（`destructive`）与警示级（`warning`），单行汇总分类计数（含采销对照中上浮的 `税后倒挂`、`拆笔超需求`、`需垫资/账期错配`、`进项偏低/专票抵扣`、`履约与取价不符` 等跨单/商务风控，以及财务类 `超出可申请余额 · 缺少联行号 · 缺少银行回单`）。
-   - 右侧内嵌动作按钮 **`仅看风险项（N）›`**（过滤主表至含税/税后/拆笔/进项偏低等可操作风险行）以及在命中商务/票税/履约风控时提供 **`采销对照 ›`** 直达右轨。
+2. **可操作风险聚合条（[`TaskRiskSummaryBar`](../erp-client/components/business/task/task-risk-summary-bar.tsx)）**：
+   - 仅在 `riskCount > 0`（或存在有效风险项/摘要）时渲染；使用 `border-l-2` 区分严重级（`destructive`）与警示级（`warning`），单行汇总分类计数（含采销对照中上浮的 `税后倒挂`、`拆笔超需求`、`需垫资/账期错配`、`进项偏低/专票抵扣`、`履约与取价不符` 等跨单/商务风控，以及财务类 `超出可申请余额 · 缺少联行号 · 缺少银行回单`）。
+   - 右侧内嵌动作按钮 **`仅看风险项（N）›`**（过滤主表至含税/税后/拆笔/进项偏低等可操作风险行）以及在命中商务/票税/履约风控时提供 **`采销对照 ›`** 直达右轨（或通过单项 `items[].onClick` 逐项直达定位）。
 
-#### 模式 A2：口径透明且宁缺毋滥的决策 KPI 栏
-- 容器采用 `bg-surface-sunken rounded-lg px-4 py-3.5`，通过 `@container` 查询按实际有效指标数自适应列数（`2 / 3 / 4` 列；纯费用单收缩为 3 列，仅 2 项金额指标时按 2 列或 3 列布局，不留空白死格）。
+#### 模式 A2：口径透明且宁缺毋滥的决策 KPI 栏（[`DecisionKpiBar`](../erp-client/components/business/task/decision-kpi-bar.tsx)）
+- 容器采用 `bg-surface-sunken rounded-lg px-4 py-3.5`，由 `DecisionKpiBar` / `DecisionKpiCell` 内置 `@container/decision-kpi` 容器查询，按实际有效指标数自适应列数（`1 / 2 / 3 / 4` 列；3 列中屏自动通栏第 3 项，不留空白死格）。
 - **字号主次分明**：主金额用 `text-value-section`（`24px`），利润/毛利率/余额等辅助决策值用 `text-value-compact`（`20px`），条款摘要用 `text-body-compact`（`13px`）。
 - **强制口径透明**：每个计算类指标必须附带极轻口径副标（`text-tiny`，如 `含税`、`供给 − 采购`、`含税 / 税后`、`采购未结 − 占用`）、`?` 悬浮 `Tooltip` 展示精确公式与明细分解（含税后毛利及进销项税差），以及覆盖率脚注（如 `3/5 项`、`不含费用`、`税损 -X.Xpp`）；「公司对外毛利」直接在主画布呈现含税/税后双口径与 `税后倒挂` 警报，「付款与交付」在单源场景呈现 `客户 → 采` 付款条件对照与垫资提示，纯费用单同步展现含本单累计附加费及占销售比。
 - **指标价值门禁（严禁凑数与硬塞）**：
@@ -337,7 +337,7 @@ ERP 任务页同时运行于大屏、中屏、768px 抽屉和分栏队列检查�
   - **克制去重但不破坏核验完整性**：仅避免在主区无意义重复吸顶页头里的单号/版本号；对于财务核验成组字段（如收付款完整要素），以「成组好核对」优先，不为机械去重而拆散核心上下文。
 
 #### 模式 A4：阈值化高密度明细表与附着式行风险条
-- **控件按阈值出现（[`workspace-approval-table-controls.tsx`](../erp-client/features/workspace/components/workspace-approval-table-controls.tsx)）**：
+- **控件按阈值出现（[`workspace-approval-table-controls.tsx`](../erp-client/components/business/task/workspace-approval-table-controls.tsx)）**：
   - 筛选栏（`全部 N` / `仅看风险项 N` 子切换 + 搜索框）：仅在「总行数 `> 8`」或「存在风险项」或「当前处于筛选态」时显示；3 行正常小单保持绝对清爽。
   - 分页条（`20 / 50` 条每页）：仅在过滤后行数 `> 20` 时显示。
 - **无框柔底圆角表头与整单口径表尾**：表头与合计行使用 `bg-surface-sunken [&_th:first-child]:rounded-l-md [&_th:last-child]:rounded-r-md [&_tr]:border-b-0`。当处于筛选态时，表尾始终保持**整单合计**并显式标注 `（当前显示 M 项，合计按整单）`，防止误将筛选小计当作整单金额批复。
@@ -346,7 +346,7 @@ ERP 任务页同时运行于大屏、中屏、768px 抽屉和分栏队列检查�
   - 风险行（含 `税后倒挂` 与同销售行拆笔合并的 `拆笔超需求`）或多来源行自动去除主行底边（`border-b-0`），紧贴附着一行 `PurchaseLineRiskStrip`（`border-l-2` 语义色条），直接给出**量化差值**（`高出 ¥12.00 (+8.5%)`、`超来源销售需求 +5 台`、`对外税后倒挂：含税盈利，扣税后不含税亏 ¥X`、`品规差异：销售「A」→ 采购「B」`）与 **`对照本行`** 联动入口。
 
 #### 模式 A5：智能扩宽且双向联动的右侧上下文轨
-由 [`UnifiedTaskWorkbench`](../erp-client/components/business/unified-task-workbench.tsx) + [`WorkspaceApprovalContextRail`](../erp-client/features/workspace/components/workspace-approval-context-rail.tsx) + [`WorkspacePurchaseSourceComparison`](../erp-client/features/workspace/components/workspace-purchase-source-comparison.tsx) 协作完成（与左侧主画布共享同一份上提的 `buildPurchaseSourceComparisonModel` 计算结果）：
+由 [`UnifiedTaskWorkbench`](../erp-client/components/business/unified-task-workbench.tsx) + [`WorkspaceApprovalContextRail`](../erp-client/components/business/task/workspace-approval-context-rail.tsx)（工作台领域适配封装见 [`features/workspace/components/workspace-approval-context-rail.tsx`](../erp-client/features/workspace/components/workspace-approval-context-rail.tsx)） + [`WorkspacePurchaseSourceComparison`](../erp-client/features/workspace/components/workspace-purchase-source-comparison.tsx) 协作完成（与左侧主画布共享同一份上提的 `buildPurchaseSourceComparisonModel` 计算结果）：
 1. **单层线型页签（零嵌套 Tab）**：`审批记录` | `附件对照 (N)` | `采销对照 (N)` | `单据全动态`。
 2. **自适应扩宽与自动复原引擎**：
    - 默认宽度 `28%`（持久化至 `localStorage`：`erp.workspace.approvalRailWidth`，折叠态持久化至 `erp.workspace.approvalRailCollapsed`），拖拽范围 `24% ~ 52%`。
@@ -364,7 +364,7 @@ ERP 任务页同时运行于大屏、中屏、768px 抽屉和分栏队列检查�
 - **双视角收货地址弹窗（[`WorkspacePurchaseDeliveryDialog`](../erp-client/features/workspace/components/workspace-purchase-delivery-dialog.tsx)，`Dialog size="lg"`）**：
   - 单地址统一收货直接展示精简地址卡 + 一键复制；
   - 多地址自动展示区域分布 Top 5 胶囊、条件搜索（`> 3` 个地址才显）、`按收货地址 / 按商品` 双视角切换，以及从某一行点入时的上下文筛选横幅（带 `查看整单全部地址` 恢复键）。
-- **分级内联审批栏（[`ApprovalActionBar`](../erp-client/features/approval-workflow/components/approval-action-bar.tsx)）**：
+- **分级内联审批栏（[`ApprovalActionBar`](../erp-client/components/business/task/approval-action-bar.tsx)，审批流写接口适配见 [`features/approval-workflow/components/approval-action-bar.tsx`](../erp-client/features/approval-workflow/components/approval-action-bar.tsx)）**：
   - **原地向上展开**：底栏默认仅占 `48px` 单行；点击意见框、点击「驳回」或按快捷键 `R` 时，审批意见区原地向上平滑展开为 `ReasonTextareaField`（实时显示 `UTF-8` 字节计数器，上限 `512` 字节，遵循 `lib/validation/reason-length.ts`）。
   - **动态上下文驳回短语**：基于单据风险状态动态生成高频驳回理由（`buildPurchaseDynamicRejectPhrases`，融合对外负毛利、税后倒挂、拆笔超需求、资金垫资/账期错配、进项税率/专票抵扣、集采改直发等），前置在默认通用短语之前，总计上限 6 枚胶囊，一键填入。
   - **肌肉记忆按钮顺序与 ADR-1 风控**：右侧固定 `[驳回]`（`destructive` 描边）→ `[通过审批]`（唯一实心飞书蓝；高风险时自动附加 `ShieldAlertIcon`）。低风险直接提交 + `3s` Toast + 自动下一项；高风险复用同一 `purchaseApprovalRiskReasons` 计算结果（含税后倒挂、拆笔超需求、资金/票税/履约警示），弹出唯一确认框 `FormalActionConfirmDialog`（绝不重复确认）。
@@ -555,7 +555,7 @@ ERP 任务项会出现在三种界面载体中，必须通过统一的上下文�
 | **轻作业抽屉（`TaskActionSheet`）** | `768px` | 与检查器共用组件；遵循 ADR-3 双轨规范（仅承载快速审阅/速办，重编辑一键升格全屏页） | 禁用横向滚动条，确保核心状态与主 CTA 在首屏可见 |
 | **全屏任务页（`/workspace/[id]`）** | `>= 960px` 启用双栏 | `WorkspaceTaskPageProvider` 启用通栏 `framed` 模式、`56px` 吸顶头、`48px` 吸底栏、可拖拽右轨与队列步进器 | 显示 `← 返回列表`、`第 X/Y 项` 步进器与 `[☑ 处理后自动下一项]` |
 
-### 6.2 工作台键盘效率引擎（[`use-workspace-hotkeys.ts`](../erp-client/features/workspace/hooks/use-workspace-hotkeys.ts)）
+### 6.2 工作台键盘效率引擎（[`use-workspace-hotkeys.ts`](../erp-client/hooks/use-workspace-hotkeys.ts)）
 
 任务页必须原生支持免鼠标高频流转，并严格遵守输入保护守卫：
 
@@ -597,17 +597,100 @@ ERP 任务项会出现在三种界面载体中，必须通过统一的上下文�
 
 ### 7.1 核心复用原语清册
 
+以下通用任务页原语已全部沉淀至 `erp-client/components/business/`（含 `components/business/task/*`）并由 `@/components/business` 统一再导出，快捷键引擎沉淀至 `@/hooks/use-workspace-hotkeys`（各领域仅保留绑定 TanStack Query / mutation 的薄适配层）：
+
 | 层级 | 组件 / 工具 | 源码路径 | 核心职责 |
 | --- | --- | --- | --- |
-| **骨架层** | `UnifiedTaskWorkbench` & `UnifiedTaskWorkbenchRailToggle` | [`erp-client/components/business/unified-task-workbench.tsx`](../erp-client/components/business/unified-task-workbench.tsx) | 4 原型容器查询布局、56px 头/48px 底、可拖拽/自动扩宽/持久化右轨 |
-| **适配层** | `WorkspaceTaskPane` / `WorkspaceTaskFooter` / `WorkspaceInspectorModeProvider` | [`erp-client/components/business/workspace-task-pane.tsx`](../erp-client/components/business/workspace-task-pane.tsx) | 页面级与嵌入式宿主适配、底栏 Portal 注入、检查器去重 |
-| **页头层** | `WorkspaceCompactTaskHeader` / `WorkspaceTaskIdentityHeader` / `WorkspaceTaskHeaderActions` | [`erp-client/features/workspace/components/workspace-task-identity-header.tsx`](../erp-client/features/workspace/components/workspace-task-identity-header.tsx)<br>[`erp-client/features/workspace/components/workspace-task-context.tsx`](../erp-client/features/workspace/components/workspace-task-context.tsx) | 56px 单行标题、状态与单据徽章、元信息流、转派/关闭/说明/右轨开关 |
-| **核心信息层** | `WorkspaceFactGrid` / `WorkspaceFactItem` / `WorkspaceFactGroup` / `DetailWorkspaceFacts` / `SensitiveValue` | [`erp-client/components/business/detail-workspace.tsx`](../erp-client/components/business/detail-workspace.tsx)<br>[`erp-client/components/business/values.tsx`](../erp-client/components/business/values.tsx) | 自带 `@container/facts` 的纯白无框 2~4 列结构化键值网格（12px 柔灰标签 + 13px 正文值、长文本通栏、语义分组与定位高亮）、敏感账号/流水显文与复制 |
-| **审批右轨** | `WorkspaceApprovalContextRail` / `UnifiedMaterialViewer` / `ApprovalRouteStepper` | [`erp-client/features/workspace/components/workspace-approval-context-rail.tsx`](../erp-client/features/workspace/components/workspace-approval-context-rail.tsx)<br>[`erp-client/components/business/unified-material-viewer.tsx`](../erp-client/components/business/unified-material-viewer.tsx)<br>[`erp-client/features/approval-workflow/components/approval-route-stepper.tsx`](../erp-client/features/approval-workflow/components/approval-route-stepper.tsx) | 单层页签右轨（审批记录 / 附件对照 / 来源单据对照 / 单据全动态） |
-| **审批决策** | `ApprovalActionBar` / `WorkspaceApprovalResubmissionBanner` / `WorkspaceApprovalTableControls` | [`erp-client/features/approval-workflow/components/approval-action-bar.tsx`](../erp-client/features/approval-workflow/components/approval-action-bar.tsx)<br>[`erp-client/features/workspace/components/workspace-approval-resubmission-banner.tsx`](../erp-client/features/workspace/components/workspace-approval-resubmission-banner.tsx)<br>[`erp-client/features/workspace/components/workspace-approval-table-controls.tsx`](../erp-client/features/workspace/components/workspace-approval-table-controls.tsx) | ADR-1 分级通过、原地展开驳回与动态短语、重提 diff 横幅、阈值化表格筛选与分页 |
-| **编制色标与配平** | `source-palette.ts` / `SourcingAllocationSummary` / `SourcingInlineOptionPicker` | [`erp-client/features/purchase-orders/lib/sourcing/source-palette.ts`](../erp-client/features/purchase-orders/lib/sourcing/source-palette.ts)<br>[`erp-client/features/purchase-orders/components/sourcing-allocation-summary.tsx`](../erp-client/features/purchase-orders/components/sourcing-allocation-summary.tsx)<br>[`erp-client/features/purchase-orders/components/sourcing-inline-option-picker.tsx`](../erp-client/features/purchase-orders/components/sourcing-inline-option-picker.tsx) | 4 路径色 + 5 源序号色、实时守恒配平卡与自愈按钮、富信息单元格内联选择器 |
+| **骨架层** | `UnifiedTaskWorkbench` / `UnifiedTaskWorkbenchRailToggle` / `useUnifiedTaskWorkbenchRail` | [`erp-client/components/business/unified-task-workbench.tsx`](../erp-client/components/business/unified-task-workbench.tsx) | 4 原型容器查询布局、56px 头/48px 底、可拖拽/自动扩宽/持久化右轨、底栏内置 `autoNext`「处理后自动下一项」可选槽位 |
+| **适配层** | `WorkspaceTaskPane` / `WorkspaceTaskFooter` / `WorkspaceTaskPageProvider` / `WorkspaceInspectorModeProvider` / `WorkspaceProcessingPane` | [`erp-client/components/business/workspace-task-pane.tsx`](../erp-client/components/business/workspace-task-pane.tsx)<br>[`erp-client/components/business/task/workspace-processing-pane.tsx`](../erp-client/components/business/task/workspace-processing-pane.tsx) | 页面级与嵌入式宿主适配、底栏 Portal 注入、检查器去重与统一任务办理壳 |
+| **页头层** | `WorkspaceCompactTaskHeader` / `WorkspaceTaskIdentityHeader` / `WorkspaceTaskHeaderActions` / `WorkspaceDocumentBadge` / `WorkspaceTaskContextHelp` / `WorkspaceHotkeyCheatSheetButton` | [`erp-client/components/business/task/workspace-task-identity-header.tsx`](../erp-client/components/business/task/workspace-task-identity-header.tsx)<br>[`erp-client/components/business/task/workspace-task-context.tsx`](../erp-client/components/business/task/workspace-task-context.tsx)<br>[`erp-client/components/business/task/workspace-document-badge.tsx`](../erp-client/components/business/task/workspace-document-badge.tsx) | 56px 单行标题、状态与单据徽章、元信息流、说明/快捷键速查/右轨开关（工作台责任流转绑定适配位于 `features/workspace/components/`） |
+| **核心信息层** | `WorkspaceFactGrid` / `WorkspaceFactItem` / `WorkspaceFactGroup` / `DetailWorkspaceFacts` / `SensitiveValue` | [`erp-client/components/business/detail-workspace.tsx`](../erp-client/components/business/detail-workspace.tsx)<br>[`erp-client/components/business/feedback.tsx`](../erp-client/components/business/feedback.tsx) | 自带 `@container/facts` 的纯白无框 2~4 列结构化键值网格（12px 柔灰标签 + 13px 正文值、长文本通栏、语义分组与定位高亮）；`SensitiveValue` 提供短时明文揭示（默认 15s 自动隐藏、失败重试）与权限内默认开启的一键复制明文（`copyable` 默认 `true`，仅在传 `onReveal` 时渲染，始终复制明文而非脱敏占位符，剪贴板不可用时降级显文并弹 Toast，派生 `${id}-toggle` / `-copy` / `-retry`） |
+| **决策 KPI 与风险条** | `DecisionKpiBar` / `DecisionKpiCell` / `TaskRiskSummaryBar` | [`erp-client/components/business/task/decision-kpi-bar.tsx`](../erp-client/components/business/task/decision-kpi-bar.tsx)<br>[`erp-client/components/business/task/task-risk-summary-bar.tsx`](../erp-client/components/business/task/task-risk-summary-bar.tsx) | `@container/decision-kpi` 柔底决策 KPI 栏（主次字号梯度、口径副标、`?` 公式 Tooltip、覆盖脚注）；`border-l-2` 零占位可操作风险聚合直达条 |
+| **审批右轨** | `WorkspaceApprovalContextRail` / `UnifiedMaterialViewer` / `ApprovalRouteStepper` | [`erp-client/components/business/task/workspace-approval-context-rail.tsx`](../erp-client/components/business/task/workspace-approval-context-rail.tsx)<br>[`erp-client/components/business/unified-material-viewer.tsx`](../erp-client/components/business/unified-material-viewer.tsx)<br>[`erp-client/components/business/task/approval-route-stepper.tsx`](../erp-client/components/business/task/approval-route-stepper.tsx) | 单层页签右轨（审批记录 / 附件对照 / 来源单据对照 / 单据全动态），材料数据由外部回调注入保持纯 UI 边界 |
+| **审批决策与重办** | `ApprovalActionBar` / `WorkspaceApprovalResubmissionBanner` / `ApprovalLineFilterBar` / `ApprovalLinePagination` / `WorkspaceReworkCommandCard` | [`erp-client/components/business/task/approval-action-bar.tsx`](../erp-client/components/business/task/approval-action-bar.tsx)<br>[`erp-client/components/business/task/workspace-approval-resubmission-banner.tsx`](../erp-client/components/business/task/workspace-approval-resubmission-banner.tsx)<br>[`erp-client/components/business/task/workspace-approval-table-controls.tsx`](../erp-client/components/business/task/workspace-approval-table-controls.tsx)<br>[`erp-client/components/business/task/workspace-rework-command-card.tsx`](../erp-client/components/business/task/workspace-rework-command-card.tsx) | ADR-1 分级通过、原地展开驳回与动态短语、重提 diff 横幅、阈值化表格筛选与分页、驳回待处理唯一行动指挥卡 |
+| **视觉编码与微可视化** | `ProfitValue`（别名 `PurchaseProfitValue`） / `FulfillmentRouteBadge` / `source-palette.ts` / `CoverageRatioBar` / `CostMarginBar` | [`erp-client/components/business/task/profit-value.tsx`](../erp-client/components/business/task/profit-value.tsx)<br>[`erp-client/components/business/task/fulfillment-route-badge.tsx`](../erp-client/components/business/task/fulfillment-route-badge.tsx)<br>[`erp-client/components/business/task/source-palette.ts`](../erp-client/components/business/task/source-palette.ts)<br>[`erp-client/components/business/task/micro-visualizations.tsx`](../erp-client/components/business/task/micro-visualizations.tsx) | 盈亏双编码、履约路径双编码徽章、4 路径色 + 5 源序号色、纯 CSS 覆配覆盖进度条与成本-毛利结构条 |
+| **编制配平（采购域专用）** | `SourcingAllocationSummary` / `SourcingInlineOptionPicker` | [`erp-client/features/purchase-orders/components/sourcing-allocation-summary.tsx`](../erp-client/features/purchase-orders/components/sourcing-allocation-summary.tsx)<br>[`erp-client/features/purchase-orders/components/sourcing-inline-option-picker.tsx`](../erp-client/features/purchase-orders/components/sourcing-inline-option-picker.tsx) | 采购供给实时守恒配平卡与自愈按钮、富信息单元格内联选源器 |
 | **预览与纸面** | `PaperDocumentViewport` / `WorkspacePurchaseDeliveryDialog` | [`erp-client/components/business/paper-document-viewport.tsx`](../erp-client/components/business/paper-document-viewport.tsx)<br>[`erp-client/features/workspace/components/workspace-purchase-delivery-dialog.tsx`](../erp-client/features/workspace/components/workspace-purchase-delivery-dialog.tsx) | 右轨/弹窗内单据纸面适配缩放、按地址/按商品双视角收货核对 |
-| **快捷键** | `useWorkspaceHotkeys` | [`erp-client/features/workspace/hooks/use-workspace-hotkeys.ts`](../erp-client/features/workspace/hooks/use-workspace-hotkeys.ts) | 全局队列与审批快捷键引擎（含活跃帧与 IME 守卫） |
+| **快捷键** | `useWorkspaceHotkeys` | [`erp-client/hooks/use-workspace-hotkeys.ts`](../erp-client/hooks/use-workspace-hotkeys.ts) | 全局队列与审批快捷键引擎（含活跃帧、IME 与阻断浮层豁免守卫） |
+
+#### 7.1.1 新增核心任务原语 Props 与用法速查
+
+##### 1. `DecisionKpiBar` & `DecisionKpiCell`（`@/components/business`）
+
+替代各页面手写 `bg-surface-sunken rounded-lg` 指标条；当 `items` 全部为空且未传 `children` 时返回 `null`（零占位），内置 `@container/decision-kpi` 按有效指标数自适应 `1 / 2 / 3 / 4` 列（3 列中屏自动通栏第 3 项，绝不留空白死格）：
+
+- **`DecisionKpiBarProps`**：`items?: readonly (DecisionKpiItem | null | undefined | false)[]`、`children?: ReactNode`（组合式配合 `DecisionKpiCell`）、`columns?: 1 | 2 | 3 | 4`（省略按有效项数自动推导）、`ariaLabel = "关键决策指标"`、`idPrefix?: string`（自动派生 `${idPrefix}-kpi-${seg}-formula`）、`gridClassName?: string`。
+- **`DecisionKpiItem` / `DecisionKpiCellProps`**：`id`、`label`、`basis?`（`text-tiny` 轻口径副标）、`emphasis?: "primary" | "secondary" | "terms"`（默认 `"secondary"`；对应 24px `text-value-section` / 20px `text-value-compact` / 13px `text-body-compact`）、`value`、`tone?: "default" | "muted" | "success" | "warning" | "destructive" | "info"`、`valueMeta?`（右侧行内附着毛利率/徽章）、`formulaTooltip?` / `formulaTooltipId?` / `formulaTooltipLabel?`（`?` 公式弹窗）、`footnote?` / `footnoteTone?: "muted" | "warning" | "destructive" | "success"`、`extra?`、`span?: 1 | 2 | "full"`。
+
+```tsx
+import { DecisionKpiBar, MoneyValue, ProfitValue } from "@/components/business"
+
+<DecisionKpiBar
+    idPrefix={idPrefix}
+    ariaLabel="采购审批核心决策指标"
+    items={[
+        {
+            id: "total",
+            label: "采购含税总额",
+            basis: "含税",
+            emphasis: "primary",
+            value: <MoneyValue value={summary.taxIncludedTotal} display="compact" inheritColor />,
+            formulaTooltip: "货品含税小计 + 附加费用",
+            footnote: `共 ${summary.lineCount} 项`,
+        },
+        {
+            id: "sales-profit",
+            label: "对比销售价",
+            basis: "含税 / 税后",
+            emphasis: "secondary",
+            value: <ProfitValue amount={summary.grossProfit} />,
+            valueMeta: summary.afterTaxLoss ? <StatusBadge tone="destructive" label="税后倒挂" /> : null,
+            footnote: `覆盖 ${summary.coveredCount}/${summary.totalCount} 项`,
+            footnoteTone: summary.afterTaxLoss ? "destructive" : "muted",
+        },
+    ]}
+/>
+```
+
+##### 2. `TaskRiskSummaryBar`（`@/components/business`）
+
+落地模式 A1 零占位风险聚合直达条（`role="alert"` + `border-l-2`）：当 `riskCount <= 0` 或无有效风险项与摘要时返回 `null`；自动过滤空项及 `count <= 0` 项；未显式传 `severity` 时，只要任一可见项为 `"destructive"` 即自动升级为高危态，否则为 `"warning"`：
+
+- **`TaskRiskSummaryBarProps`**：`riskCount?: number`、`severity?: "destructive" | "warning"`、`leadLabel?: ReactNode | null`（默认高危「高危复核」、警示「需复核」，传 `null` 隐藏）、`items?: readonly (TaskRiskSummaryItem | null | undefined | false)[]`（`id`、`label`、`count?`、`severity?`、`onClick?` 转为行内直达定位钮、`buttonId?`）、`summary?: ReactNode`、`tooltipTitle?: string`、`actions?: readonly (TaskRiskSummaryAction | null | undefined | false)[]`（右侧直达按钮：`id`、`label`、`count?` 自动追加「（N）」、`onClick`、`buttonId?`、`disabled?`、`showChevron = true`）、`idPrefix?: string`（派生 `${idPrefix}-risk-item-${seg}` / `${idPrefix}-risk-action-${seg}`）、`dataSlot = "task-risk-summary-bar"`。
+
+```tsx
+import { TaskRiskSummaryBar } from "@/components/business"
+
+<TaskRiskSummaryBar
+    idPrefix={idPrefix}
+    riskCount={riskSummary.total}
+    items={[
+        { id: "negative-margin", label: "负毛利", count: riskSummary.negativeMargin, severity: "destructive" },
+        { id: "after-tax-loss", label: "税后倒挂", count: riskSummary.afterTaxLoss, severity: "destructive" },
+        { id: "cash-advance", label: "需垫资", count: riskSummary.cashAdvance, severity: "warning" },
+    ]}
+    actions={[
+        { id: "jump-risk-only", label: "仅看风险项", count: riskSummary.riskLines, onClick: handleJumpRiskOnly },
+        { id: "open-comparison", label: "采销对照", onClick: handleOpenSourceComparison },
+    ]}
+/>
+```
+
+##### 3. `FulfillmentRouteBadge`（`@/components/business`）
+
+统一消费 `source-palette.ts` 的履约路径语义双编码徽章（图标 + 语义色 + 默认中文标签）：
+
+- **`FulfillmentRouteBadgeProps`**：`route?: SourceRouteCategory`（`"stock" | "warehouse" | "direct_dropship" | "direct_bulk" | "other"`，优先级高于 `option`）、`option?: SourceRouteInput | null`（传入 `{ sourceType, fulfillmentResponsibility, priceBasis }` 自动推导路径分类与标签）、`label?: ReactNode`（覆盖默认中文标签）、`showIcon?: boolean`（默认 `true`，内置 `PackageCheckIcon` / `WarehouseIcon` / `TruckIcon` / `BoxesIcon` / `RouteIcon` 双编码）、`size?: "default" | "compact"`（`default` 标准 12px 徽章，`compact` 为 `h-4.5 px-1.5 text-tiny` 紧凑微胶囊）。
+
+```tsx
+import { FulfillmentRouteBadge } from "@/components/business"
+
+// 方式 A：直接传入供给方案对象，自动推导路径与语义色
+<FulfillmentRouteBadge option={candidate} />
+
+// 方式 B：显式指定路径与紧凑尺寸
+<FulfillmentRouteBadge route="direct_bulk" size="compact" label="集采直发" />
+```
 
 ### 7.2 实施蓝图：新建原型 A（决策审查型）任务页
 
@@ -626,7 +709,6 @@ ERP 任务项会出现在三种界面载体中，必须通过统一的上下文�
         />
     }
     contextRail={{
-        defaultTab: "trail",
         collapsible: true,
         resizable: true,
         defaultWidthPercent: 28,
@@ -657,13 +739,18 @@ ERP 任务项会出现在三种界面载体中，必须通过统一的上下文�
     {/* 1. 条件层：第 >=2 轮重提对照横幅（干净时零渲染） */}
     {resubmission ? <WorkspaceApprovalResubmissionBanner {...resubmission} /> : null}
 
-    {/* 2. 条件层：风险聚合跳转条（一键切至「仅看风险项」并滚至表格） */}
-    {riskSummary.total > 0 ? <RiskAggregationStrip onJumpRiskOnly={handleJumpRiskOnly} /> : null}
+    {/* 2. 条件层：风险聚合跳转条（riskCount === 0 时零渲染，一键切至「仅看风险项」并滚至表格） */}
+    <TaskRiskSummaryBar
+        idPrefix={idPrefix}
+        riskCount={riskSummary.total}
+        items={riskSummary.items}
+        actions={[{ id: "risk-only", label: "仅看风险项", count: riskSummary.riskLines, onClick: handleJumpRiskOnly }]}
+    />
 
-    {/* 3. 决策指标层：bg-surface-sunken 柔底 KPI 带（仅放有决策价值的金额/余额/毛利，带口径副标与 ? 公式 Tooltip） */}
-    <DecisionKpiBand />
+    {/* 3. 决策指标层：DecisionKpiBar 柔底 KPI 带（仅放有决策价值的金额/余额/毛利，带口径副标与 ? 公式 Tooltip） */}
+    <DecisionKpiBar idPrefix={idPrefix} items={kpiItems} />
 
-    {/* 4. 核心业务信息层：无框结构化 2~3 列键值网格（12px 标签 + 13px 正文值；账户/税票按组拆字段，长文本通栏） */}
+    {/* 4. 核心业务信息层：WorkspaceFactGroup + WorkspaceFactGrid（12px 标签 + 13px 正文值；账户/税票按组拆字段，长文本通栏） */}
     <StructuredBusinessFactsGrid onOpenSourceComparison={handleOpenSourceComparison} />
 
     {/* 5. 业务核心层：A1 多行对照表（阈值筛选/分页/附着风险条）或 A2 语义化关联单据依据表 */}

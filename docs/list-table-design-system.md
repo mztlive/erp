@@ -103,11 +103,11 @@
 
 页头、视图栏、主筛选栏、已选条件带、高级筛选托盘、批量操作条、表格首列左缘与末列右缘、分页条全部严格对齐同一水平边距变量 `--scaffold-px`：
 
-| 视口条件 | `--scaffold-px` 值 | 对应 Token |
+| 视口 / 容器条件 | `--scaffold-px` 值 | 对应 Token |
 | --- | --- | --- |
-| 窄窗 `< 768px` (`< 48rem`) | `16px` (`1rem`) | `--spacing-workspace-inline` |
-| 中屏 `768px ~ 1199px` (`48rem ~ 74.9rem`) | `20px` (`1.25rem`) | `--spacing-page-inline` |
-| 宽屏 `≥ 1200px` (`≥ 75rem`) | `24px` (`1.5rem`) | `--spacing-page-inline-lg` |
+| 窄窗 `< 768px`（`< 48rem` 视口） | `16px` (`1rem`) | `--spacing-workspace-inline` |
+| 中屏 `≥ 768px`（`≥ 48rem` 视口）且工作区容器 `< 70rem` | `20px` (`1.25rem`) | `--spacing-page-inline` |
+| 宽屏容器查询 `@container workspace (min-width: 70rem)`（容器宽度 `≥ 1120px`，扣除侧栏后约对应 `≥ 1360px` 视口，对应 `@[70rem]/workspace:px-page-inline-lg`） | `24px` (`1.5rem`) | `--spacing-page-inline-lg` |
 | 矮屏自动收紧：`width ≥ 768px && height ≤ 960px` | 中屏 `16px` / 宽屏 `20px` | 由 `globals.css` 媒体查询运行时覆写 |
 
 #### 控件与行高节奏
@@ -115,7 +115,7 @@
 | Token | 标准桌面值 | 矮屏 `≤960px` | 极矮屏 `≤720px` | 用途 |
 | --- | --- | --- | --- | --- |
 | `--spacing-control-xs` | `24px` (`1.5rem`) | `24px` | `24px` | 极小图标按钮（列设置移位/固定、FilterChip 高） |
-| `--spacing-control-sm` | `28px` (`1.75rem`) | `28px` | `28px` | 表格二级工具条按钮、列设置触发器、分页器每页下拉与翻页按钮、行内操作链（`h-7`） |
+| `--spacing-control-sm` | `28px` (`1.75rem`) | `28px` | `28px` | 表格二级工具条按钮、列设置触发器、分页器每页下拉与翻页按钮、行内操作链（`h-control-sm`） |
 | `--spacing-control` | `32px` (`2rem`) | `32px` | `32px` | 页头操作按钮、搜索框、主筛选下拉、高级筛选单行胶囊、「更多筛选 / 查询」按钮 |
 | `--spacing-control-lg` | `36px` (`2.25rem`) | `36px` | `36px` | 强调控件 |
 | `--spacing-workspace-toolbar-block` | `10px` (`0.625rem`) | `8px` | `6px` | 主筛选栏上下内边距 |
@@ -281,7 +281,7 @@ flowchart TD
 
 ### 4.4 通栏展开式高级筛选托盘（`ListFilterTray`）
 
-- **形态**：`morePresentation="popover"` 配合 `ListWorkSurface` 内的 `TableToolbarFilterTrayHost` 渲染为**纯白通栏展开区**（非遮挡表格的浮动弹窗），由 Base UI `Collapsible`（`keepMounted` 保留草稿）驱动 `height + opacity + translateY` 过渡（展开 `200ms ease-out`，收起 `150ms ease-in`，支持 `motion-reduce`）。
+- **形态与默认值**：`ListWorkspaceFilterBar` 的 `morePresentation` **默认为 `"popover"`**（同时支持语义别名 `"tray"`，两者等价；仅旧版内联布局需显式传 `morePresentation="inline"`），配合 `ListWorkSurface` 内的 `TableToolbarFilterTrayHost` 渲染为**纯白通栏展开区**（非遮挡表格的浮动弹窗），由 Base UI `Collapsible`（`keepMounted` 保留草稿）驱动 `height + opacity + translateY` 过渡（展开 `200ms ease-out`，收起 `150ms ease-in`，支持 `motion-reduce`）。
 - **无缝视觉融合**：托盘展开（`[data-open]`）时，CSS `:has()` 自动隐去主筛选栏和已选条件带的底线并收紧下边距至 `6px`。
 - **分组与网格布局**：
   - 使用语义化 `<fieldset>` + `<legend>` 对低频条件分组（如「人员」「状态」「商品」），相邻分组间用 `border-top: 1px solid color-mix(in oklab, var(--border) 42%, transparent)` + `8px` 间距分隔。
@@ -292,17 +292,17 @@ flowchart TD
   - 托盘内用 `ListWorkspaceFilterField`（或带 `data-slot="list-filter-field"` 的复合控件如 `PersonDirectoryFilter`、`GrossPriceRangeInputs`）包裹字段。
   - `globals.css` 自动把字段压成 `32px` 单行胶囊（`bg-muted/65 rounded-md`），`label` 自动追加中文冒号 `：`，并彻底剥离内部 `InputGroup / Input / ComboboxChips` 的边框与底色。
   - 胶囊交互态与外层主筛选逐像素同源：hover `bg-muted` → focus-within `border-primary/60 bg-card + 3px ring` → 有值（`:has([data-has-value="true"])` 或输入框非空）切换冰蓝底 `bg-sidebar-accent/70` + `border-primary/25` + 深蓝字！
-- **托盘页脚**：`border-t border-border/40 pt-3 pb-3.5`，左放说明文案（`可组合多个条件，点击「查询」后统一生效。`），右放「重置更多条件」（`RotateCcwIcon`，只清空托盘草稿）+ 实心主蓝「查询」按钮。
+- **托盘页脚**：`border-t border-border/40 pt-3 pb-3.5`，左放说明文案（手动查询模式默认 `可组合多个条件，点击「查询」后统一生效。`；`reactive={true}` 即时筛选模式默认 `选择条件后即时生效，无需点击查询。`），右放「重置更多条件」（`RotateCcwIcon`，只清空托盘草稿）+ 实心主蓝「查询」按钮（`reactive={true}` 时切换为 `variant="outline"` 的「完成」按钮收起托盘）。
 
 ### 4.5 批量勾选悬浮胶囊（`ListWorkSurface` Dock + `ListSelectionBar`）
 
-- **形态与定位**：当 `ListWorkSurface` 传入 `selectionBarOpen={canBatch && selectedCount > 0}` 时，默认在表格区域底部正中、分页条上方 `14px` 处以**自适应内容宽度的悬浮胶囊（`data-slot="list-selection-dock"`，`z-40`）**平滑上浮呈现，**零表体下推跳动**；容器样式为 `rounded-2xl border border-border/90 bg-popover/95 px-2.5 py-1.5 shadow-xl ring-1 ring-foreground/5 backdrop-blur-md`（与内部 `rounded-md` 28px 按钮形成同心圆角）。
+- **形态与定位**：只要向 `ListWorkSurface` 传入 `selectionBar`（且未显式指定 `selectionBarPlacement="toolbar"`），即默认启用表格区域底部正中、分页条上方 `14px` 处的**自适应内容宽度悬浮胶囊（`data-slot="list-selection-dock"`，`z-40`）**，**零表体下推跳动**；省略 `selectionBarOpen` 时默认展开，推荐配合 `selectionBarOpen={canBatch && selectedCount > 0}` 保持挂载以平滑播放入场/退场动画；容器样式为 `rounded-2xl border border-border/90 bg-popover/95 px-2.5 py-1.5 shadow-xl ring-1 ring-foreground/5 backdrop-blur-md`（与内部 `rounded-md` 28px 按钮形成同心圆角）。
 - **底部滚动留白与计数去重**：浮条展开时自动给表格滚动容器追加 `padding-bottom: 4.5rem`，保证滚动至最末行仍完全可见可点且不影响可视行位置；同时由 `TableToolbarScope` 告知分页条与顶栏不重复展示「已选择 N 条」，分页条稳定保持「共 M 条」。
 - **入场/退场防闪烁**：通过 `opacity + translateY + scale + visibility` 平滑上浮（200ms ease-out）与收起（150ms ease-in，支持 `motion-reduce`）；`ListSelectionBar` 内置 `useFrozenSelectionSnapshot`，在取消最后一条勾选触发退场动画期间冻结最后一次非零计数，杜绝闪现 `0`。
 - **控件排布（左右以 `1px` 竖线分隔）**：
   1. 计数锚点与分流摘要：`已选` + 实心主蓝圆胶囊数字（`bg-primary text-primary-foreground rounded-full`）+ `/ M 单位` + 轻量 `text-xs text-muted-foreground` 附加摘要（如 `· 可上架 3 件（2 件将跳过）`）
-  2. `Button variant="ghost" size="sm"`：「全选本页」（弱化灰字，本页已全选时禁用）
-  3. 批量主动作按钮：有可执行项时用实心主蓝 `variant="default"` 带图标及实时可执行数（如 `批量上架 3`）；可执行数为 `0` 时降级为中性 `variant="secondary"` 禁用态并通过 `title` 解释原因，避免淡蓝半透明显脏
+  2. `Button variant="ghost" size="sm"`：「全选本页」（13px 弱化灰字，本页已全选时禁用）
+  3. 批量主动作按钮：优先使用 `primaryAction` 或 `ListSelectionBarActionButton` —— 有可执行项时用实心主蓝 `variant="default"` 带图标及实时可执行数（如 `批量上架 3`）；可执行数为 `0` 时自动降级为中性 `variant="secondary"` 禁用态并通过 `title` 解释原因，避免淡蓝半透明显脏
   4. `Button variant="ghost" size="icon-sm"`：右侧 `×` 清空按钮（保留 `${idPrefix}-clear` 原生 ID 与 `aria-label="清空已选"`，支持无浮层打开时按 `Esc` 快速清空）
 
 ---
@@ -353,7 +353,7 @@ flowchart TD
 
 ### 5.3 语义列宽档位与列显隐策略
 
-禁止在 `ColumnDef` 上写死任意像素宽度；通过 `meta.width` 选用主题语义档位，仅特殊列（如操作列、隐藏长文本列）在页面专属 `*-list-styles.ts` 中用 `[&_[data-column-id=...]]` 覆盖：
+禁止在 `ColumnDef` 上写死任意像素宽度；通过 `meta.width` 选用 [`data-table-layout.ts`](../erp-client/components/business/data-table-layout.ts) 定义的主题语义档位（含内置 `actions` 操作列档位，无需再在 `tableClassName` 手写 `[&_[data-column-id=actions]]:w-32`），仅默认隐藏的特殊宽列可在页面专属 `*-list-styles.ts` 中微调：
 
 | `meta.width` 档位 | 默认宽 / 最小宽 | 适用列类型 |
 | --- | --- | --- |
@@ -365,7 +365,8 @@ flowchart TD
 | `status` | `128px (8rem)` / `112px (7rem)` | 状态徽章、开关列 |
 | `quantity` | `128px (8rem)` / `112px (7rem)` | 数量、版本号（配 `align: "end", numeric: true`） |
 | `rate` | `112px (7rem)` / `96px (6rem)` | 税率、比例（配 `align: "end", numeric: true`） |
-| 页面微调（`*-list-styles.ts`） | 如 `actions`: `w-32 min-w-28`（128px / 112px） | 操作列或默认隐藏的长明细列（如 `min-w-40`） |
+| `actions` | `128px (8rem)` / `112px (7rem)`（`w-32 min-w-28`） | **行尾操作列**（配 `align: "end"`），替代页面手写 `tableClassName` |
+| 页面微调（可选） | 如默认隐藏长明细列 `min-w-40` | 仅限超出标准语义档位的特殊长文本/复合列 |
 
 **默认显隐与冻结原则**：
 - 默认显示 **6~8 列核心决策信息**（身份、关键归属、关键数值、状态、直接操作）；独立编号（已并入名称副行）、版本号、版本状态、明细枚举、阻断原因默认设为 `false`，供用户在「列设置」中按需勾选。
@@ -375,14 +376,14 @@ flowchart TD
 
 | 单元格类型 | 视觉规范与推荐原语 |
 | --- | --- |
-| **1. 主身份双行**（名称 + 编号/主事实） | 使用 `<TableIdentityCell primary={name} secondary={stableNo} secondaryTitle={stableNo} numericSecondary />`（首行 13px 中粗截断，次行 12px 等宽灰字截断并带 `title`） |
+| **1. 主身份双行**（名称 + 编号/主事实） | 使用 `<TableIdentityCell primary={name} secondary={stableNo} secondaryTitle={stableNo} numericSecondary />`（首行 13px 中粗截断，次行 12px 等宽灰字截断并自动提供字符串 `title` 兜底） |
 | **2. 普通文本 / 长文本** | 使用 `<TableTextCell value={ownerName} />` 或 `<TableTextCell value={label} clamp={2} />`（继承表格 `13px text-foreground/90`，**禁止加 `text-sm`**，空值自动降级 `—`，2 行截断默认 `max-w-56` + `title`） |
 | **3. 空值与未填写** | 使用 `<TableEmptyCell />`（默认淡灰全角破折号 `—`，`text-muted-foreground/60`）；业务“未填写”使用 `<TableEmptyCell variant="label" label="未填写" />`（`12px text-muted-foreground`） |
 | **4. 异步副查询态** | 使用 `<TableAsyncCell pending={pending} failed={failed}>{children}</TableAsyncCell>`（局部降级为 `12px`「读取中…」「暂不可查」，不阻塞主表） |
 | **5. 金额 / 数量数值** | 必配 `meta: { align: "end", numeric: true, width: "amount" \| "quantity" }`；金额用 `<MoneyValue display="compact" />` 或 `.num`；带单位数量用 `<QuantityValue value={String(count)} unit="个" />`（自动分离 13px 等宽数值与 12px 淡灰单位） |
-| **6. 语义状态徽章** | 必用 `<BusinessStatusBadge context="list" tone={...} label={...} />`（自动带图标 + 12px `rounded-sm`，禁止纯色圆点与枚举原值）；**常态健康状态**（如已覆盖、当前启用）传 `appearance="quiet"` 渲染无底色语义图标 + 沉稳文字以降低满屏彩块噪点，**异常/待处理状态**（部分覆盖、未覆盖、当前停用、资料更新待确认）使用默认 `appearance="badge"` 浅底胶囊凸显；可下方纵向堆叠 `gap-1` 的 `text-xs leading-4` 阻断说明（`text-destructive`）或定时计划（`text-muted-foreground`）；可点击状态外包 `Button variant="ghost" size="xs" className="h-auto px-0 py-0.5 font-normal"` 且 `event.stopPropagation()` |
-| **7. 行内即时开关** | 使用 `<TableSwitchCell id={...} canEdit={canEdit} checked={...} statusLabel={...} statusTone={...} accessibleName={...} onCheckedChange={...} />`（有写权限渲染精致 `Switch size="sm"` `16×28px`，**无写权限自动降级为只读 `BusinessStatusBadge`**；若业务存在「部分上架」等中间态，在开关旁配轻量 `text-tiny` 琥珀微标明示；高风险关闭触发二次确认 Dialog） |
-| **8. 行尾操作列** | 使用 `<TableRowActions maxInline={2} ... />`，`meta: { align: "end" }`。最多直出 2 个无框轻按钮（`h-7 px-2 text-body-compact font-normal`，常态沉稳灰 `text-muted-foreground`，行悬停 / 聚焦 / 选中时自动点亮为主蓝 `text-primary`，不显示图标）；溢出项与破坏性动作（`destructive: true`）自动收入 `···` 纯图标下拉菜单，破坏性项以分割线置底并显示红字红图标。所有点击必须 `event.stopPropagation()` 并记录 `lastFocusedRowId` |
+| **6. 语义状态徽章** | 必用 `<BusinessStatusBadge context="list" tone={...} label={...} />`（自动带图标 + 12px `rounded-sm`，禁止纯色圆点与枚举原值）；**常态健康状态**（如已覆盖、当前启用）传 `appearance="quiet"` 渲染无底色语义图标 + 沉稳文字以降低满屏彩块噪点，**异常/待处理状态**（部分覆盖、未覆盖、当前停用、资料更新待确认）使用默认 `appearance="badge"` 浅底胶囊凸显；可下方纵向堆叠 `gap-1` 的 `text-xs leading-4` 阻断说明（`text-destructive`）或定时计划（`text-muted-foreground`）；**可点击状态优先使用 `<TableStatusActionCell>`**（自动封装无框按钮与 `event.stopPropagation()`） |
+| **7. 行内即时开关** | 使用 `<TableSwitchCell id={...} canEdit={canEdit} checked={...} statusLabel={...} statusTone={...} appearance="quiet" intermediateLabel={...} accessibleName={...} onCheckedChange={...} />`（有写权限渲染精致 `Switch size="sm"` `16×28px`，**无写权限自动降级为只读 `BusinessStatusBadge`** 并支持 `appearance="quiet"` 降噪；存在「部分上架」等中间态时通过 `intermediateLabel` / `intermediateTitle` 在开关旁展示 `text-tiny` 琥珀微标；高风险关闭触发二次确认 Dialog） |
+| **8. 行尾操作列** | 使用 `<TableRowActions maxInline={2} ... />`，必配 `meta: { align: "end", width: "actions" }`。最多直出 2 个无框轻按钮（`h-control-sm px-2 text-body-compact font-normal`，常态沉稳灰 `text-muted-foreground`，行悬停 / 聚焦 / 选中时自动点亮为主蓝 `text-primary`，不显示图标；`destructive: true` 显式外露时锁定 `text-destructive` 不被行悬停染蓝）；溢出项与破坏性动作默认自动收入 `···` 纯图标下拉菜单，破坏性项以分割线置底并显示红字红图标（菜单项 `min-h-control`）。所有点击自动 `event.stopPropagation()` 并记录 `lastFocusedRowId` |
 
 ---
 
@@ -444,16 +445,16 @@ flowchart TD
 
 所有可点击、可输入、可聚焦、可切换元素必须提供稳定唯一的原生 `id`（小写 kebab-case，禁止使用数组 index、时间戳或 `React.useId`；动态业务 ID 统一经 `@/lib/automation-id` 的 `toAutomationIdSegment()` 清洗）：
 
-| 区域 | ID 命名模式（以 `prefix = "{domain}-{entity}-list"` 为例） |
-| --- | --- |
-| 页头视图 Tab | `{prefix}-metrics-preset-{key}` |
-| 页头动作按钮 | `{prefix}-import`、`{prefix}-export`、`{prefix}-create` |
-| 主筛选与搜索 | `{prefix}-toolbar-search-input`、`{prefix}-toolbar-search-input-clear`、`{prefix}-toolbar-{field}`、`{prefix}-toolbar-filter-trigger`、`{prefix}-toolbar-query` |
-| 已选条件与托盘 | `{prefix}-toolbar-chip-{key}`、`{prefix}-toolbar-chip-{key}-clear`、`{prefix}-toolbar-clear-filters`、`{prefix}-toolbar-more-panel`、`{prefix}-toolbar-reset`、`{prefix}-toolbar-more-apply` |
-| 批量勾选条 | `{prefix}-selection-select-page`、`{prefix}-selection-clear`、`{prefix}-selection-batch-{action}` |
-| 表格与分页 | `{prefix}-table`、`{prefix}-table-select-all`、`{prefix}-table-row-{id}`、`{prefix}-table-row-{id}-select`、`{prefix}-table-column-visibility-trigger`、`{prefix}-table-page-size`、`{prefix}-table-prev-page` 等（由 `DataTable` 基于 `id` 自动派生） |
-| 行内动作 | `{domain}-{entity}-{id}-{action}`、更多菜单触发器 `{prefix}-row-{id}-more` |
-| 空态 / 重试 | `{prefix}-retry`、`{prefix}-empty-clear-filters`、`{prefix}-empty-create` |
+| 区域 | ID 命名模式（以 `prefix = "{domain}-{entity}-list"` 为例） | 组件实际派生与兼容说明 |
+| --- | --- | --- |
+| 页头视图 Tab | `{prefix}-metrics-preset-{key}` | 由页面通过 `ListWorkspaceViews` `items[].id` 传入 |
+| 页头动作按钮 | `{prefix}-import`、`{prefix}-export`、`{prefix}-create` | 由页面通过 `ListWorkspacePage` `actions[].id` 传入 |
+| 主筛选与搜索 | `{prefix}-toolbar-search-input`、`{prefix}-toolbar-search-input-clear`、`{prefix}-toolbar-{field}`、`{prefix}-toolbar-filter-trigger`（兼容默认 `{prefix}-toolbar-more`）、`{prefix}-toolbar-query` | `ListSearchField` 基于 `id` 自动派生 `${id}-clear`；`ListWorkspaceFilterBar`（`idPrefix="{prefix}-toolbar"`）中，未显式传 `moreButtonId` 时，默认 `idConvention="legacy"` 派生 `${idPrefix}-more`（保护存量 E2E 断言），新页面可传 `idConvention="standard"` 派生 `${idPrefix}-filter-trigger`；托盘展开隐藏顶栏查询钮时自动输出 `${idPrefix}-implicit-submit` |
+| 已选条件与托盘 | `{prefix}-toolbar-chip-{key}`、`{prefix}-toolbar-chip-{key}-clear`、`{prefix}-toolbar-clear-filters`、`{prefix}-toolbar-more-panel`、`{prefix}-toolbar-reset`、`{prefix}-toolbar-more-apply`（`reactive` 模式为 `{prefix}-toolbar-more-done`） | 由 `ListWorkspaceFilterBar` + `FilterChip` + `ListFilterTray` 基于 `idPrefix` 自动派生（`chip.key` 自动经 `toAutomationIdSegment` 清洗），支持 `clearButtonId` / `morePanelId` / `resetMoreButtonId` 覆盖 |
+| 批量勾选条 | `{prefix}-selection-select-page`、`{prefix}-selection-clear`、`{prefix}-selection-batch-{action}` | `ListSelectionBar`（`idPrefix="{prefix}-selection"`）自动派生 `-select-page` 与 `-clear`，主动作由 `primaryAction.id` 或自定义按钮传入 |
+| 表格与分页 | `{prefix}-table`、`{prefix}-table-select-all`、`{prefix}-table-row-{id}`、`{prefix}-table-row-{id}-select`、`{prefix}-table-column-visibility-trigger`、`{prefix}-table-columns-show-all`、`{prefix}-table-columns-reset`、`{prefix}-table-page-size`、`{prefix}-table-first-page` / `-prev-page` / `-next-page` / `-last-page` | 由 `DataTable` 基于 `baseId = idPrefix ?? id ?? "data-table"` 自动派生（动态 `row.id` 经 `toAutomationIdSegment` 清洗） |
+| 行内动作 | `{domain}-{entity}-{id}-{action}`、更多菜单触发器 `{prefix}-row-{id}-more` | 由页面通过 `TableRowActions` 的 `actions[].id` 与 `moreId` 传入 |
+| 空态 / 重试 | `{prefix}-retry`、`{prefix}-empty-clear-filters`、`{prefix}-empty-create` | `ListDataTable` 传 `actionIdPrefix={PREFIX}` 时按本规范派生；省略 `actionIdPrefix` 时默认回退至表格前缀（`idPrefix ?? id ?? "data-table"`，如 `{prefix}-table-empty-create`）以兼容既有 E2E 断言，亦支持 `retryButtonId` / `clearFiltersButtonId` / `createButtonId` 单项覆盖 |
 
 ---
 
@@ -463,8 +464,8 @@ flowchart TD
 
 | 目录层 | 可直接复用的现成组件 / Hook | 职责 |
 | --- | --- | --- |
-| **`@/components/business`**（跨全站共享） | `TableIdentityCell`、`TableTextCell`、`TableEmptyCell`、`TableAsyncCell`、`TableSwitchCell`、`TableRowActions`、`BusinessStatusBadge`、`MoneyValue`、`QuantityValue`、`RateValue`、`OptionCombobox`、`BackgroundJobProgress`（同时再导出下方全部 `list-workspace` 组件） | 统一标准单元格原语、状态徽章、数值展示与可搜索下拉 |
-| **`@/components/business/list-workspace`**（跨全站列表共享） | `ListWorkspacePage`（含 `tier: "quiet" \| "primary"` 动作分级与自动视图排版）、`ListDataTable`（内置 `flush` + 失败重试 + 三态空态）、`ListSelectionBar` + `useFrozenSelectionSnapshot`、`ListWorkspaceFilterBar`（支持 `foldedChipKeys` 自动去重）、`ListFilterSections` / `ListFilterSection` / `ListFilterRangeField`、`ListSearchField`、`ListWorkspaceFilterField`、`ListWorkspaceHeader`、`ListWorkspaceViews`、`ListWorkSurface`、`listWorkspaceStyles` | **飞书多维表格纯白通栏列表工作面的全部封装积木** |
+| **`@/components/business`**（跨全站共享） | `TableIdentityCell`、`TableTextCell`、`TableEmptyCell`、`TableAsyncCell`、`TableStatusActionCell`、`TableSwitchCell`、`TableRowActions`、`BusinessStatusBadge`、`MoneyValue`、`QuantityValue`、`RateValue`、`OptionCombobox`、`BackgroundJobProgress`（同时再导出下方全部 `list-workspace` 组件） | 统一标准单元格原语、状态徽章、数值展示与可搜索下拉 |
+| **`@/components/business/list-workspace`**（跨全站列表共享） | `ListWorkspacePage`（含 `tier: "quiet" \| "primary"` 动作分级与自动视图排版）、`ListDataTable`（内置 `flush` + 失败重试 + 三态空态 + `actionIdPrefix`）、`ListSelectionBar` + `ListSelectionBarActionButton` + `useFrozenSelectionSnapshot`、`ListWorkspaceFilterBar`（默认通栏托盘，支持 `foldedChipKeys` 自动去重与 `idConvention`）、`ListFilterSections` / `ListFilterSection` / `ListFilterRangeField`、`ListSearchField`、`ListWorkspaceFilterField`、`ListWorkspaceHeader`、`ListWorkspaceViews`、`ListWorkSurface`、`listWorkspaceStyles` | **飞书多维表格纯白通栏列表工作面的全部封装积木** |
 | **`@/hooks/use-list-selection`**（跨全站共享 Hook） | `useListSelection<T>` | 按稳定 ID 跨页多选、筛选/视图变化即时清空、最新行回显 |
 | **`@/features/<domain>/`**（各业务域自建） | `<entity>-list-page.tsx`、`<entity>-list-styles.ts`、`<entity>-list-toolbar.tsx`、`use-<entity>-list-state.ts`、`use-<entity>-list-filters.ts`、`use-<entity>-list-columns.tsx` | 仅承载本业务域的 TanStack Query、URL 参数解析、权限映射、列定义与业务弹窗；不重复写页壳、空/错态、批量防闪烁条和单元格样板 |
 
@@ -530,8 +531,9 @@ export function StandardEntityListPage() {
                 ariaLabel: "单据列表",
                 toolbar: (
                     <ListWorkspaceFilterBar
-                        morePresentation="popover"
+                        // morePresentation 默认即 "popover"（别名 "tray"），无需显式传入；新页面推荐启用 idConvention="standard"
                         idPrefix={`${PREFIX}-toolbar`}
+                        idConvention="standard"
                         formAriaLabel="单据列表查询"
                         onSubmit={filters.apply}
                         search={
@@ -625,10 +627,11 @@ export function StandardEntityListPage() {
                         )}
                     />
                 ) : undefined,
-                tableClassName: "[&_[data-column-id=actions]]:w-32 [&_[data-column-id=actions]]:min-w-28",
+                // 操作列宽度在 ColumnDef 中直接声明 meta: { align: "end", width: "actions" }，无需在此手写 tableClassName
                 table: (
                     <ListDataTable
                         id={`${PREFIX}-table`}
+                        actionIdPrefix={PREFIX}
                         entityName="单据"
                         data={pageRows}
                         columns={columns}
@@ -683,7 +686,7 @@ export function StandardEntityListPage() {
 
 每完成一个新列表页，对照以下清单逐项核验：
 
-- [ ] **边界与基准对齐**：左侧导航有 1px `border-sidebar-border/80` 右细线；页头、主筛选栏、已选条件带、通栏无框表格首尾列外沿、分页条在 `<768px` / `768~1199px` / `≥1200px` 下严格对齐 `--scaffold-px`；表头纯白无灰块粘连，表格无四周边框，以水平细线分层。
+- [ ] **边界与基准对齐**：左侧导航有 1px `border-sidebar-border/80` 右细线；页头、主筛选栏、已选条件带、通栏无框表格首尾列外沿、分页条在 `<768px` / `≥768px` / `@container workspace (min-width: 70rem)` 下严格对齐 `--scaffold-px`；表头纯白无灰块粘连，表格无四周边框，以水平细线分层。
 - [ ] **页头精炼度**：2~4 项视图切换已内联至页头同行（桌面 `48px` 高）；次要按钮为无框 `ghost + quietButton`，仅主动作「新建」为实心蓝。
 - [ ] **筛选视觉一致性**：搜索框、主筛选下拉、高级筛选胶囊均为 `32px` 高、`bg-muted/65` 无框浅灰底；有值时同步转冰蓝柔底 + 深蓝字；有已选条件或展开托盘时上方底线自动消失无缝衔接。
 - [ ] **已选条件去重**：主筛选行可见条件不重复出现在下方 `FilterChip` 也不重复计入「更多筛选」数字角标；待提交修改时顶栏「查询」亮蓝且右侧出现橙色 `● 待查询`。
