@@ -91,7 +91,7 @@ function ProductBasicSection({
             headingId={`${prefix}-heading`}
             width="full"
         >
-            <div className="grid min-w-0 items-start gap-8 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+            <div className="grid min-w-0 items-start gap-8 @[1120px]/workspace:grid-cols-[minmax(0,1fr)_360px] @[1480px]/workspace:grid-cols-[minmax(0,1fr)_400px]">
                 {/* 左主栏：基础属性表单 */}
                 <fieldset
                     disabled={controlsDisabled}

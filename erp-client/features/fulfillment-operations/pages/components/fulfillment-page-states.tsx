@@ -68,7 +68,7 @@ export function FulfillmentPageStates({
         ) : (
             <>
                 <div className="h-20 animate-pulse rounded-lg bg-muted" />
-                <div className="grid gap-4 xl:grid-cols-[minmax(16rem,1fr)_minmax(0,2fr)]">
+                <div className="grid gap-4 @[1120px]/workspace:grid-cols-[minmax(16rem,1fr)_minmax(0,2fr)]">
                     <div className="h-80 animate-pulse rounded-lg bg-muted" />
                     <div className="h-96 animate-pulse rounded-lg bg-muted" />
                 </div>

@@ -293,7 +293,7 @@ export function AllocationSessionPanel({
                     ) : null}
 
                     {isReceipt ? (
-                        <div className="grid min-w-0 flex-1 grid-cols-1 items-start lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)]">
+                        <div className="grid min-w-0 flex-1 grid-cols-1 items-start lg:grid-cols-[360px_minmax(0,1fr)] @[1120px]:grid-cols-[400px_minmax(0,1fr)]">
                             {/* 左侧：回款事实与凭证（扁平无卡片，右分割线，宽屏吸顶） */}
                             <div className="border-b border-border/60 pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8">
                                 <div className="space-y-5 lg:sticky lg:top-20">
@@ -379,7 +379,7 @@ export function AllocationSessionPanel({
                             </div>
                         </div>
                     ) : (
-                        <div className="grid min-w-0 flex-1 grid-cols-1 items-start lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)]">
+                        <div className="grid min-w-0 flex-1 grid-cols-1 items-start lg:grid-cols-[360px_minmax(0,1fr)] @[1120px]:grid-cols-[400px_minmax(0,1fr)]">
                             {/* 左侧：销项发票事实 */}
                             <div className="border-b border-border/60 pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8">
                                 <div className="space-y-5 lg:sticky lg:top-20">

@@ -35,7 +35,7 @@ export function DefinitionReadView({
                 </span>
             }
         >
-            <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="grid items-start gap-5 @[960px]/workspace:grid-cols-[minmax(0,1fr)_320px]">
                 <DefinitionFlowchart
                     id="governance-approval-processes-detail-read-flow"
                     nodes={nodes.map(toEditorNode)}
@@ -43,9 +43,9 @@ export function DefinitionReadView({
                 />
                 <aside
                     aria-label="流程配置与规则"
-                    className="min-w-0 divide-y divide-border/60 border-t border-border/60 xl:self-stretch xl:border-t-0 xl:border-l xl:pl-5"
+                    className="min-w-0 divide-y divide-border/60 border-t border-border/60 @[960px]/workspace:self-stretch @[960px]/workspace:border-t-0 @[960px]/workspace:border-l @[960px]/workspace:pl-5"
                 >
-                    <div className="space-y-2 py-4 xl:pt-0">
+                    <div className="space-y-2 py-4 @[960px]/workspace:pt-0">
                         <h3 className="font-medium">版本说明</h3>
                         <p className="text-xs text-muted-foreground">
                             {versionDescription}

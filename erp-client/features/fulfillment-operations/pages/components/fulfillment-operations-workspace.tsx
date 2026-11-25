@@ -241,7 +241,7 @@ export function FulfillmentOperationsWorkspace({
                     className={
                         singleOperation
                             ? "flex min-h-0 min-w-0 flex-1 flex-col"
-                            : "grid min-h-[28rem] min-w-0 gap-4 xl:grid-cols-[minmax(15rem,0.9fr)_minmax(0,2.1fr)]"
+                            : "grid min-h-[28rem] min-w-0 gap-4 @[1120px]/workspace:grid-cols-[minmax(15rem,0.9fr)_minmax(0,2.1fr)]"
                     }
                 >
                     {!singleOperation ? (

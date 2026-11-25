@@ -96,7 +96,7 @@ export function ProfitLossChartsAndStageReference({
             <div
                 className={
                     showTrend && canViewCost
-                        ? "grid min-w-0 gap-4 xl:grid-cols-[3fr_2fr]"
+                        ? "grid min-w-0 gap-4 @[960px]/workspace:grid-cols-[3fr_2fr]"
                         : "grid min-w-0 gap-4"
                 }
             >

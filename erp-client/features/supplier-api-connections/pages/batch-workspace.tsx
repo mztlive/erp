@@ -931,7 +931,7 @@ export function BatchWorkspace({
                                     variant="inline"
                                     columns={4}
                                     ariaLabel="待处理商品统计"
-                                    className="xl:grid-cols-5"
+                                    className="@[960px]/detail-metrics:grid-cols-5"
                                 >
                                     <DetailWorkspaceMetricItem
                                         label="本批 SKU"

@@ -579,7 +579,7 @@ function PermissionSection({
                 </p>
             ) : null}
 
-            <div className="divide-y divide-border/60 border-y border-border/60">
+            <div className="@container/permission-rows divide-y divide-border/60 border-y border-border/60">
                 {group.rows.map((row) => {
                     const rowEditableCodes = row.codes.filter(
                         (code) => !hasPermission(crossResourceCodes, code),
@@ -636,7 +636,7 @@ function PermissionSection({
                                 </div>
                             ) : null}
 
-                            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                            <div className="grid gap-2 sm:grid-cols-2 @[720px]/permission-rows:grid-cols-3">
                                 {row.cells.flatMap((item) => {
                                     if (!item) return []
                                     const checked = selectedSet.has(item.code)

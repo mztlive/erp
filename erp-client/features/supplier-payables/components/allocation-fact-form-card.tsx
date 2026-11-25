@@ -65,18 +65,18 @@ export function AllocationAmountSummary({
 
     return (
         <DescriptionList
-            columns="three"
+            columns="one"
             aria-label={track === "payment" ? "付款金额摘要" : "分配金额摘要"}
-            className="gap-0 border-y border-border sm:grid-cols-3 xl:grid-cols-3"
+            className="gap-0 border-y border-border @[560px]/description-list:grid-cols-3"
         >
             {items.map(([label, value], index) => (
                 <DescriptionItem
                     key={label}
                     className={cn(
-                        "px-1 py-3 sm:px-5",
+                        "px-1 py-3 @[560px]/description-list:px-5",
                         index > 0 &&
-                            "border-t border-border sm:border-l sm:border-t-0",
-                        index === 0 && "sm:pl-1",
+                            "border-t border-border @[560px]/description-list:border-l @[560px]/description-list:border-t-0",
+                        index === 0 && "@[560px]/description-list:pl-1",
                     )}
                 >
                     <DescriptionTerm>{label}</DescriptionTerm>

@@ -119,10 +119,10 @@ export function BatchPricingPanel({
         else changeMode(mode)
     }
     return (
-        <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(320px,380px)_minmax(0,1fr)]">
+        <div className="grid min-w-0 items-start gap-6 @[1120px]/workspace:grid-cols-[minmax(320px,380px)_minmax(0,1fr)]">
             <fieldset
                 disabled={disabled}
-                className="min-w-0 disabled:opacity-70 xl:border-r xl:border-border/60 xl:pr-5"
+                className="min-w-0 disabled:opacity-70 @[1120px]/workspace:border-r @[1120px]/workspace:border-border/60 @[1120px]/workspace:pr-5"
                 aria-labelledby="supplier-catalog-batch-pricing-title"
             >
                 <DetailFormGrid layout="stack" className="space-y-5">

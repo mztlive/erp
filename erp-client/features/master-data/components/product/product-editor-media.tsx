@@ -200,8 +200,8 @@ function MediaListEditor({
                     "grid gap-3",
                     gridClassName ??
                         (mode === "carousel"
-                            ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7"
-                            : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-4"),
+                            ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 @[1120px]/workspace:grid-cols-7"
+                            : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4"),
                 )}
             >
                 {value.map((name, index) => {
@@ -591,7 +591,7 @@ function ProductBasicMediaRail({
     return (
         <aside
             aria-label="商品图片速览"
-            className="min-w-0 space-y-4 xl:border-l xl:border-border/60 xl:pl-7"
+            className="min-w-0 space-y-4 @[1120px]/workspace:border-l @[1120px]/workspace:border-border/60 @[1120px]/workspace:pl-7"
         >
             <div className="flex items-center justify-between gap-2">
                 <div className="flex items-baseline gap-2">

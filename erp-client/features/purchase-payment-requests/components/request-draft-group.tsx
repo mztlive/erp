@@ -290,13 +290,16 @@ export function RequestDraftGroup({
                     ))}
                 </div>
                 <div
-                    className={cn("space-y-5", !fixedOrder && "border-t pt-5")}
+                    className={cn(
+                        "@container/draft-payment space-y-5",
+                        !fixedOrder && "border-t pt-5",
+                    )}
                 >
                     <div
                         className={cn(
                             "grid gap-4",
                             (!fixedOrder || rows.length > 1) &&
-                                "xl:grid-cols-[minmax(0,1fr)_13rem]",
+                                "@xl/draft-payment:grid-cols-[minmax(0,1fr)_13rem]",
                         )}
                     >
                         <div className="space-y-4">

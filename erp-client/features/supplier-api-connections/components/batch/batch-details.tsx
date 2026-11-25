@@ -43,7 +43,7 @@ export function BatchDetailsPanel({
 }) {
     const { form, values } = workspace
     return (
-        <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,7fr)_minmax(19rem,3fr)]">
+        <div className="grid min-w-0 items-start gap-5 @[1120px]/workspace:grid-cols-[minmax(0,7fr)_minmax(19rem,3fr)]">
             <BatchCategoryMappings
                 workspace={workspace}
                 categories={categories}
@@ -52,7 +52,7 @@ export function BatchDetailsPanel({
             />
             <section
                 aria-labelledby="supplier-catalog-batch-terms-title"
-                className="min-w-0 space-y-4 xl:border-l xl:border-border/60 xl:pl-5"
+                className="min-w-0 space-y-4 @[1120px]/workspace:border-l @[1120px]/workspace:border-border/60 @[1120px]/workspace:pl-5"
             >
                 <h2
                     id="supplier-catalog-batch-terms-title"
@@ -62,7 +62,7 @@ export function BatchDetailsPanel({
                 </h2>
                 <DetailFormGrid
                     layout="stack"
-                    className="grid gap-5 md:grid-cols-2 xl:grid-cols-1"
+                    className="grid gap-5 md:grid-cols-2 @[1120px]/workspace:grid-cols-1"
                 >
                     <div className="space-y-4">
                         <form.AppField name="inputTaxPercentage">

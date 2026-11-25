@@ -84,7 +84,7 @@ export function ProcessCatalog({
             {required.length > 0 && (
                 <ul
                     aria-label="审批流程"
-                    className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+                    className="grid gap-3 md:grid-cols-2 @[960px]/workspace:grid-cols-3"
                 >
                     {required.map((item) => (
                         <ProcessCard
@@ -116,7 +116,7 @@ export function ProcessCatalog({
                     </div>
                     <ul
                         aria-label="无需审批的单据类型"
-                        className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+                        className="grid gap-3 md:grid-cols-2 @[960px]/workspace:grid-cols-3"
                     >
                         {exempt.map((item) => {
                             const Icon = PROCESS_ICONS[item.document_type]

@@ -203,7 +203,7 @@ function ProductMediaSection({
             </DetailWorkspaceSection>
 
             <DetailWorkspaceSection width="full">
-                <div className="grid min-w-0 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div className="grid min-w-0 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_320px] @[1120px]/workspace:grid-cols-[minmax(0,1fr)_360px]">
                     <div className="min-w-0">
                         <MediaListEditor
                             readOnly={!canRevise}

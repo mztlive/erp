@@ -12,7 +12,7 @@ export function SupplierSummaryStrip({
     rows: ReadonlyArray<Readonly<{ label: string; value: string }>>
 }) {
     return (
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 py-3.5 sm:grid-cols-3 xl:grid-cols-6">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 py-3.5 sm:grid-cols-3 @[1120px]/workspace:grid-cols-6">
             {rows.map(({ label, value }) => (
                 <div key={label} className="min-w-0">
                     <dt className="text-xs text-muted-foreground">{label}</dt>

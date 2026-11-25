@@ -368,7 +368,7 @@ export function CategoryTreePage() {
                     </Button>
                 </div>
 
-                <div className="grid min-h-0 min-w-0 flex-1 lg:grid-cols-[272px_minmax(0,1fr)] lg:overflow-hidden xl:grid-cols-[288px_minmax(0,1fr)]">
+                <div className="grid min-h-0 min-w-0 flex-1 lg:grid-cols-[272px_minmax(0,1fr)] lg:overflow-hidden @[1120px]/workspace:grid-cols-[288px_minmax(0,1fr)]">
                     <aside
                         aria-label="分类导航"
                         className="hidden min-h-0 flex-col overflow-hidden border-r border-border/60 bg-surface-sunken/45 lg:flex"
@@ -448,7 +448,8 @@ export function CategoryTreePage() {
                 <SheetContent
                     closeButtonId="category-mobile-nav-close"
                     side="left"
-                    className="w-[min(340px,100vw)] bg-surface-sunken/45"
+                    size="preview"
+                    className="bg-surface-sunken/45"
                 >
                     <SheetHeader>
                         <SheetTitle>分类目录</SheetTitle>

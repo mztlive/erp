@@ -179,8 +179,8 @@ export function PersonalPolicyDetail({
                         />
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                        <div className="space-y-3 pb-4">
-                            <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        <div className="@container/policy-actions space-y-3 pb-4">
+                            <ul className="grid gap-2 @[440px]/policy-actions:grid-cols-2 @[720px]/policy-actions:grid-cols-3">
                                 {business.actions.map((action) => {
                                     const isConfigurableAction =
                                         business.configurable_actions.includes(

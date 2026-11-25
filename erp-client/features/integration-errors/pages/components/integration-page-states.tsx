@@ -23,7 +23,7 @@ export function IntegrationPageSkeleton({ focus }: { focus?: boolean }) {
             {focus ? (
                 <div className="h-80 animate-pulse rounded-lg bg-muted" />
             ) : (
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,38fr)_minmax(0,62fr)]">
+                <div className="grid gap-4 @[1120px]/workspace:grid-cols-[minmax(0,38fr)_minmax(0,62fr)]">
                     <div className="h-80 animate-pulse rounded-lg bg-muted" />
                     <div className="h-80 animate-pulse rounded-lg bg-muted" />
                 </div>

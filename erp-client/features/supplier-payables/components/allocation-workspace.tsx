@@ -159,7 +159,7 @@ export function SupplierAllocationWorkspace({
                             "grid items-start",
                             embedded
                                 ? "grid-cols-1 gap-0"
-                                : "gap-6 lg:grid-cols-[380px_minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)]",
+                                : "gap-6 lg:grid-cols-[380px_minmax(0,1fr)] @[1120px]/workspace:grid-cols-[400px_minmax(0,1fr)]",
                         )}
                     >
                         <div

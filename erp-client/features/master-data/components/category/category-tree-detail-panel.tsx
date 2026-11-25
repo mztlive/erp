@@ -512,7 +512,7 @@ export function CategoryTreeDetailPanel({
                         </div>
                     </div>
 
-                    <dl className="grid gap-x-6 gap-y-3 rounded-lg border border-border/55 bg-surface-sunken/75 px-4 py-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <dl className="grid gap-x-6 gap-y-3 rounded-lg border border-border/55 bg-surface-sunken/75 px-4 py-3 sm:grid-cols-2 @[1120px]/workspace:grid-cols-4">
                         <div className="min-w-0 space-y-0.5">
                             <dt className="text-xs text-muted-foreground">
                                 分类代码

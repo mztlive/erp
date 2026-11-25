@@ -374,7 +374,7 @@ export function ApprovalProcessesPage() {
                     <div
                         aria-busy="true"
                         aria-label="正在加载目录"
-                        className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+                        className="grid gap-3 md:grid-cols-2 @[960px]/workspace:grid-cols-3"
                     >
                         <Skeleton className="h-20" />
                         <Skeleton className="h-20" />

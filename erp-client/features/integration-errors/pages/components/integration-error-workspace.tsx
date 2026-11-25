@@ -170,7 +170,7 @@ export function IntegrationErrorWorkspace({
                 "grid gap-4",
                 focusMode
                     ? "grid-cols-1"
-                    : "xl:grid-cols-[minmax(0,38fr)_minmax(0,62fr)]",
+                    : "@[1120px]/workspace:grid-cols-[minmax(0,38fr)_minmax(0,62fr)]",
             )}
         >
             {!focusMode ? (

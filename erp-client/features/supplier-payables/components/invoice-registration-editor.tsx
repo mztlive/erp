@@ -187,7 +187,7 @@ export function InvoiceRegistrationEditor({
             />
 
             {/* 左右分栏工作区 */}
-            <div className="grid min-w-0 flex-1 grid-cols-1 items-start px-(--scaffold-px) py-6 lg:grid-cols-[380px_minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)]">
+            <div className="grid min-w-0 flex-1 grid-cols-1 items-start px-(--scaffold-px) py-6 lg:grid-cols-[380px_minmax(0,1fr)] @[1120px]/workspace:grid-cols-[400px_minmax(0,1fr)]">
                 {/* 左侧：发票信息（扁平无卡片，右分割线，宽屏吸顶） */}
                 <div className="border-b border-border/60 pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8">
                     <div className="space-y-5 lg:sticky lg:top-20">

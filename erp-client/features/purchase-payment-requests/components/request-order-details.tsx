@@ -62,55 +62,70 @@ function BasisAmount({ title, value }: { title: string; value?: string }) {
 function OrderBasis({ line, draft }: { line: RequestLine; draft: boolean }) {
     const fulfillmentKey = line.current_fulfillment ?? ""
     return (
-        <div className="grid gap-6 border-l-2 border-border/60 py-2 pl-4 xl:grid-cols-[1.2fr_1fr] xl:divide-x xl:divide-border/60">
-            <section
-                className="space-y-3"
-                aria-label={draft ? "保存时依据" : "提交时依据"}
-            >
-                <h4 className="text-xs font-medium text-muted-foreground">
-                    {draft ? "保存时依据" : "提交时依据"}
-                </h4>
-                <dl className="grid grid-cols-2 gap-x-5 gap-y-3 2xl:grid-cols-4">
-                    <BasisAmount title="采购总额" value={line.total_amount} />
-                    <BasisAmount
-                        title="有效已付"
-                        value={line.source_paid_amount}
-                    />
-                    <BasisAmount title="剩余应付" value={line.open_amount} />
-                    <BasisAmount
-                        title="其他申请占用"
-                        value={line.reserved_amount}
-                    />
-                </dl>
-            </section>
-            <section className="space-y-3 xl:pl-6" aria-label="当前进度">
-                <h4 className="text-xs font-medium text-muted-foreground">
-                    当前进度
-                </h4>
-                <dl className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-3">
-                    <BasisAmount
-                        title="采购剩余应付"
-                        value={line.current_open_amount}
-                    />
-                    <BasisAmount
-                        title="申请占用"
-                        value={line.current_reserved_amount}
-                    />
-                    <div className="space-y-1">
-                        <dt className="text-xs text-muted-foreground">
-                            履约进度
-                        </dt>
-                        <dd>
-                            <StatusBadge
-                                tone={progressTone[fulfillmentKey] ?? "neutral"}
-                                label={
-                                    progressLabel[fulfillmentKey] ?? "待核对"
-                                }
-                            />
-                        </dd>
-                    </div>
-                </dl>
-            </section>
+        <div className="@container/order-basis">
+            <div className="grid gap-6 border-l-2 border-border/60 py-2 pl-4 @[840px]/order-basis:grid-cols-[1.2fr_1fr] @[840px]/order-basis:divide-x @[840px]/order-basis:divide-border/60">
+                <section
+                    className="space-y-3"
+                    aria-label={draft ? "保存时依据" : "提交时依据"}
+                >
+                    <h4 className="text-xs font-medium text-muted-foreground">
+                        {draft ? "保存时依据" : "提交时依据"}
+                    </h4>
+                    <dl className="grid grid-cols-2 gap-x-5 gap-y-3 2xl:grid-cols-4">
+                        <BasisAmount
+                            title="采购总额"
+                            value={line.total_amount}
+                        />
+                        <BasisAmount
+                            title="有效已付"
+                            value={line.source_paid_amount}
+                        />
+                        <BasisAmount
+                            title="剩余应付"
+                            value={line.open_amount}
+                        />
+                        <BasisAmount
+                            title="其他申请占用"
+                            value={line.reserved_amount}
+                        />
+                    </dl>
+                </section>
+                <section
+                    className="space-y-3 @[840px]/order-basis:pl-6"
+                    aria-label="当前进度"
+                >
+                    <h4 className="text-xs font-medium text-muted-foreground">
+                        当前进度
+                    </h4>
+                    <dl className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-3">
+                        <BasisAmount
+                            title="采购剩余应付"
+                            value={line.current_open_amount}
+                        />
+                        <BasisAmount
+                            title="申请占用"
+                            value={line.current_reserved_amount}
+                        />
+                        <div className="space-y-1">
+                            <dt className="text-xs text-muted-foreground">
+                                履约进度
+                            </dt>
+                            <dd>
+                                <StatusBadge
+                                    tone={
+                                        progressTone[fulfillmentKey] ??
+                                        "neutral"
+                                    }
+                                    label={
+                                        progressLabel[fulfillmentKey] ??
+                                        "待核对"
+                                    }
+                                />
+                            </dd>
+                        </div>
+                    </dl>
+                </section>
+            </div>
         </div>
     )
 }
