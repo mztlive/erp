@@ -38,10 +38,11 @@ import { useAccountProfileQuery } from "@/features/auth/queries"
 import { downloadFileAsset } from "@/features/file-assets/api/file-assets"
 import { expenseLineName } from "@/features/purchase-orders/api/purchase-order-mapping"
 import { useConfirmExpenseOccurrenceMutation } from "@/features/purchase-orders/hooks/queries"
+import { inputTaxRatePercent } from "@/features/purchase-orders/lib/input-tax-rate"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { compareDecimal, multiplyFixed, sumFixed } from "@/lib/fixed-decimal"
+import { compareDecimal, sumFixed } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
 
 type ExpenseLine = PurchaseOrderCenterView["currentContent"]["lines"][number]
@@ -137,9 +138,9 @@ export function PurchaseOrderExpenseSection({
                     <TableHeader>
                         <TableRow>
                             <TableHead>费用</TableHead>
-                            {expenseOnly ? (
-                                <TableHead data-align="end">税率</TableHead>
-                            ) : null}
+                            <TableHead scope="col" data-align="end">
+                                进项税率
+                            </TableHead>
                             <TableHead data-align="end">含税金额</TableHead>
                             <TableHead>状态</TableHead>
                             <TableHead data-align="end">操作</TableHead>
@@ -152,7 +153,7 @@ export function PurchaseOrderExpenseSection({
                                 order={order}
                                 line={line}
                                 costMasked={costMasked}
-                                showTax={expenseOnly}
+                                showTaxAmount={expenseOnly}
                                 canConfirm={canConfirm}
                                 canDownload={canDownload}
                                 onConfirm={() => setConfirming(line)}
@@ -190,7 +191,7 @@ function ExpenseRow({
     line,
     costMasked,
     canConfirm,
-    showTax,
+    showTaxAmount,
     canDownload,
     onConfirm,
 }: {
@@ -198,7 +199,7 @@ function ExpenseRow({
     line: ExpenseLine
     costMasked: boolean
     canConfirm: boolean
-    showTax: boolean
+    showTaxAmount: boolean
     canDownload: boolean
     onConfirm: () => void
 }) {
@@ -219,22 +220,21 @@ function ExpenseRow({
                         : "归属整张销售单"}
                 </div>
             </TableCell>
-            {showTax ? (
-                <TableCell className="text-right">
-                    {costMasked ? (
-                        "•••"
-                    ) : (
-                        <RateValue
-                            value={multiplyFixed(line.inputTaxRate, "100", {
-                                leftMaxScale: 6,
-                                rightMaxScale: 0,
-                                outputScale: 2,
-                            })}
-                            precision={2}
-                        />
-                    )}
-                </TableCell>
-            ) : null}
+            <TableCell data-align="end">
+                {costMasked ? (
+                    <span
+                        className="text-muted-foreground"
+                        aria-label="税率已隐藏"
+                    >
+                        •••
+                    </span>
+                ) : (
+                    <RateValue
+                        value={inputTaxRatePercent(line.inputTaxRate)}
+                        precision={2}
+                    />
+                )}
+            </TableCell>
             <TableCell className="text-right">
                 <div className="font-medium">
                     {costMasked ? (
@@ -243,7 +243,7 @@ function ExpenseRow({
                         <MoneyValue value={line.grossAmount} />
                     )}
                 </div>
-                {showTax ? (
+                {showTaxAmount ? (
                     <div className="mt-1 text-xs text-muted-foreground">
                         税额{" "}
                         {costMasked ? (

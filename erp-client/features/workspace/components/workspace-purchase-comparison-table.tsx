@@ -202,6 +202,13 @@ export function WorkspacePurchaseComparisonTable({
                             <TableHead
                                 scope="col"
                                 data-align="end"
+                                className="w-20"
+                            >
+                                进项税率
+                            </TableHead>
+                            <TableHead
+                                scope="col"
+                                data-align="end"
                                 className="w-24"
                             >
                                 采购供给单价
@@ -279,7 +286,7 @@ export function WorkspacePurchaseComparisonTable({
                         {!visible.length ? (
                             <TableRow>
                                 <TableCell
-                                    colSpan={9}
+                                    colSpan={10}
                                     className="py-10 text-center text-xs text-muted-foreground"
                                 >
                                     {riskOnly && !search
@@ -329,6 +336,12 @@ export function WorkspacePurchaseComparisonTable({
                                         display="exact"
                                         value={metrics.grossTotal}
                                     />
+                                </TableCell>
+                                <TableCell
+                                    data-align="end"
+                                    className="py-2.5 align-top text-muted-foreground"
+                                >
+                                    —
                                 </TableCell>
                                 <TableCell
                                     data-align="end"

@@ -1,11 +1,12 @@
 import { useState } from "react"
 import { MapPinIcon } from "lucide-react"
 
-import { MoneyValue, QuantityValue } from "@/components/business"
+import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TableCell, TableRow } from "@/components/ui/table"
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
+import { inputTaxRatePercent } from "@/features/purchase-orders/lib/input-tax-rate"
 import { displayName } from "@/lib/display-name"
 import { cn } from "@/lib/utils"
 import { PurchaseProfitValue } from "./workspace-purchase-amount-details"
@@ -207,6 +208,17 @@ export function PurchaseComparisonRow({
                 </TableCell>
 
                 <TableCell data-align="end" className="py-3 align-top">
+                    {line.input_tax_rate == null ? (
+                        "—"
+                    ) : (
+                        <RateValue
+                            value={inputTaxRatePercent(line.input_tax_rate)}
+                            precision={2}
+                        />
+                    )}
+                </TableCell>
+
+                <TableCell data-align="end" className="py-3 align-top">
                     <MoneyValue
                         display="exact"
                         value={sales?.procurement_supply_price_gross}
@@ -280,7 +292,7 @@ export function PurchaseComparisonRow({
             {showRiskStrip ? (
                 <TableRow className="hover:bg-transparent">
                     <TableCell
-                        colSpan={9}
+                        colSpan={10}
                         className="pt-0 pb-3 whitespace-normal"
                     >
                         <PurchaseLineRiskStrip
@@ -298,7 +310,7 @@ export function PurchaseComparisonRow({
                 <TableRow className="hover:bg-transparent">
                     <TableCell
                         id={inlineDetailsId}
-                        colSpan={9}
+                        colSpan={10}
                         className="pt-0 pb-3 whitespace-normal"
                     >
                         <div className="rounded-md bg-surface-sunken p-3">

@@ -9,9 +9,9 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { inputTaxRatePercent } from "@/features/purchase-orders/lib/input-tax-rate"
 import type { PurchaseOrderCenterView } from "@/features/purchase-orders/types"
 import { fullDeliveryAddress } from "@/lib/delivery-address"
-import { multiplyFixed } from "@/lib/fixed-decimal"
 
 type LineRow = PurchaseOrderCenterView["currentContent"]["lines"][number]
 
@@ -43,7 +43,7 @@ export function PurchaseOrderDetailLines({
     }
 
     return (
-        <Table aria-label="采购明细" className="min-w-[680px]">
+        <Table aria-label="采购明细" className="min-w-[760px]">
             <TableHeader>
                 <TableRow>
                     <TableHead scope="col" className="min-w-56">
@@ -58,6 +58,9 @@ export function PurchaseOrderDetailLines({
                         className="w-28 whitespace-normal leading-4"
                     >
                         采购含税单价
+                    </TableHead>
+                    <TableHead scope="col" data-align="end" className="w-20">
+                        进项税率
                     </TableHead>
                     <TableHead
                         scope="col"
@@ -88,18 +91,6 @@ export function PurchaseOrderDetailLines({
                             : undefined
                     const allocations = (line.deliveryAllocations ?? []).filter(
                         (item) => item.recipient || item.address,
-                    )
-                    const taxRate = costMasked ? (
-                        "•••"
-                    ) : (
-                        <RateValue
-                            value={multiplyFixed(line.inputTaxRate, "100", {
-                                leftMaxScale: 6,
-                                rightMaxScale: 0,
-                                outputScale: 2,
-                            })}
-                            precision={2}
-                        />
                     )
                     const quoteTitle = quote
                         ? `需求 v${quote.requirement_version} · 反馈第 ${quote.feedback_round} 轮 · 实际报价 v${quote.quote_revision_no}`
@@ -201,11 +192,26 @@ export function PurchaseOrderDetailLines({
                                 className="py-3 align-top whitespace-nowrap"
                             >
                                 {isFee ? "—" : amount(line.unitCostGross, true)}
-                                {!costMasked ? (
-                                    <div className="mt-1 text-xs text-muted-foreground">
-                                        税率 {taxRate}
-                                    </div>
-                                ) : null}
+                            </TableCell>
+                            <TableCell
+                                data-align="end"
+                                className="py-3 align-top"
+                            >
+                                {costMasked ? (
+                                    <span
+                                        className="text-muted-foreground"
+                                        aria-label="税率已隐藏"
+                                    >
+                                        •••
+                                    </span>
+                                ) : (
+                                    <RateValue
+                                        value={inputTaxRatePercent(
+                                            line.inputTaxRate,
+                                        )}
+                                        precision={2}
+                                    />
+                                )}
                             </TableCell>
                             <TableCell
                                 data-align="end"
