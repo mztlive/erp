@@ -12,6 +12,7 @@ import {
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Collapsible,
     CollapsibleContent,
@@ -93,7 +94,7 @@ function VersionRecord({
     return (
         <article
             className={cn(
-                "space-y-4 rounded-lg px-4 py-3.5",
+                "@container/revision space-y-4 rounded-lg px-4 py-3.5",
                 isCurrent
                     ? "border border-primary/20 bg-primary/[0.025]"
                     : "bg-muted/25",
@@ -125,7 +126,7 @@ function VersionRecord({
                 </div>
             </dl>
 
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-2.5 border-t border-border/60 pt-3 sm:grid-cols-2 xl:grid-cols-4">
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-2.5 border-t border-border/60 pt-3 sm:grid-cols-2 @[680px]/revision:grid-cols-4">
                 <SnapshotField
                     label="当时客户"
                     value={displayText(rev.customerSnapshot)}
@@ -222,10 +223,7 @@ function HistoricalVersion({
             <div className="flex flex-wrap items-center justify-between gap-2 text-body-compact">
                 <p className="flex flex-wrap items-baseline gap-x-1.5 text-muted-foreground">
                     <span>当时成交</span>
-                    <MoneyValue
-                        value={rev.amountGross || undefined}
-                        className="text-foreground"
-                    />
+                    <MoneyValue value={rev.amountGross || undefined} />
                     {rev.lines.length > 0 ? (
                         <span className="num">· {rev.lines.length} 项明细</span>
                     ) : null}
@@ -309,13 +307,15 @@ export function RevisionHistoryCard({
                                             v{rev.revisionNo}
                                         </span>
                                         {isCurrent ? (
-                                            <Badge variant="info">
-                                                当前在用
-                                            </Badge>
+                                            <StatusBadge
+                                                tone="info"
+                                                label="当前在用"
+                                            />
                                         ) : (
-                                            <Badge variant="outline">
-                                                历史
-                                            </Badge>
+                                            <StatusBadge
+                                                tone="neutral"
+                                                label="历史"
+                                            />
                                         )}
                                         {rev.note ? (
                                             <Badge variant="neutral">

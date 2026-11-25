@@ -905,14 +905,16 @@ function FeedbackEditorContent({
                                                                         "未命名费用"}
                                                                 </span>
                                                                 {fee.amount_gross.trim() ? (
-                                                                    <MoneyValue
-                                                                        value={fee.amount_gross.trim()}
-                                                                        display="exact"
-                                                                        showHint={
-                                                                            false
-                                                                        }
-                                                                        className="text-muted-foreground"
-                                                                    />
+                                                                    <span className="text-muted-foreground">
+                                                                        <MoneyValue
+                                                                            value={fee.amount_gross.trim()}
+                                                                            display="exact"
+                                                                            showHint={
+                                                                                false
+                                                                            }
+                                                                            inheritColor
+                                                                        />
+                                                                    </span>
                                                                 ) : (
                                                                     <span className="text-warning-soft-foreground">
                                                                         待填金额

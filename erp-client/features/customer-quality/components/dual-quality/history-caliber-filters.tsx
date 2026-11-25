@@ -2,8 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { OptionCombobox } from "@/components/business/option-combobox"
-import { BusinessFailureState } from "@/components/business"
+import { BusinessFailureState, OptionCombobox } from "@/components/business"
 import type { useHistoricalDirectory } from "@/lib/historical-directory"
 import { serializeCsvIds } from "../../lib/dual-url-state"
 import { toggleId } from "../../lib/dual-filter-state"
@@ -213,7 +212,7 @@ export function HistoryCaliberFilters({
             </div>
 
             {attributionGroup ? (
-                <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-border p-2 text-body-compact">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-lg border border-border p-2 text-body-compact">
                     <span className="min-w-0 truncate">
                         历史分组明细：
                         {formatAttributionGroupLabel(

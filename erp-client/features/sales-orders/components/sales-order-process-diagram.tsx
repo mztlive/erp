@@ -133,11 +133,11 @@ function Step({ step, data }: { step: ProcessStep; data: DiagramData }) {
                     <Button
                         id={`${data.prefix}-${step.id}-open`}
                         className={cn(
-                            "nodrag nopan h-7 text-xs",
+                            "nodrag nopan",
                             detailWorkspaceStyles.subtleButton,
                         )}
                         variant="ghost"
-                        size="sm"
+                        size="xs"
                         aria-haspopup={
                             step.groups.length ? "dialog" : undefined
                         }
@@ -198,11 +198,11 @@ function ProcessNode({ id, data }: NodeProps<DiagramNode>) {
                     )}
                 >
                     <StateIcon state={root.state} />
-                    <div className="text-body-compact font-semibold leading-6">
+                    <div className="text-body-compact font-semibold">
                         <p>{root.title}</p>
                         <p>{root.description}</p>
                         {root.state === "active" ? (
-                            <div className="mt-2 space-y-1 text-xs font-normal leading-5">
+                            <div className="mt-2 space-y-1 text-xs font-normal">
                                 {root.currentNode ? (
                                     <p>{root.currentNode}</p>
                                 ) : null}
@@ -471,7 +471,7 @@ export function SalesOrderProcessDiagram({
                     当前无权读取交付明细；交付与验收节点仅展示已确认的总体状态。
                 </p>
             ) : null}
-            <div className="flex items-start gap-2 rounded-lg bg-muted/35 px-4 py-3 text-xs leading-6">
+            <div className="flex items-start gap-2 rounded-lg bg-muted/35 px-4 py-3 text-xs">
                 <InfoIcon
                     className="mt-1 size-4 shrink-0 text-muted-foreground"
                     aria-hidden="true"

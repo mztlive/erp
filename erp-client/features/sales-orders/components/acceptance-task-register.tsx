@@ -3,10 +3,13 @@
 import * as React from "react"
 import { flushSync } from "react-dom"
 import { useSelector } from "@tanstack/react-form"
-import { ArrowDownIcon, CircleAlertIcon, SearchIcon } from "lucide-react"
+import { CircleAlertIcon, SearchIcon } from "lucide-react"
 
-import { WorkspaceTaskFooter } from "@/components/business"
-import { ReasonTextareaField } from "@/components/business/reason-textarea-field"
+import {
+    ReasonTextareaField,
+    TaskRiskSummaryBar,
+    WorkspaceTaskFooter,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -494,45 +497,31 @@ export function AcceptanceTaskRegister({
                     </div>
                 </div>
             ) : issues.length > 0 ? (
-                <div
+                <TaskRiskSummaryBar
                     id={blockerId}
                     tabIndex={-1}
                     role={blocker ? "alert" : "status"}
-                    className={cn(
-                        "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-r-md border-l-2 px-3 py-2 text-xs outline-none",
+                    severity={blocker ? "destructive" : "warning"}
+                    leadLabel={
                         blocker
-                            ? "border-l-destructive bg-destructive-soft text-destructive-soft-foreground"
-                            : "border-l-warning bg-warning-soft text-warning-soft-foreground",
-                        pulse(blockerId),
-                    )}
-                >
-                    <div className="flex min-w-0 flex-[1_1_16rem] items-start gap-2">
-                        <CircleAlertIcon
-                            aria-hidden="true"
-                            className="mt-0.5 size-4 shrink-0"
-                        />
-                        <p className="min-w-0 wrap-anywhere">
-                            <strong className="mr-2">
-                                {blocker
-                                    ? "当前存在办理限制"
-                                    : `${issues.length} 项待完善`}
-                            </strong>
-                            {issues[0].message}
-                        </p>
-                    </div>
-                    {!blocker ? (
-                        <Button
-                            id={`${idPrefix}-issue-locate`}
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            onClick={locate}
-                        >
-                            定位
-                            <ArrowDownIcon aria-hidden="true" />
-                        </Button>
-                    ) : null}
-                </div>
+                            ? "当前存在办理限制"
+                            : `${issues.length} 项待完善`
+                    }
+                    summary={issues[0].message}
+                    actions={
+                        !blocker
+                            ? [
+                                  {
+                                      id: "locate",
+                                      buttonId: `${idPrefix}-issue-locate`,
+                                      label: "定位",
+                                      onClick: locate,
+                                  },
+                              ]
+                            : undefined
+                    }
+                    className={cn("outline-none", pulse(blockerId))}
+                />
             ) : null}
 
             <AcceptanceTaskKpis
@@ -712,9 +701,10 @@ export function AcceptanceTaskRegister({
                                                 />
                                                 <Input
                                                     id={`${idPrefix}-search`}
+                                                    size="sm"
                                                     aria-label="搜索商品或交付单号"
                                                     placeholder="搜索商品或单号"
-                                                    className="h-control-sm pl-7 text-body-compact"
+                                                    className="pl-7"
                                                     value={search}
                                                     onChange={(event) => {
                                                         setSearch(
@@ -801,7 +791,7 @@ export function AcceptanceTaskRegister({
                                     <Input
                                         id={dateId}
                                         type="datetime-local"
-                                        className="num w-full min-w-0 text-body-compact"
+                                        className="num w-full min-w-0"
                                         disabled={readOnly}
                                         aria-invalid={
                                             Boolean(dateIssue) || undefined
@@ -850,7 +840,7 @@ export function AcceptanceTaskRegister({
                                     <Input
                                         id={`${fileId}-input`}
                                         type="file"
-                                        className="max-w-full min-w-0 text-body-compact"
+                                        className="max-w-full min-w-0"
                                         accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp"
                                         disabled={readOnly}
                                         aria-describedby={

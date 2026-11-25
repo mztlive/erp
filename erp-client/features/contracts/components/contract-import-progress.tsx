@@ -63,7 +63,7 @@ export function ContractImportProgress({
                 </h3>
             </div>
             <div className="mt-4 space-y-4 sm:ml-8">
-                <p className="text-body-compact leading-relaxed text-muted-foreground">
+                <p className="text-body-compact text-muted-foreground">
                     {active?.description ?? "任务正在处理，等待后端进度更新。"}
                 </p>
                 {active ? (
@@ -124,7 +124,7 @@ export function ContractImportProgress({
                     </>
                 ) : null}
                 {showCloseHint ? (
-                    <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+                    <p className="flex items-start gap-2 text-xs text-muted-foreground">
                         <InfoIcon
                             className="mt-0.5 size-3.5 shrink-0"
                             aria-hidden="true"

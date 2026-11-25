@@ -385,6 +385,7 @@ export const SalesOrderCreateLineRow = React.memo(
                                             </FieldLabel>
                                             <Input
                                                 id={`${linePrefix}-quantity`}
+                                                size="sm"
                                                 name={field.name}
                                                 type="text"
                                                 inputMode="decimal"
@@ -398,7 +399,7 @@ export const SalesOrderCreateLineRow = React.memo(
                                                 aria-invalid={
                                                     invalid || undefined
                                                 }
-                                                className="h-control-sm num text-right"
+                                                className="num text-right"
                                                 onBlur={field.handleBlur}
                                                 onChange={(event) =>
                                                     field.handleChange(
@@ -460,6 +461,7 @@ export const SalesOrderCreateLineRow = React.memo(
                                                 </FieldLabel>
                                                 <Input
                                                     id={`${linePrefix}-unit-price`}
+                                                    size="sm"
                                                     name={field.name}
                                                     type="text"
                                                     inputMode="decimal"
@@ -468,7 +470,7 @@ export const SalesOrderCreateLineRow = React.memo(
                                                     aria-invalid={
                                                         invalid || undefined
                                                     }
-                                                    className="h-control-sm num text-right"
+                                                    className="num text-right"
                                                     onBlur={field.handleBlur}
                                                     onChange={(event) => {
                                                         modeField.handleChange(
@@ -897,11 +899,13 @@ export const SalesOrderCreateLineRow = React.memo(
                 {/* 8. 含税小计 + 预估行毛利 */}
                 <TableCell data-align="end" className="w-28 py-2.5 align-top">
                     <div className="space-y-0.5">
-                        <div className="flex h-control-sm items-center justify-end font-medium">
-                            <MoneyValue
-                                value={lineGross}
-                                className={taxAmountToneClass("含税小计")}
-                            />
+                        <div
+                            className={cn(
+                                "flex h-control-sm items-center justify-end font-medium",
+                                taxAmountToneClass("含税小计"),
+                            )}
+                        >
+                            <MoneyValue value={lineGross} />
                         </div>
                         <div className="num text-right text-xs">
                             {rowProfit === null ? (

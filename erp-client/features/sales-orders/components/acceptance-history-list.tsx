@@ -17,7 +17,6 @@ import {
 import {
     BusinessStatusBadge,
     DetailWorkspaceSection,
-    DocumentSection,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -116,13 +115,15 @@ export function AcceptanceHistoryList({
     }
 
     return (
-        <DocumentSection
+        <DetailWorkspaceSection
+            width="full"
+            divider={false}
             className={className ?? "py-0"}
             title="验收记录"
-            description={guidance}
+            subtitle={guidance}
         >
             {content}
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }
 

@@ -4,6 +4,7 @@ import { useStore } from "@tanstack/react-form"
 import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 
 import {
+    DetailFormGrid,
     DetailWorkspaceSection,
     QuantityValue,
     detailWorkspaceStyles,
@@ -82,8 +83,8 @@ export function InquiryDeliveryAllocationEditor({
                     width="form"
                     subtitle="各地址数量合计须等于商品开单数量；变更收件资料请返回询价确认"
                 >
-                    <div
-                        data-slot="detail-form-grid"
+                    <DetailFormGrid
+                        layout="stack"
                         className="divide-y divide-border/60 border-y border-border/60"
                     >
                         {lines.map((line, lineIndex) => (
@@ -211,7 +212,7 @@ export function InquiryDeliveryAllocationEditor({
                                 )}
                             </div>
                         ))}
-                    </div>
+                    </DetailFormGrid>
                 </DetailWorkspaceSection>
             )}
         </form.Subscribe>

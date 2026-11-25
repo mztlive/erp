@@ -1,15 +1,9 @@
 "use client"
 
 import type { ReactNode } from "react"
+import { OptionCombobox } from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { deliveryAttention } from "../lib/delivery-progress"
 import { salesInquiryFeedback } from "../lib/feedback-view"
@@ -152,11 +146,32 @@ export function SalesInquiryProducts({
                             >
                                 轮次
                             </Label>
-                            <Select
+                            <OptionCombobox
+                                id="sales-inquiry-products-round"
+                                size="sm"
+                                aria-label="轮次"
+                                allowClear={false}
                                 value={
                                     feedback
                                         ? String(feedback.round)
                                         : "current"
+                                }
+                                options={[
+                                    ...(!currentFeedback
+                                        ? [
+                                              {
+                                                  value: "current",
+                                                  label: currentRoundLabel,
+                                              },
+                                          ]
+                                        : []),
+                                    ...rounds.map((item) => ({
+                                        value: String(item.round),
+                                        label: formatRoundLabel(item),
+                                    })),
+                                ]}
+                                getOptionId={(value) =>
+                                    `sales-inquiry-products-round-${value}`
                                 }
                                 onValueChange={(value) => {
                                     if (!value) return
@@ -165,40 +180,7 @@ export function SalesInquiryProducts({
                                     )
                                     onRoundChange(next?.round ?? null)
                                 }}
-                            >
-                                <SelectTrigger
-                                    id="sales-inquiry-products-round"
-                                    size="sm"
-                                >
-                                    <SelectValue>
-                                        {feedback
-                                            ? formatRoundLabel(feedback)
-                                            : currentRoundLabel}
-                                    </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent
-                                    align="end"
-                                    alignItemWithTrigger={false}
-                                >
-                                    {!currentFeedback && (
-                                        <SelectItem
-                                            id="sales-inquiry-products-round-current"
-                                            value="current"
-                                        >
-                                            {currentRoundLabel}
-                                        </SelectItem>
-                                    )}
-                                    {rounds.map((item) => (
-                                        <SelectItem
-                                            key={item.round}
-                                            id={`sales-inquiry-products-round-${item.round}`}
-                                            value={String(item.round)}
-                                        >
-                                            {formatRoundLabel(item)}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            />
                         </div>
                     )}
                 </div>

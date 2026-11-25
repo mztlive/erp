@@ -3,11 +3,10 @@
 import type { ReactNode } from "react"
 
 import {
+    DetailInlineTable,
     DetailWorkspaceMetricItem,
     DetailWorkspaceMetrics,
     DetailWorkspaceSection,
-    DocumentSection,
-    detailWorkspaceStyles,
 } from "@/components/business"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
@@ -216,37 +215,36 @@ export function AcceptanceProgressTable({
                 {progress.lines.length === 0 ? (
                     tableContent
                 ) : (
-                    <div
-                        data-slot="detail-inline-table"
-                        className={detailWorkspaceStyles.dataTableWrapper}
-                    >
+                    <DetailInlineTable frame="scroll">
                         {tableContent}
-                    </div>
+                    </DetailInlineTable>
                 )}
             </DetailWorkspaceSection>
         )
     }
 
     return (
-        <DocumentSection
+        <DetailWorkspaceSection
+            width="full"
+            divider={false}
             className={className ?? "py-0"}
             title="验收进度"
-            action={actions}
-            description={
+            actions={actions}
+            subtitle={
                 !showSummary ? (
                     pendingHint
                 ) : pendingHint ? (
-                    <div className="flex flex-col gap-1">
-                        <p>{summary}</p>
-                        <p>{pendingHint}</p>
-                    </div>
+                    <span className="inline-flex flex-wrap items-center gap-x-2">
+                        <span>{summary}</span>
+                        <span>{pendingHint}</span>
+                    </span>
                 ) : (
                     summary
                 )
             }
         >
             {tableContent}
-        </DocumentSection>
+        </DetailWorkspaceSection>
     )
 }
 

@@ -143,7 +143,7 @@ export function AcceptanceRegisterBatchRow({
                                     key={option}
                                     htmlFor={controlId}
                                     className={cn(
-                                        "items-start rounded-lg border p-3 leading-normal transition-colors",
+                                        "items-start rounded-lg border p-3 transition-colors",
                                         canPost
                                             ? "cursor-pointer"
                                             : "opacity-60",

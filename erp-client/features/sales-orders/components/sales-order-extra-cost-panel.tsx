@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query"
 
 import {
     BusinessFailureState,
+    DetailInlineTable,
     DetailWorkspaceMetricItem,
     DetailWorkspaceMetrics,
     DetailWorkspaceSection,
@@ -327,10 +328,7 @@ export function ExtraCostPanel({
                         本单还没有附加费用。
                     </p>
                 ) : (
-                    <div
-                        data-slot="detail-inline-table"
-                        className={detailWorkspaceStyles.dataTableWrapper}
-                    >
+                    <DetailInlineTable frame="scroll">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -362,7 +360,7 @@ export function ExtraCostPanel({
                                 ))}
                             </TableBody>
                         </Table>
-                    </div>
+                    </DetailInlineTable>
                 )}
             </DetailWorkspaceSection>
 

@@ -139,7 +139,7 @@ export function InquiryRequirementDetail({
                                         className="shrink-0 font-medium"
                                     />
                                 </div>
-                                <p className="text-xs leading-5 text-muted-foreground wrap-anywhere">
+                                <p className="text-xs text-muted-foreground wrap-anywhere">
                                     {[
                                         allocation.region_name || "未填写地区",
                                         allocation.address || "未填写详细地址",

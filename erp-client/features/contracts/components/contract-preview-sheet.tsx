@@ -5,8 +5,8 @@ import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { PrinterIcon } from "lucide-react"
 
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { ContractPreviewPanel } from "@/features/contracts/components/contract-preview-panel"
 import type {
     ContractCenterView,
@@ -66,7 +66,7 @@ export function ContractPreviewSheet({
                             tone={row.statusTone}
                         />
                         {row.expiringWithin30Days ? (
-                            <Badge variant="warning">将到期</Badge>
+                            <StatusBadge tone="warning" label="将到期" />
                         ) : null}
                         <span className="text-xs text-muted-foreground">
                             关联销售 {row.salesOrderCount} 张

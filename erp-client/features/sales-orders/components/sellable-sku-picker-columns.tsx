@@ -5,7 +5,7 @@ import { CircleCheckIcon, TriangleAlertIcon } from "lucide-react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { MoneyValue, QuantityValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { SkuThumbnail } from "@/features/sales-orders/components/sku-thumbnail"
 import type { MasterDataListItem } from "@/features/master-data/types"
 
@@ -113,26 +113,12 @@ export function useSellableSkuPickerColumns() {
                     const count = row.original.sellableItem?.supplierCount ?? 0
                     const atRisk = count <= 1
                     return (
-                        <Badge variant={atRisk ? "warning" : "success"}>
-                            {atRisk ? (
-                                <TriangleAlertIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                            ) : (
-                                <CircleCheckIcon
-                                    data-icon="inline-start"
-                                    aria-hidden="true"
-                                />
-                            )}
-                            {atRisk ? (
-                                "单一供应商"
-                            ) : (
-                                <>
-                                    <span className="num">{count}</span> 家可供
-                                </>
-                            )}
-                        </Badge>
+                        <StatusBadge
+                            tone={atRisk ? "warning" : "success"}
+                            icon={atRisk ? TriangleAlertIcon : CircleCheckIcon}
+                            className={!atRisk ? "num" : undefined}
+                            label={atRisk ? "单一供应商" : `${count} 家可供`}
+                        />
                     )
                 },
             },

@@ -4,8 +4,8 @@ import { Fragment } from "react"
 
 import {
     BusinessEmptyState,
+    DetailInlineTable,
     DetailWorkspaceSection,
-    detailWorkspaceStyles,
     MoneyValue,
     QuantityValue,
 } from "@/components/business"
@@ -33,9 +33,7 @@ function ProductIdentity({
         <div className="min-w-0 space-y-1 whitespace-normal break-words">
             <p className="font-medium text-foreground">{name}</p>
             {description ? (
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                    {description}
-                </p>
+                <p className="text-xs text-muted-foreground">{description}</p>
             ) : null}
         </div>
     )
@@ -65,10 +63,7 @@ function LineValues({
                 )}
             </TableCell>
             <TableCell data-align="end">
-                <MoneyValue
-                    value={line.line_amount}
-                    className="font-semibold"
-                />
+                <MoneyValue value={line.line_amount} />
             </TableCell>
         </>
     )
@@ -99,10 +94,7 @@ export function ProposalItems({ proposal }: { proposal: ProposalView }) {
                     description="该方案尚无可展示的确认明细。"
                 />
             ) : (
-                <div
-                    data-slot="detail-inline-table"
-                    className={detailWorkspaceStyles.inlineTableWrapper}
-                >
+                <DetailInlineTable>
                     <Table
                         data-density="comfortable"
                         className="min-w-[560px] table-fixed"
@@ -216,7 +208,7 @@ export function ProposalItems({ proposal }: { proposal: ProposalView }) {
                             })}
                         </TableBody>
                     </Table>
-                </div>
+                </DetailInlineTable>
             )}
         </DetailWorkspaceSection>
     )

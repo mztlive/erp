@@ -4,6 +4,7 @@ import { useStore } from "@tanstack/react-form"
 import { useQueries, useQuery } from "@tanstack/react-query"
 import {
     BusinessFailureState,
+    DetailInlineTable,
     FormalActionConfirmDialog,
     MoneyValue,
     RateValue,
@@ -410,8 +411,8 @@ export function InquiryFeesContent({
                 </p>
             ) : (
                 <>
-                    <div
-                        data-slot="detail-inline-table"
+                    <DetailInlineTable
+                        frame="none"
                         className="min-w-0 border-y border-border/70"
                     >
                         <Table>
@@ -579,7 +580,7 @@ export function InquiryFeesContent({
                                 ))}
                             </TableBody>
                         </Table>
-                    </div>
+                    </DetailInlineTable>
                     {sourceError ? (
                         <BusinessFailureState
                             id="inquiry-fees-sources-retry"
@@ -785,8 +786,8 @@ export function InquiryFeesContent({
                         </DialogContent>
                     </Dialog>
                     {allocationRows.length ? (
-                        <div
-                            data-slot="detail-inline-table"
+                        <DetailInlineTable
+                            frame="none"
                             className="min-w-0 border-y border-border/70"
                         >
                             <Table>
@@ -917,7 +918,7 @@ export function InquiryFeesContent({
                                     ))}
                                 </TableBody>
                             </Table>
-                        </div>
+                        </DetailInlineTable>
                     ) : null}
                     {procurement ? (
                         <Dialog

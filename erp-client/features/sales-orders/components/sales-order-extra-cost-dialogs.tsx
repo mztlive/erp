@@ -249,7 +249,7 @@ export function RegisterExtraCostDialog({
                                             aria-label="有待确认结果"
                                         />
                                     ) : inquiry.availableCount > 0 ? (
-                                        <span className="num rounded-sm bg-sidebar-accent px-1.5 py-0.5 text-tiny leading-none font-medium text-sidebar-accent-foreground">
+                                        <span className="num rounded-sm bg-sidebar-accent px-1.5 py-0.5 text-tiny font-medium text-sidebar-accent-foreground">
                                             {inquiry.availableCount}
                                         </span>
                                     ) : inquiry.candidates.length > 0 ? (
@@ -902,7 +902,7 @@ function ReduceBalanceHint({
                     <MoneyValue
                         value={status.after}
                         display="exact"
-                        className="ml-1 font-medium text-foreground"
+                        className="ml-1"
                     />
                 </span>
             ) : (

@@ -4,6 +4,7 @@ import * as React from "react"
 import type { CellContext, ColumnDef } from "@tanstack/react-table"
 import {
     DataTable,
+    DetailInlineTable,
     MoneyValue,
     detailWorkspaceStyles,
 } from "@/components/business"
@@ -57,11 +58,7 @@ function CustomerPriceCell({ row }: CellContext<DisplayItem, unknown>) {
     return priceEditor && products.length ? (
         <div className="grid gap-2">
             {item.kind === "PACKAGE" ? (
-                <MoneyValue
-                    value={item.price}
-                    display="exact"
-                    className="font-semibold"
-                />
+                <MoneyValue value={item.price} display="exact" />
             ) : null}
             {products.map((product) => (
                 <div key={product.sku_id}>
@@ -83,11 +80,7 @@ function CustomerPriceCell({ row }: CellContext<DisplayItem, unknown>) {
             ))}
         </div>
     ) : (
-        <MoneyValue
-            value={item.price}
-            display="exact"
-            className="font-semibold"
-        />
+        <MoneyValue value={item.price} display="exact" />
     )
 }
 
@@ -313,7 +306,7 @@ export function PreviewTable({
         <PriceCellContext.Provider
             value={{ pending, savingSkuIds, priceEditor }}
         >
-            <div data-slot="detail-inline-table" className="space-y-2">
+            <DetailInlineTable frame="none" className="space-y-2">
                 <p className="text-xs text-muted-foreground">
                     价格均含税
                     {priceEditor
@@ -340,7 +333,7 @@ export function PreviewTable({
                     emptyTitle="当前筛选无结果"
                     emptyDescription="调整档位或缺图筛选后再试。"
                 />
-            </div>
+            </DetailInlineTable>
         </PriceCellContext.Provider>
     )
 }

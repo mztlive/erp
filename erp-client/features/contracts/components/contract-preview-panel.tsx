@@ -3,9 +3,14 @@
 import * as React from "react"
 import Link from "next/link"
 
-import { BusinessFailureState, MoneyValue } from "@/components/business"
+import {
+    BusinessFailureState,
+    BusinessStatusBadge,
+    MoneyValue,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { StatusBadge } from "@/components/ui/status-badge"
 import type {
     ContractCenterView,
     ContractListRow,
@@ -138,7 +143,7 @@ export function ContractPreviewPanel({
                                 ) : null}
                             </dl>
                         )}
-                        <p className="mt-3 text-tiny leading-relaxed text-muted-foreground">
+                        <p className="mt-3 text-tiny text-muted-foreground">
                             本页不汇总合同金额；金额以各销售单为准。
                         </p>
                     </div>
@@ -179,25 +184,27 @@ export function ContractPreviewPanel({
                                             <span className="min-w-0 truncate">
                                                 {file.name}
                                             </span>
-                                            <Badge
-                                                variant={
+                                            <StatusBadge
+                                                tone={
                                                     file.securityState ===
                                                     "done"
-                                                        ? "secondary"
+                                                        ? "success"
                                                         : file.securityState ===
                                                             "quarantined"
                                                           ? "destructive"
-                                                          : "outline"
+                                                          : "neutral"
+                                                }
+                                                label={
+                                                    file.securityState ===
+                                                    "done"
+                                                        ? "已通过"
+                                                        : file.securityState ===
+                                                            "quarantined"
+                                                          ? "未通过安全检测"
+                                                          : "检查中"
                                                 }
                                                 className="shrink-0"
-                                            >
-                                                {file.securityState === "done"
-                                                    ? "已通过"
-                                                    : file.securityState ===
-                                                        "quarantined"
-                                                      ? "未通过安全检测"
-                                                      : "检查中"}
-                                            </Badge>
+                                            />
                                         </li>
                                     ))}
                                 </ul>
@@ -246,9 +253,10 @@ export function ContractPreviewPanel({
                                                     <Badge variant="secondary">
                                                         {so.natureLabel}
                                                     </Badge>
-                                                    <Badge variant="outline">
-                                                        {so.primaryStatus.label}
-                                                    </Badge>
+                                                    <BusinessStatusBadge
+                                                        context="list"
+                                                        {...so.primaryStatus}
+                                                    />
                                                 </div>
                                                 <p className="text-tiny text-muted-foreground">
                                                     合同 v

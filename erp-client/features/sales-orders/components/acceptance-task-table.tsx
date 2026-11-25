@@ -3,18 +3,11 @@
 import { Fragment } from "react"
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
 
-import { ReasonTextareaField } from "@/components/business/reason-textarea-field"
+import { OptionCombobox, ReasonTextareaField } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
 import {
     Table,
     TableBody,
@@ -45,7 +38,7 @@ import type { buildAcceptanceTaskTotals } from "./acceptance-task-totals"
 export const ACCEPTANCE_REASON_MAX_BYTES = 512
 
 const quantityClassName =
-    "num h-control-sm min-w-0 border-0 bg-surface-sunken px-2 text-right text-body-compact shadow-none hover:bg-card focus-visible:bg-card"
+    "num min-w-0 border-0 bg-surface-sunken px-2 text-right shadow-none hover:bg-card focus-visible:bg-card"
 
 export type AcceptanceTaskIssue = {
     target: string
@@ -55,14 +48,6 @@ export type AcceptanceTaskIssue = {
 
 export function acceptanceTaskRowId(idPrefix: string, factId: string) {
     return `${idPrefix}-batch-${toAutomationIdSegment(factId)}`
-}
-
-const DECISION_TONE_DOT: Record<AcceptanceBatchDecision, string> = {
-    PASS: "bg-success",
-    SHORT: "bg-warning",
-    REJECT: "bg-destructive",
-    SERVICE_FAIL: "bg-destructive",
-    SKIP: "bg-muted-foreground/40",
 }
 
 export function AcceptanceTaskTable({
@@ -160,7 +145,7 @@ export function AcceptanceTaskTable({
                         <TableRow>
                             <TableCell
                                 colSpan={4}
-                                className="py-4 text-center text-xs text-muted-foreground"
+                                className="py-4 text-center text-muted-foreground"
                             >
                                 没有符合条件的交付批次
                             </TableCell>
@@ -246,6 +231,7 @@ export function AcceptanceTaskTable({
                                         <div className="flex min-w-0 flex-wrap items-center gap-1">
                                             <Input
                                                 id={`${prefix}-qty`}
+                                                size="sm"
                                                 aria-label={`${label} 本次验收数量`}
                                                 aria-invalid={invalid("qty")}
                                                 aria-describedby={issueId}
@@ -303,64 +289,34 @@ export function AcceptanceTaskTable({
                                         </div>
                                     </TableCell>
                                     <TableCell className="px-2">
-                                        <Select<AcceptanceBatchDecision>
-                                            value={result}
+                                        <OptionCombobox
+                                            id={`${prefix}-result`}
+                                            size="sm"
+                                            allowClear={false}
                                             disabled={readOnly}
+                                            aria-label={`${label} 验收结果`}
+                                            value={result}
+                                            options={batchDecisionsForFact(
+                                                fact,
+                                            ).map((decision) => ({
+                                                value: decision,
+                                                label: BATCH_DECISION_LABEL[
+                                                    decision
+                                                ],
+                                            }))}
+                                            inputClassName="w-full min-w-0 border-0 bg-surface-sunken shadow-none hover:bg-card"
                                             onValueChange={(value) => {
-                                                if (value === "SKIP")
+                                                const decision =
+                                                    value as AcceptanceBatchDecision | null
+                                                if (decision === "SKIP")
                                                     selection.skipFact(factId)
-                                                else if (value)
+                                                else if (decision)
                                                     selection.selectResult(
                                                         fact,
-                                                        value,
+                                                        decision,
                                                     )
                                             }}
-                                        >
-                                            <SelectTrigger
-                                                id={`${prefix}-result`}
-                                                size="sm"
-                                                className="w-full min-w-0 border-0 bg-surface-sunken px-2 hover:bg-card"
-                                                aria-label={`${label} 验收结果`}
-                                            >
-                                                <SelectValue>
-                                                    <span className="inline-flex min-w-0 items-center gap-1.5">
-                                                        <span
-                                                            aria-hidden="true"
-                                                            className={cn(
-                                                                "size-1.5 shrink-0 rounded-full",
-                                                                DECISION_TONE_DOT[
-                                                                    result
-                                                                ],
-                                                            )}
-                                                        />
-                                                        <span className="truncate">
-                                                            {
-                                                                BATCH_DECISION_LABEL[
-                                                                    result
-                                                                ]
-                                                            }
-                                                        </span>
-                                                    </span>
-                                                </SelectValue>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {batchDecisionsForFact(
-                                                    fact,
-                                                ).map((decision) => (
-                                                    <SelectItem
-                                                        key={decision}
-                                                        idPrefix={`${prefix}-result`}
-                                                        value={decision}
-                                                    >
-                                                        {
-                                                            BATCH_DECISION_LABEL[
-                                                                decision
-                                                            ]
-                                                        }
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                        />
                                     </TableCell>
                                 </TableRow>
                                 {hasSubRow ? (
@@ -393,6 +349,7 @@ export function AcceptanceTaskTable({
                                                         </FieldLabel>
                                                         <Input
                                                             id={`${prefix}-exc`}
+                                                            size="sm"
                                                             inputMode="decimal"
                                                             className={
                                                                 quantityClassName
@@ -494,7 +451,7 @@ export function AcceptanceTaskTable({
                         <TableCell className="num bg-surface-sunken px-2 whitespace-normal wrap-anywhere">
                             {totals.registered}
                         </TableCell>
-                        <TableCell className="rounded-r-md bg-surface-sunken px-2 whitespace-normal text-xs text-muted-foreground">
+                        <TableCell className="rounded-r-md bg-surface-sunken px-2 whitespace-normal text-muted-foreground">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                                 <span>
                                     可验{" "}

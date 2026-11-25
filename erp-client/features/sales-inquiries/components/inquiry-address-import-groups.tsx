@@ -1,7 +1,6 @@
 "use client"
 
-import { QuantityValue } from "@/components/business"
-import { OptionCombobox } from "@/components/business/option-combobox"
+import { OptionCombobox, QuantityValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -114,13 +113,12 @@ export function InquiryAddressImportGroups({
                                 className="[&>td]:py-3 [&>td]:align-top"
                             >
                                 <TableCell
-                                    className="text-xs"
                                     title={`来源：第 ${sourceLines.join("、")} 行`}
                                 >
-                                    <p className="font-medium tabular-nums">
+                                    <p className="num font-medium">
                                         {group.rows.length} 行
                                     </p>
-                                    <p className="truncate text-muted-foreground">
+                                    <p className="truncate text-xs text-muted-foreground">
                                         第 {sourceLabel} 行
                                     </p>
                                 </TableCell>
@@ -128,12 +126,12 @@ export function InquiryAddressImportGroups({
                                     <p className="font-medium">
                                         {group.allocation.recipient || "—"}
                                     </p>
-                                    <p className="text-xs text-muted-foreground tabular-nums">
+                                    <p className="num text-xs text-muted-foreground">
                                         {group.allocation.phone || "—"}
                                     </p>
                                 </TableCell>
-                                <TableCell className="space-y-1 whitespace-normal text-xs wrap-anywhere">
-                                    <p className="text-muted-foreground">
+                                <TableCell className="space-y-1 whitespace-normal wrap-anywhere">
+                                    <p className="text-xs text-muted-foreground">
                                         {group.allocation.region_name ||
                                             [
                                                 group.rows[0].province,
@@ -143,12 +141,12 @@ export function InquiryAddressImportGroups({
                                     </p>
                                     <p>{group.allocation.address || "—"}</p>
                                 </TableCell>
-                                <TableCell className="whitespace-normal text-xs">
-                                    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+                                <TableCell className="whitespace-normal">
+                                    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
                                         <dt className="text-muted-foreground">
                                             原有
                                         </dt>
-                                        <dd className="text-right tabular-nums wrap-anywhere">
+                                        <dd className="num text-right wrap-anywhere">
                                             {group.existing.length
                                                 ? group.existing
                                                       .map(
@@ -160,7 +158,7 @@ export function InquiryAddressImportGroups({
                                         <dt className="text-muted-foreground">
                                             导入
                                         </dt>
-                                        <dd className="text-right tabular-nums wrap-anywhere">
+                                        <dd className="num text-right wrap-anywhere">
                                             {group.quantities.join("、")}
                                         </dd>
                                     </dl>
@@ -214,10 +212,11 @@ export function InquiryAddressImportGroups({
                                             </label>
                                             <Input
                                                 id={`${rowId}-quantity`}
+                                                size="sm"
                                                 aria-label="结果配送数量"
                                                 aria-describedby={`${rowId}-status`}
                                                 inputMode="decimal"
-                                                className="h-8 min-w-0 max-w-36 text-right tabular-nums"
+                                                className="num min-w-0 max-w-36 text-right"
                                                 value={
                                                     group.choice.quantity ?? ""
                                                 }

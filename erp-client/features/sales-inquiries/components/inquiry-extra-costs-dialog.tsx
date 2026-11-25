@@ -219,12 +219,13 @@ export const InquiryExtraCostsDialog = withForm({
                                         额外成本合计
                                     </span>
                                     {summary?.feesTotal != null ? (
-                                        <MoneyValue
-                                            value={summary.feesTotal}
-                                            display="exact"
-                                            showHint={false}
-                                            className="text-body-compact font-semibold text-foreground"
-                                        />
+                                        <span className="text-body-compact font-semibold">
+                                            <MoneyValue
+                                                value={summary.feesTotal}
+                                                display="exact"
+                                                showHint={false}
+                                            />
+                                        </span>
                                     ) : (
                                         <span className="num text-body-compact font-medium text-muted-foreground">
                                             {fees.length === 0
@@ -235,7 +236,7 @@ export const InquiryExtraCostsDialog = withForm({
                                     {touchedIncompleteRowCount > 0 && (
                                         <span
                                             role="status"
-                                            className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-tiny leading-4 font-medium text-warning-soft-foreground"
+                                            className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-tiny font-medium text-warning-soft-foreground"
                                         >
                                             <span
                                                 aria-hidden="true"
@@ -257,7 +258,6 @@ export const InquiryExtraCostsDialog = withForm({
                                                 value={summary.goodsTotal}
                                                 display="exact"
                                                 showHint={false}
-                                                className="font-medium text-foreground"
                                             />
                                         ) : (
                                             <span className="text-muted-foreground/70">
@@ -282,7 +282,6 @@ export const InquiryExtraCostsDialog = withForm({
                                                         }
                                                         display="exact"
                                                         showHint={false}
-                                                        className="font-semibold text-foreground"
                                                     />
                                                 </span>
                                             </>
@@ -312,7 +311,7 @@ export const InquiryExtraCostsDialog = withForm({
 
                         <fieldset disabled={disabled} className="min-w-0">
                             {fees.length === 0 ? (
-                                <div className="flex flex-col items-center rounded-xl border border-dashed border-border/80 bg-surface-sunken/35 px-6 py-8 text-center">
+                                <div className="flex flex-col items-center rounded-lg border border-dashed border-border/80 bg-surface-sunken/35 px-6 py-8 text-center">
                                     <div className="flex size-10 items-center justify-center rounded-full border border-border/60 bg-card text-muted-foreground shadow-2xs">
                                         <ReceiptTextIcon
                                             aria-hidden="true"
@@ -493,7 +492,7 @@ export const InquiryExtraCostsDialog = withForm({
                                                                                         <div className="space-y-1">
                                                                                             <Input
                                                                                                 id={`${prefix}-name`}
-                                                                                                className="h-control-sm"
+                                                                                                size="sm"
                                                                                                 aria-label={`第 ${index + 1} 项费用名称`}
                                                                                                 aria-invalid={
                                                                                                     invalid ||
@@ -624,9 +623,10 @@ export const InquiryExtraCostsDialog = withForm({
                                                                                                 </span>
                                                                                                 <Input
                                                                                                     id={`${prefix}-gross`}
+                                                                                                    size="sm"
                                                                                                     type="text"
                                                                                                     inputMode="decimal"
-                                                                                                    className="h-control-sm num pl-6 text-right"
+                                                                                                    className="num pl-6 text-right"
                                                                                                     aria-label={`第 ${index + 1} 项含税金额（元）`}
                                                                                                     aria-invalid={
                                                                                                         invalid ||

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { ChevronLeftIcon, ChevronRightIcon, SearchIcon } from "lucide-react"
 
-import { OptionCombobox } from "@/components/business/option-combobox"
+import { OptionCombobox } from "@/components/business"
 import { clearApiFieldError } from "@/components/form/api-errors"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
@@ -296,13 +296,14 @@ function InquiryDeliveryAddresses({
                             />
                             <Input
                                 id={`${prefix}-search`}
+                                size="sm"
                                 aria-label="按收货人、电话或地址搜索"
                                 placeholder="搜索收货人、电话或地址"
                                 value={search}
                                 onChange={(event) =>
                                     setSearch(event.target.value)
                                 }
-                                className="h-control-sm pl-8"
+                                className="pl-8"
                             />
                         </div>
                         <Button
@@ -446,6 +447,7 @@ function InquiryDeliveryAddresses({
                                                     <div className="flex items-center justify-end gap-1">
                                                         <Input
                                                             id={`${id}-quantity`}
+                                                            size="sm"
                                                             aria-label={`${row.delivery.recipient} 的转入数量`}
                                                             aria-invalid={
                                                                 Boolean(
@@ -464,7 +466,7 @@ function InquiryDeliveryAddresses({
                                                                 row.current
                                                                     .quantity
                                                             }
-                                                            className="h-control-sm num w-16 text-right"
+                                                            className="num w-16 text-right"
                                                             onChange={(
                                                                 event,
                                                             ) => {

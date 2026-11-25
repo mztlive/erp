@@ -20,7 +20,7 @@ export function CandidatePicker({
     onToggle: (id: string) => void
 }) {
     return (
-        <fieldset className="min-w-0 rounded-xl border border-border p-3">
+        <fieldset className="min-w-0 rounded-lg border border-border p-3">
             <legend className="px-1 text-xs font-medium text-muted-foreground">
                 {title}（{options.length}）
             </legend>

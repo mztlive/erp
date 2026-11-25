@@ -522,7 +522,7 @@ function ContractImportReviewForm({
                                     )}
                                 </form.AppField>
                             </div>
-                            <p className="text-xs leading-relaxed text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 最终确认归档时优先复用已有档案，缺少时再创建。
                             </p>
                         </div>

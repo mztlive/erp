@@ -4,6 +4,7 @@ import * as React from "react"
 import { MapPinIcon, TriangleAlertIcon, TruckIcon } from "lucide-react"
 import {
     BusinessFailureState,
+    DetailInlineTable,
     MoneyValue,
     QuantityValue,
     QuickPreviewSheet,
@@ -88,8 +89,8 @@ export function InquiryProductsTable({
                     onRetry={() => void details.refetch()}
                 />
             )}
-            <div
-                data-slot="detail-inline-table"
+            <DetailInlineTable
+                frame="none"
                 className="min-w-0 border-y border-border/70"
             >
                 <Table className="min-w-[960px] table-fixed">
@@ -176,9 +177,9 @@ export function InquiryProductsTable({
                             <TableRow className="hover:bg-transparent">
                                 <TableCell
                                     colSpan={4}
-                                    className="py-2.5 text-xs text-muted-foreground"
+                                    className="py-2.5 text-muted-foreground"
                                 >
-                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                                         <span className="font-medium text-foreground">
                                             共{" "}
                                             <span className="num">
@@ -203,7 +204,6 @@ export function InquiryProductsTable({
                                                         }
                                                         display="exact"
                                                         showHint={false}
-                                                        className="font-medium text-foreground"
                                                     />
                                                 </span>
                                             )}
@@ -227,15 +227,17 @@ export function InquiryProductsTable({
                                 </TableCell>
                                 <TableCell
                                     colSpan={2}
-                                    className="py-2.5 text-xs text-muted-foreground"
+                                    className="py-2.5 text-muted-foreground"
                                 >
-                                    商品供给合计
+                                    <span className="text-xs">
+                                        商品供给合计
+                                    </span>
                                 </TableCell>
                             </TableRow>
                         </TableFooter>
                     )}
                 </Table>
-            </div>
+            </DetailInlineTable>
             <QuickPreviewSheet
                 idPrefix="sales-inquiry-product-detail"
                 open={Boolean(activeLine)}
@@ -361,7 +363,7 @@ function ProductRow({
                                     {image}
                                     <div className="min-w-0 flex-1">
                                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                            <span className="font-medium leading-5 text-foreground wrap-anywhere">
+                                            <span className="font-medium text-foreground wrap-anywhere">
                                                 {line.product_name}
                                             </span>
                                             {result ? (
@@ -480,7 +482,6 @@ function ProductRow({
                                     value={price.unit_price_gross}
                                     display="exact"
                                     showHint={false}
-                                    className="font-medium text-foreground"
                                 />
                             ) : (
                                 <span className="text-muted-foreground">—</span>
@@ -526,7 +527,6 @@ function ProductRow({
                                     value={feedbackLineSubtotal(result, line)!}
                                     display="exact"
                                     showHint={false}
-                                    className="font-medium text-foreground"
                                 />
                             ) : (
                                 <span className="text-muted-foreground/60">

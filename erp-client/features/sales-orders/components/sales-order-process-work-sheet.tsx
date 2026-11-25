@@ -69,7 +69,7 @@ export function SalesOrderProcessWorkSheet({
                                     <dt className="text-xs text-muted-foreground">
                                         待完成
                                     </dt>
-                                    <dd className="mt-1 leading-6">
+                                    <dd className="mt-1">
                                         {current.owner_user_id
                                             ? current.instruction
                                             : "尚未分配处理人，需先明确责任人。"}

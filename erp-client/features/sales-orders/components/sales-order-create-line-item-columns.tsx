@@ -24,6 +24,7 @@ import type {
     SalesOrderDraftLineInput,
 } from "@/features/sales-orders/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
 import {
     SalesProcurementBasisEditor,
     SalesProcurementPriceEditor,
@@ -455,12 +456,17 @@ export function buildSalesOrderCreateLineItemColumns(
             numeric: true,
             align: "end",
             renderValue: ({ item }) => (
-                <div className="flex min-h-control items-center justify-end font-medium">
+                <div
+                    className={cn(
+                        "flex min-h-control items-center justify-end font-medium",
+                        taxAmountToneClass("含税小计"),
+                    )}
+                >
                     <MoneyValue
                         value={
                             calculateTotals([item], values.taxRatePercent).gross
                         }
-                        className={taxAmountToneClass("含税小计")}
+                        inheritColor
                     />
                 </div>
             ),

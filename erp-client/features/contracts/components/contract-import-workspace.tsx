@@ -104,7 +104,7 @@ export function ContractImportWorkspace(props: Props) {
                 : { closeButtonId: "contract-import-dialog-close" })}
             className={cn(
                 inline
-                    ? "flex min-w-0 flex-col gap-5 rounded-xl border border-grid bg-card p-4 sm:p-6"
+                    ? "flex min-w-0 flex-col gap-5 rounded-lg border border-grid bg-card p-4 sm:p-6"
                     : "flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:p-7",
                 !inline &&
                     (reviewing
@@ -330,7 +330,7 @@ export function ContractImportWorkspace(props: Props) {
                 ) : null}
             </div>
             <Footer className="flex flex-col sm:flex-row shrink-0 items-start gap-3 border-t border-border pt-4 sm:flex-wrap sm:items-center sm:justify-between">
-                <div className="space-y-1 text-xs leading-relaxed text-muted-foreground">
+                <div className="space-y-1 text-xs text-muted-foreground">
                     {reviewing ? (
                         <div className="flex items-center gap-3">
                             <p>第 {step + 1} 步，共 3 步</p>

@@ -50,7 +50,7 @@ export function InquiryTaxRateInput({
                 {...props}
                 type="text"
                 inputMode="decimal"
-                className={cn("pr-7 tabular-nums", className)}
+                className={cn("num pr-7", className)}
                 value={draft.text}
                 onChange={(event) => {
                     const text = event.target.value.trim().replace(/%$/, "")

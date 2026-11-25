@@ -18,6 +18,7 @@ import {
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { revealCustomerSensitiveField } from "@/features/customers/hooks/queries"
 import { periodLabel } from "@/features/customers/pages/customer-detail-records"
@@ -115,7 +116,7 @@ export function CustomerReadonlyContactsSection({
                                         </span>
                                     ) : null}
                                     {c.isDefault ? (
-                                        <Badge variant="info">默认</Badge>
+                                        <StatusBadge tone="info" label="默认" />
                                     ) : null}
                                 </div>
                                 <span className="num text-xs text-muted-foreground">
@@ -244,7 +245,7 @@ export function CustomerReadonlyAddressesSection({
                                         {a.addressType}
                                     </span>
                                     {a.isDefault ? (
-                                        <Badge variant="info">默认</Badge>
+                                        <StatusBadge tone="info" label="默认" />
                                     ) : null}
                                     {a.contactName ? (
                                         <span className="text-xs text-muted-foreground">
@@ -339,7 +340,7 @@ export function CustomerReadonlyBankAccountsSection({
                                         {b.accountName}
                                     </span>
                                     {b.isDefault ? (
-                                        <Badge variant="info">默认</Badge>
+                                        <StatusBadge tone="info" label="默认" />
                                     ) : null}
                                 </div>
                                 <span className="num text-xs text-muted-foreground">

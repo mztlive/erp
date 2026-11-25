@@ -51,7 +51,7 @@ export function DualCaliberSwitch({
                             if (!active) onChange(tab.value)
                         }}
                         className={cn(
-                            "min-w-0 flex-1 rounded-xl border px-4 py-3 text-left transition-colors",
+                            "min-w-0 flex-1 rounded-lg border px-4 py-3 text-left transition-colors",
                             active
                                 ? "border-primary bg-primary/5"
                                 : "border-border hover:border-muted-foreground/40",

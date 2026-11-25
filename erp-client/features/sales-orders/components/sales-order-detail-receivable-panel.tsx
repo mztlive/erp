@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 
 import {
     BusinessFailureState,
+    DetailInlineTable,
     DetailWorkspaceMetricItem,
     DetailWorkspaceMetrics,
     DetailWorkspaceSection,
@@ -231,12 +232,7 @@ export function SalesOrderCustomerFinancePanel({
                                     : "本单已生效，当前可见范围未查到应收记录。"}
                             </p>
                         ) : (
-                            <div
-                                data-slot="detail-inline-table"
-                                className={
-                                    detailWorkspaceStyles.dataTableWrapper
-                                }
-                            >
+                            <DetailInlineTable frame="scroll">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
@@ -286,7 +282,7 @@ export function SalesOrderCustomerFinancePanel({
                                         ))}
                                     </TableBody>
                                 </Table>
-                            </div>
+                            </DetailInlineTable>
                         )}
                     </ReadState>
                 </DetailWorkspaceSection>
@@ -314,12 +310,7 @@ export function SalesOrderCustomerFinancePanel({
                                 暂无回款记录
                             </p>
                         ) : (
-                            <div
-                                data-slot="detail-inline-table"
-                                className={
-                                    detailWorkspaceStyles.dataTableWrapper
-                                }
-                            >
+                            <DetailInlineTable frame="scroll">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
@@ -432,7 +423,7 @@ export function SalesOrderCustomerFinancePanel({
                                         ))}
                                     </TableBody>
                                 </Table>
-                            </div>
+                            </DetailInlineTable>
                         )}
                         {receipts.data &&
                         (receipts.data.total > 20 || state.receiptPage > 1) ? (

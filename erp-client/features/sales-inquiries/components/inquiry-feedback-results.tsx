@@ -1,16 +1,8 @@
 "use client"
 
-import { MoneyValue } from "@/components/business"
+import { MoneyValue, OptionCombobox } from "@/components/business"
 import { Label } from "@/components/ui/label"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
 import { StatusBadge } from "@/components/ui/status-badge"
-import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
 import { InquiryFeedbackTable } from "./inquiry-feedback-table"
 import { sumInquiryFeesGross } from "../lib/feedback-summary"
@@ -90,8 +82,15 @@ export function InquiryFeedbackResults({
                         <Label htmlFor={`${idPrefix}-feedback-round`}>
                             反馈轮次
                         </Label>
-                        <Select
+                        <OptionCombobox
+                            id={`${idPrefix}-feedback-round`}
+                            aria-label="反馈轮次"
+                            allowClear={false}
                             value={String(feedback.round)}
+                            options={rounds.map((item) => ({
+                                value: String(item.round),
+                                label: formatRoundLabel(item),
+                            }))}
                             onValueChange={(value) => {
                                 if (!value) return
                                 const next = rounds.find(
@@ -99,27 +98,7 @@ export function InquiryFeedbackResults({
                                 )
                                 if (next) onRoundChange(next.round)
                             }}
-                        >
-                            <SelectTrigger id={`${idPrefix}-feedback-round`}>
-                                <SelectValue>
-                                    {formatRoundLabel(feedback)}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent
-                                align="end"
-                                alignItemWithTrigger={false}
-                            >
-                                {rounds.map((item) => (
-                                    <SelectItem
-                                        id={`${idPrefix}-feedback-round-option-${toAutomationIdSegment(item.round)}`}
-                                        key={item.round}
-                                        value={String(item.round)}
-                                    >
-                                        {formatRoundLabel(item)}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        />
                     </div>
                 )}
             </div>

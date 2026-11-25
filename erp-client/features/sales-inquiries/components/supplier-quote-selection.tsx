@@ -110,7 +110,7 @@ export function SupplierQuoteSelection({
                                 <div className="min-w-0 space-y-1">
                                     <Label
                                         htmlFor={id}
-                                        className="block leading-5 wrap-anywhere"
+                                        className="block wrap-anywhere"
                                     >
                                         {line.name}
                                     </Label>
@@ -222,7 +222,7 @@ export function SupplierQuoteSelection({
                                 <div className="min-w-0 space-y-1">
                                     <Label
                                         htmlFor={id}
-                                        className="block leading-5 wrap-anywhere"
+                                        className="block wrap-anywhere"
                                     >
                                         {group.supplierName}
                                     </Label>

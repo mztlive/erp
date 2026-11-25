@@ -196,7 +196,6 @@ function InquirySaleRecovery({
                                     成交单价{" "}
                                     <MoneyValue
                                         value={line.unitPriceGross || "0"}
-                                        className="text-foreground"
                                     />
                                 </span>
                                 <span className="num text-xs text-muted-foreground">

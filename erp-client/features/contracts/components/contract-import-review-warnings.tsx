@@ -49,7 +49,7 @@ export function ContractImportReviewWarnings({
                 {scope === "other" ? "归档前还需核对" : "请对照原文核对"}
             </AlertTitle>
             <AlertDescription>
-                <ul className="list-disc space-y-1 pl-4 text-xs leading-relaxed">
+                <ul className="list-disc space-y-1 pl-4 text-xs">
                     {relevant.map((warning) => (
                         <li key={warning}>
                             {entries.reduce(

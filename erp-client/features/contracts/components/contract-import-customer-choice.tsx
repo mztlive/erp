@@ -72,7 +72,7 @@ export function ContractImportCustomerChoice({
                 </p>
                 <p
                     className={cn(
-                        "text-xs leading-relaxed",
+                        "text-xs",
                         needsAttention
                             ? "text-warning-soft-foreground/90"
                             : "text-muted-foreground",

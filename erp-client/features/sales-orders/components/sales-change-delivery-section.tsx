@@ -3,9 +3,9 @@
 import { RequiredMark } from "@/components/ui/required-mark"
 import { PlusIcon } from "lucide-react"
 import { toFieldErrors } from "@/components/form"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { FieldError } from "@/components/ui/field"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compactFixed } from "@/lib/fixed-decimal"
 import { allocationSummary } from "./sales-delivery-allocation-editor"
@@ -153,22 +153,22 @@ function DeliveryGroup({
                         aria-live="polite"
                     >
                         {removed ? (
-                            <Badge variant="warning">
-                                商品已移除，请移除下方收货地址
-                            </Badge>
+                            <StatusBadge
+                                tone="warning"
+                                label="商品已移除，请移除下方收货地址"
+                            />
                         ) : (
                             <>
                                 <span className="num">{summary.summary}</span>
                                 {summary.status ? (
-                                    <Badge
-                                        variant={
+                                    <StatusBadge
+                                        tone={
                                             summary.complete
                                                 ? "success"
                                                 : "warning"
                                         }
-                                    >
-                                        {summary.status}
-                                    </Badge>
+                                        label={summary.status}
+                                    />
                                 ) : null}
                             </>
                         )}

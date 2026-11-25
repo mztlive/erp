@@ -1,10 +1,5 @@
-import { Button } from "@/components/ui/button"
+import { DecisionKpiBar } from "@/components/business"
 import { StatusBadge } from "@/components/ui/status-badge"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import {
     clampZeroFixed,
     compactFixed,
@@ -198,41 +193,21 @@ export function AcceptanceTaskKpis({
 }) {
     const hasAmount = totals.pendingAmount !== "—"
     return (
-        <dl
-            aria-label="本次客户验收核心指标"
-            className="grid grid-cols-1 items-start gap-x-5 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/acceptance-task:grid-cols-2 @[840px]/acceptance-task:grid-cols-4"
-        >
-            <div className="min-w-0">
-                <dt className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                    <span>本次待验收总额</span>
-                    <span className="text-tiny text-muted-foreground">
-                        含税估算
-                    </span>
-                    <Tooltip>
-                        <TooltipTrigger
-                            id={`${idPrefix}-amount-help`}
-                            render={
-                                <Button
-                                    type="button"
-                                    size="icon-xs"
-                                    variant="ghost"
-                                    aria-label="验收金额计算口径"
-                                />
-                            }
-                        >
-                            <span aria-hidden="true">?</span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            待验收总额 = Σ(可验数量 ×
-                            销售单含税单价)；本次登记金额按通过数量核算。
-                        </TooltipContent>
-                    </Tooltip>
-                </dt>
-                <dd className="num wrap-anywhere text-value-section font-semibold tracking-tight">
-                    {totals.pendingAmount}
-                </dd>
-                <dd className="text-xs text-muted-foreground">
-                    {hasAmount ? (
+        <DecisionKpiBar
+            columns={4}
+            ariaLabel="本次客户验收核心指标"
+            items={[
+                {
+                    id: "pending-amount",
+                    label: "本次待验收总额",
+                    basis: "含税估算",
+                    emphasis: "primary",
+                    formulaTooltipId: `${idPrefix}-amount-help`,
+                    formulaTooltipLabel: "验收金额计算口径",
+                    formulaTooltip:
+                        "待验收总额 = Σ(可验数量 × 销售单含税单价)；本次登记金额按通过数量核算。",
+                    value: totals.pendingAmount,
+                    footnote: hasAmount ? (
                         <>
                             本次登记金额{" "}
                             <span className="num text-foreground">
@@ -241,121 +216,102 @@ export function AcceptanceTaskKpis({
                         </>
                     ) : (
                         "暂无法核算含税额，按数量核对"
-                    )}
-                </dd>
-            </div>
-            <div className="min-w-0">
-                <dt className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                    <span>验收覆盖进度</span>
-                    <span className="text-tiny text-muted-foreground">
-                        {totals.mixedUnits ? "按行覆盖" : "按数量覆盖"}
-                    </span>
-                    <Tooltip>
-                        <TooltipTrigger
-                            id={`${idPrefix}-coverage-help`}
-                            render={
-                                <Button
-                                    type="button"
-                                    size="icon-xs"
-                                    variant="ghost"
-                                    aria-label="验收覆盖进度统计口径"
-                                />
-                            }
-                        >
-                            <span aria-hidden="true">?</span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            绿色为已通过验收、蓝色为当前可验、橙色为待交付未就绪；多单位商品按销售单行统计比例。
-                        </TooltipContent>
-                    </Tooltip>
-                </dt>
-                <dd className="num wrap-anywhere text-value-compact font-semibold">
-                    {totals.accepted}
-                </dd>
-                <dd className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
-                        <span
-                            aria-hidden="true"
-                            className="size-1.5 shrink-0 rounded-full bg-success"
-                        />
-                        已验
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                        <span
-                            aria-hidden="true"
-                            className="size-1.5 shrink-0 rounded-full bg-info"
-                        />
-                        可验 <span className="num">{totals.pending}</span>
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                        <span
-                            aria-hidden="true"
-                            className="size-1.5 shrink-0 rounded-full bg-warning"
-                        />
-                        待交付 <span className="num">{totals.unready}</span>
-                    </span>
-                </dd>
-                <dd>
-                    <div
-                        aria-hidden="true"
-                        className="mt-1.5 flex h-1.5 overflow-hidden rounded-full bg-border"
-                    >
-                        {["bg-success", "bg-info", "bg-warning"].map(
-                            (tone, index) => (
+                    ),
+                },
+                {
+                    id: "coverage",
+                    label: "验收覆盖进度",
+                    basis: totals.mixedUnits ? "按行覆盖" : "按数量覆盖",
+                    emphasis: "secondary",
+                    formulaTooltipId: `${idPrefix}-coverage-help`,
+                    formulaTooltipLabel: "验收覆盖进度统计口径",
+                    formulaTooltip:
+                        "绿色为已通过验收、蓝色为当前可验、橙色为待交付未就绪；多单位商品按销售单行统计比例。",
+                    value: totals.accepted,
+                    footnote: (
+                        <>
+                            <span className="inline-flex items-center gap-1">
                                 <span
-                                    key={tone}
-                                    className={tone}
-                                    style={{
-                                        flexBasis: `calc(${totals.widths[index]} * 100%)`,
-                                    }}
+                                    aria-hidden="true"
+                                    className="size-1.5 shrink-0 rounded-full bg-success"
                                 />
-                            ),
-                        )}
-                    </div>
-                </dd>
-            </div>
-            <div className="min-w-0">
-                <dt className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                    <span>本次纳入批次与数量</span>
-                    <span className="text-tiny text-muted-foreground">
-                        共 <span className="num">{totals.totalFactCount}</span>{" "}
-                        批可验
-                    </span>
-                </dt>
-                <dd className="num text-value-compact font-semibold">
-                    {totals.rowCount} 行
-                </dd>
-                <dd className="num wrap-anywhere text-xs text-muted-foreground">
-                    合计 {totals.registered}
-                </dd>
-            </div>
-            <div className="min-w-0">
-                <dt className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                    <span>签收单凭证与验收时间</span>
-                    <span className="text-tiny text-muted-foreground">
-                        必传
-                    </span>
-                </dt>
-                <dd className="mt-1 flex flex-wrap items-center gap-1.5">
-                    <StatusBadge
-                        tone={fileName ? "success" : "warning"}
-                        appearance={fileName ? "quiet" : "badge"}
-                        label={fileName ? "已上传凭证" : "待上传凭证"}
-                    />
-                </dd>
-                {fileName ? (
-                    <dd
-                        className="mt-1 truncate text-xs text-foreground"
-                        title={fileName}
-                    >
-                        {fileName}
-                    </dd>
-                ) : null}
-                <dd className="num mt-0.5 text-xs text-muted-foreground">
-                    {acceptedAt.replace("T", " ") || "未填写验收时间"}
-                </dd>
-            </div>
-        </dl>
+                                已验
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                                <span
+                                    aria-hidden="true"
+                                    className="size-1.5 shrink-0 rounded-full bg-info"
+                                />
+                                可验{" "}
+                                <span className="num">{totals.pending}</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                                <span
+                                    aria-hidden="true"
+                                    className="size-1.5 shrink-0 rounded-full bg-warning"
+                                />
+                                待交付{" "}
+                                <span className="num">{totals.unready}</span>
+                            </span>
+                        </>
+                    ),
+                    extra: (
+                        <div
+                            aria-hidden="true"
+                            className="flex h-1.5 overflow-hidden rounded-full bg-border"
+                        >
+                            {["bg-success", "bg-info", "bg-warning"].map(
+                                (tone, index) => (
+                                    <span
+                                        key={tone}
+                                        className={tone}
+                                        style={{
+                                            flexBasis: `calc(${totals.widths[index]} * 100%)`,
+                                        }}
+                                    />
+                                ),
+                            )}
+                        </div>
+                    ),
+                },
+                {
+                    id: "selected-batches",
+                    label: "本次纳入批次与数量",
+                    basis: (
+                        <>
+                            共{" "}
+                            <span className="num">{totals.totalFactCount}</span>{" "}
+                            批可验
+                        </>
+                    ),
+                    emphasis: "secondary",
+                    value: `${totals.rowCount} 行`,
+                    footnote: `合计 ${totals.registered}`,
+                },
+                {
+                    id: "evidence-and-time",
+                    label: "签收单凭证与验收时间",
+                    basis: "必传",
+                    emphasis: "terms",
+                    value: (
+                        <StatusBadge
+                            tone={fileName ? "success" : "warning"}
+                            appearance={fileName ? "quiet" : "badge"}
+                            label={fileName ? "已上传凭证" : "待上传凭证"}
+                        />
+                    ),
+                    footnote: acceptedAt.replace("T", " ") || "未填写验收时间",
+                    extra: fileName ? (
+                        <p
+                            className="truncate text-xs text-foreground"
+                            title={fileName}
+                        >
+                            {fileName}
+                        </p>
+                    ) : undefined,
+                },
+            ]}
+        />
     )
 }
 

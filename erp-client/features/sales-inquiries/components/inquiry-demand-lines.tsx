@@ -13,11 +13,12 @@ import {
 } from "lucide-react"
 import {
     BusinessFailureState,
+    DetailInlineTable,
     MoneyValue,
+    TableRowActions,
+    TableToolbarScope,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { TableRowActions } from "@/components/business/table-row-actions"
-import { TableToolbarScope } from "@/components/business/table-toolbar"
 import { withForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
@@ -345,8 +346,8 @@ export const InquiryDemandLines = withForm({
                                     </div>
                                 </div>
                             ) : (
-                                <div
-                                    data-slot="detail-inline-table"
+                                <DetailInlineTable
+                                    frame="none"
                                     className="min-w-0 border-t border-border/70"
                                 >
                                     <Table className="min-w-[1000px] table-fixed">
@@ -501,7 +502,7 @@ export const InquiryDemandLines = withForm({
                                                                 />
                                                                 <div className="min-w-0 flex-1">
                                                                     <div className="flex items-center gap-1.5">
-                                                                        <p className="min-w-0 font-medium leading-5 text-foreground wrap-anywhere">
+                                                                        <p className="min-w-0 font-medium text-foreground wrap-anywhere">
                                                                             {
                                                                                 line.product_name
                                                                             }
@@ -542,6 +543,7 @@ export const InquiryDemandLines = withForm({
                                                                     <div className="flex items-center justify-end gap-1.5">
                                                                         <Input
                                                                             id={`${prefix}-quantity`}
+                                                                            size="sm"
                                                                             aria-label={`${line.product_name}需求数量`}
                                                                             aria-invalid={
                                                                                 !quantityValid ||
@@ -558,7 +560,7 @@ export const InquiryDemandLines = withForm({
                                                                             disabled={
                                                                                 disabled
                                                                             }
-                                                                            className="h-control-sm num min-w-0 flex-1 text-right"
+                                                                            className="num min-w-0 flex-1 text-right"
                                                                             value={
                                                                                 qtyField
                                                                                     .state
@@ -607,6 +609,7 @@ export const InquiryDemandLines = withForm({
                                                                         </span>
                                                                         <Input
                                                                             id={`${prefix}-reference-price`}
+                                                                            size="sm"
                                                                             aria-label={`${line.product_name}销售价（元）`}
                                                                             aria-invalid={
                                                                                 !priceValid ||
@@ -617,7 +620,7 @@ export const InquiryDemandLines = withForm({
                                                                                     ? undefined
                                                                                     : "请输入非负金额（最多 4 位小数）"
                                                                             }
-                                                                            className="h-control-sm num pl-6 text-right"
+                                                                            className="num pl-6 text-right"
                                                                             inputMode="decimal"
                                                                             placeholder="选填"
                                                                             disabled={
@@ -710,7 +713,7 @@ export const InquiryDemandLines = withForm({
                                                             >
                                                                 <span className="flex w-full items-center justify-between gap-1">
                                                                     <StatusBadge
-                                                                        className="h-auto min-h-5 max-w-full justify-start text-left leading-5 whitespace-normal wrap-anywhere"
+                                                                        className="h-auto min-h-5 max-w-full justify-start text-left whitespace-normal wrap-anywhere"
                                                                         tone={
                                                                             deliveryOk
                                                                                 ? "neutral"
@@ -862,13 +865,12 @@ export const InquiryDemandLines = withForm({
                                                         }
                                                         display="exact"
                                                         showHint={false}
-                                                        className="font-medium text-foreground"
                                                     />
                                                 </span>
                                             ) : null}
                                         </div>
                                     </div>
-                                </div>
+                                </DetailInlineTable>
                             )}
 
                             <Sheet

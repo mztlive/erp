@@ -319,14 +319,14 @@ export function InquiryQuoteHint({
                         />
                     }
                 >
-                    <span className="inline-flex max-w-full items-center justify-end gap-1.5 text-xs leading-4">
+                    <span className="inline-flex max-w-full items-center justify-end gap-1.5 text-xs">
                         <span className="num truncate font-medium text-foreground/80 group-hover:text-primary">
                             参考 {priceRange}
                         </span>
                         {compactDelta ? (
                             <span
                                 className={cn(
-                                    "num shrink-0 rounded-sm px-1 text-tiny leading-4 font-medium",
+                                    "num shrink-0 rounded-sm px-1 text-tiny font-medium",
                                     compactDelta.kind === "below"
                                         ? "bg-warning-soft text-warning-soft-foreground"
                                         : compactDelta.kind === "equal"
@@ -342,7 +342,7 @@ export function InquiryQuoteHint({
                             className="size-3 shrink-0 text-muted-foreground/70 transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
                         />
                     </span>
-                    <span className="num text-tiny leading-4 text-muted-foreground/80">
+                    <span className="num text-tiny text-muted-foreground/80">
                         {comparableSuppliers} 家
                         {freightPending ? " · 运费待核" : " · 含运费"}
                     </span>

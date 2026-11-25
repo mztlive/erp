@@ -4,10 +4,10 @@ import * as React from "react"
 import { FilePenLineIcon, UserRoundCogIcon } from "lucide-react"
 import { useStore } from "@tanstack/react-form"
 import {
-    detailWorkspaceStyles,
     FormalActionConfirmDialog,
+    MultiOptionCombobox,
+    detailWorkspaceStyles,
 } from "@/components/business"
-import { MultiOptionCombobox } from "@/components/business/multi-option-combobox"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"

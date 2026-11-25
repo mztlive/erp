@@ -1,7 +1,7 @@
 "use client"
 
 import { DetailWorkspaceSection } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { CONTRACT_AUDIT_ACTION_LABEL } from "@/features/contracts/types"
 import type { ContractCenterView } from "@/features/contracts/types"
 
@@ -15,7 +15,7 @@ export function ContractDetailVersions({
         <>
             <DetailWorkspaceSection width="form" title="版本时间线">
                 {contract.revisionTimeline.length === 0 ? (
-                    <p className="text-body-compact leading-relaxed text-muted-foreground">
+                    <p className="text-body-compact text-muted-foreground">
                         尚无已确认修订。
                     </p>
                 ) : (
@@ -34,18 +34,22 @@ export function ContractDetailVersions({
                                             v{item.revisionNo}
                                         </span>
                                         {item.isCurrent ? (
-                                            <Badge variant="info">当前</Badge>
+                                            <StatusBadge
+                                                tone="info"
+                                                label="当前"
+                                            />
                                         ) : (
-                                            <Badge variant="outline">
-                                                历史
-                                            </Badge>
+                                            <StatusBadge
+                                                tone="neutral"
+                                                label="历史"
+                                            />
                                         )}
                                     </div>
                                     <span className="num text-xs text-muted-foreground">
                                         {item.effectiveAt ?? "—"}
                                     </span>
                                 </div>
-                                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                                <p className="mt-1.5 text-xs text-muted-foreground">
                                     {item.validFrom} 至 {item.validTo}
                                     {item.changeReason
                                         ? ` · ${item.changeReason}`
@@ -72,7 +76,7 @@ export function ContractDetailVersions({
 
             <DetailWorkspaceSection width="form" title="审计时间线">
                 {contract.auditTimeline.length === 0 ? (
-                    <p className="text-body-compact leading-relaxed text-muted-foreground">
+                    <p className="text-body-compact text-muted-foreground">
                         暂无审计记录。
                     </p>
                 ) : (
@@ -92,7 +96,7 @@ export function ContractDetailVersions({
                                         {event.at}
                                     </span>
                                 </div>
-                                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                                <p className="mt-1.5 text-xs text-muted-foreground">
                                     {event.actorLabel} · {event.summary}
                                 </p>
                             </li>

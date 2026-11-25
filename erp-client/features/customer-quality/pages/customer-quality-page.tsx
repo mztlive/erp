@@ -4,11 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 
-import { BusinessFailureState, PageScaffold } from "@/components/business"
-import {
-    ListWorkspaceHeader,
-    listWorkspaceStyles as styles,
-} from "@/components/business/list-workspace"
+import { BusinessFailureState, ListWorkspacePage } from "@/components/business"
 import { getErrorMessage } from "@/lib/api/errors"
 import { Button } from "@/components/ui/button"
 
@@ -197,8 +193,7 @@ export function CustomerQualityPage() {
 
     if (period.periodPolicyQuery.isError) {
         return (
-            <PageScaffold density="compact" className={styles.page}>
-                <ListWorkspaceHeader eyebrow="分析" title="客户经营质量" />
+            <ListWorkspacePage eyebrow="分析" title="客户经营质量">
                 <BusinessFailureState
                     title="期间配置加载失败"
                     error={period.periodPolicyQuery.error}
@@ -230,7 +225,7 @@ export function CustomerQualityPage() {
                         to={period.resolvedTo}
                     />
                 ) : null}
-            </PageScaffold>
+            </ListWorkspacePage>
         )
     }
 
@@ -245,12 +240,11 @@ export function CustomerQualityPage() {
     // —— Period blocker ——
     if (period.needsPeriodBlocker) {
         return (
-            <PageScaffold density="compact" className={styles.page}>
-                <ListWorkspaceHeader
-                    eyebrow="分析"
-                    title="客户经营质量"
-                    description="未配置默认统计期间，请选择起止日期后开始分析。"
-                />
+            <ListWorkspacePage
+                eyebrow="分析"
+                title="客户经营质量"
+                description="未配置默认统计期间，请选择起止日期后开始分析。"
+            >
                 <PeriodBlockerCard
                     periodPolicy={period.periodPolicy}
                     explicitFrom={period.explicitFrom}
@@ -260,7 +254,7 @@ export function CustomerQualityPage() {
                     onApplyExplicit={period.applyExplicitPeriod}
                     onApplyPreset={period.applyPreset}
                 />
-            </PageScaffold>
+            </ListWorkspacePage>
         )
     }
 
@@ -270,8 +264,7 @@ export function CustomerQualityPage() {
 
     if (data && data.emptyKind === "forbidden") {
         return (
-            <PageScaffold density="compact" className={styles.page}>
-                <ListWorkspaceHeader eyebrow="分析" title="客户经营质量" />
+            <ListWorkspacePage eyebrow="分析" title="客户经营质量">
                 <BusinessFailureState
                     kind="permission"
                     title="无客户经营质量权限"
@@ -287,7 +280,7 @@ export function CustomerQualityPage() {
                         </Button>
                     }
                 />
-            </PageScaffold>
+            </ListWorkspacePage>
         )
     }
 

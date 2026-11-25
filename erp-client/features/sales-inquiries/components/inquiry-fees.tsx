@@ -1,16 +1,14 @@
 "use client"
 
 import { ReceiptTextIcon } from "lucide-react"
-import { MoneyValue, RateValue } from "@/components/business"
+import {
+    DetailInlineTable,
+    MoneyValue,
+    OptionCombobox,
+    RateValue,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
@@ -145,7 +143,6 @@ export function InquiryFees({
                                     value={feeTotal}
                                     display="exact"
                                     showHint={false}
-                                    className="font-medium text-foreground"
                                 />
                             </span>
                         )}
@@ -171,8 +168,19 @@ export function InquiryFees({
                             >
                                 轮次
                             </Label>
-                            <Select
+                            <OptionCombobox
+                                id="sales-inquiry-fees-round"
+                                size="sm"
+                                aria-label="轮次"
+                                allowClear={false}
                                 value={String(feedback.round)}
+                                options={rounds.map((item) => ({
+                                    value: String(item.round),
+                                    label: formatRoundLabel(item),
+                                }))}
+                                getOptionId={(value) =>
+                                    `sales-inquiry-fees-round-${value}`
+                                }
                                 onValueChange={(value) => {
                                     if (!value) return
                                     const next = rounds.find(
@@ -180,30 +188,7 @@ export function InquiryFees({
                                     )
                                     if (next) onRoundChange(next.round)
                                 }}
-                            >
-                                <SelectTrigger
-                                    id="sales-inquiry-fees-round"
-                                    size="sm"
-                                >
-                                    <SelectValue>
-                                        {formatRoundLabel(feedback)}
-                                    </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent
-                                    align="end"
-                                    alignItemWithTrigger={false}
-                                >
-                                    {rounds.map((item) => (
-                                        <SelectItem
-                                            key={item.round}
-                                            id={`sales-inquiry-fees-round-${item.round}`}
-                                            value={String(item.round)}
-                                        >
-                                            {formatRoundLabel(item)}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            />
                         </div>
                     )}
                 </div>
@@ -233,10 +218,7 @@ function FeeQuoteTable({ feedback }: { feedback: InquiryFeedback }) {
             </div>
         )
     return (
-        <div
-            data-slot="detail-inline-table"
-            className="min-w-0 border-y border-border/70"
-        >
+        <DetailInlineTable className="min-w-0 border-y border-border/70">
             <Table>
                 <TableHeader>
                     <TableRow>
@@ -289,6 +271,6 @@ function FeeQuoteTable({ feedback }: { feedback: InquiryFeedback }) {
                     ))}
                 </TableBody>
             </Table>
-        </div>
+        </DetailInlineTable>
     )
 }

@@ -15,12 +15,13 @@ import { useStore } from "@tanstack/react-form"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import {
     BusinessFailureState,
+    DetailInlineTable,
     MoneyValue,
+    OptionCombobox,
     QuantityValue,
     RateValue,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { OptionCombobox } from "@/components/business/option-combobox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -353,7 +354,6 @@ function buildQuoteSummaryHeader(
                             value={currentPrice}
                             display="exact"
                             showHint={false}
-                            className="font-semibold text-foreground"
                         />
                         {taxLabel ? (
                             <span className="num text-muted-foreground">
@@ -1043,8 +1043,8 @@ function QuoteComparisonTable({
 }) {
     const colCount = historical ? 6 : 7
     return (
-        <div
-            data-slot="detail-inline-table"
+        <DetailInlineTable
+            frame="none"
             className="min-w-0 overflow-x-auto rounded-lg border border-border/75"
         >
             <Table className="min-w-[780px] table-fixed [--table-cell-inline:0.75rem]">
@@ -1134,7 +1134,7 @@ function QuoteComparisonTable({
                                     )}
                                 >
                                     <TableCell className="whitespace-normal">
-                                        <p className="font-medium leading-5 text-foreground wrap-anywhere">
+                                        <p className="font-medium text-foreground wrap-anywhere">
                                             {row.supplierName}
                                         </p>
                                         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -1208,21 +1208,26 @@ function QuoteComparisonTable({
                                             <div className="space-y-0.5">
                                                 <div className="flex flex-wrap items-center justify-end gap-1.5">
                                                     {row.isLowest && (
-                                                        <span className="rounded-sm bg-success-soft px-1.5 py-0.5 text-tiny leading-4 font-medium text-success-soft-foreground">
+                                                        <span className="rounded-sm bg-success-soft px-1.5 py-0.5 text-tiny font-medium text-success-soft-foreground">
                                                             最低
                                                         </span>
                                                     )}
-                                                    <MoneyValue
-                                                        display="exact"
-                                                        showHint={false}
-                                                        value={row.refPrice}
-                                                        className={cn(
-                                                            "font-semibold",
+                                                    <span
+                                                        className={
                                                             row.isLowest
                                                                 ? "text-success-soft-foreground"
-                                                                : "text-foreground",
-                                                        )}
-                                                    />
+                                                                : undefined
+                                                        }
+                                                    >
+                                                        <MoneyValue
+                                                            display="exact"
+                                                            showHint={false}
+                                                            inheritColor={
+                                                                row.isLowest
+                                                            }
+                                                            value={row.refPrice}
+                                                        />
+                                                    </span>
                                                 </div>
                                                 {isSystem ? (
                                                     <p className="text-xs text-muted-foreground">
@@ -1388,13 +1393,13 @@ function QuoteComparisonTable({
                                         <TableCell
                                             colSpan={colCount}
                                             className={cn(
-                                                "whitespace-normal py-1.5 text-xs",
+                                                "whitespace-normal py-1.5",
                                                 row.excluded
                                                     ? "bg-warning-soft/35 text-warning-soft-foreground"
                                                     : "bg-surface-sunken/60 text-muted-foreground",
                                             )}
                                         >
-                                            <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
+                                            <div className="flex flex-wrap items-start gap-x-3 gap-y-1 text-xs">
                                                 {row.excluded && (
                                                     <span className="inline-flex items-center gap-1 font-medium">
                                                         <CircleAlertIcon
@@ -1418,7 +1423,7 @@ function QuoteComparisonTable({
                     })}
                 </TableBody>
             </Table>
-        </div>
+        </DetailInlineTable>
     )
 }
 
@@ -1956,12 +1961,13 @@ function QuoteEditorPanel({
                                     </span>
                                     {livePreview?.refPrice ? (
                                         <>
-                                            <MoneyValue
-                                                value={livePreview.refPrice}
-                                                display="exact"
-                                                showHint={false}
-                                                className="text-body-compact font-semibold text-foreground"
-                                            />
+                                            <span className="text-body-compact">
+                                                <MoneyValue
+                                                    value={livePreview.refPrice}
+                                                    display="exact"
+                                                    showHint={false}
+                                                />
+                                            </span>
                                             <span className="text-muted-foreground">
                                                 （按需求 {line.quantity} {unit}{" "}
                                                 分摊本行运费）

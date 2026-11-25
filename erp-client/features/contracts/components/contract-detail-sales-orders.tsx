@@ -4,6 +4,7 @@ import Link from "next/link"
 
 import {
     BusinessStatusBadge,
+    DetailInlineTable,
     DetailWorkspaceSection,
     MoneyValue,
     detailWorkspaceStyles,
@@ -41,14 +42,11 @@ export function ContractDetailSalesOrders({
             }
         >
             {contract.relatedSalesOrders.length === 0 ? (
-                <p className="text-body-compact leading-relaxed text-muted-foreground">
+                <p className="text-body-compact text-muted-foreground">
                     暂无关联销售单。
                 </p>
             ) : (
-                <div
-                    data-slot="detail-inline-table"
-                    className={detailWorkspaceStyles.inlineTableWrapper}
-                >
+                <DetailInlineTable>
                     <Table data-density="compact">
                         <TableHeader>
                             <TableRow>
@@ -83,19 +81,25 @@ export function ContractDetailSalesOrders({
                                             {...so.primaryStatus}
                                         />
                                     </TableCell>
-                                    <TableCell className="text-xs text-muted-foreground">
-                                        履约 {so.fulfillmentLabel} · 回款{" "}
-                                        {so.collectionLabel} · 开票{" "}
-                                        {so.invoicingLabel}
+                                    <TableCell className="text-muted-foreground">
+                                        <span className="text-xs">
+                                            履约 {so.fulfillmentLabel} · 回款{" "}
+                                            {so.collectionLabel} · 开票{" "}
+                                            {so.invoicingLabel}
+                                        </span>
                                     </TableCell>
                                     <TableCell data-align="end">
-                                        <MoneyValue
-                                            value={so.amountGross}
-                                            taxBasis="gross"
+                                        <span
                                             className={taxAmountToneClass(
                                                 "含税金额",
                                             )}
-                                        />
+                                        >
+                                            <MoneyValue
+                                                value={so.amountGross}
+                                                taxBasis="gross"
+                                                inheritColor
+                                            />
+                                        </span>
                                     </TableCell>
                                     <TableCell data-align="end">
                                         <Button
@@ -120,7 +124,7 @@ export function ContractDetailSalesOrders({
                             ))}
                         </TableBody>
                     </Table>
-                </div>
+                </DetailInlineTable>
             )}
         </DetailWorkspaceSection>
     )

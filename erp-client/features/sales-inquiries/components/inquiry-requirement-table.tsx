@@ -4,12 +4,13 @@ import * as React from "react"
 import { ChevronRightIcon, TruckIcon } from "lucide-react"
 import {
     BusinessFailureState,
+    DetailInlineTable,
     MoneyValue,
     QuantityValue,
     QuickPreviewSheet,
+    TableRowActions,
+    TableToolbarScope,
 } from "@/components/business"
-import { TableRowActions } from "@/components/business/table-row-actions"
-import { TableToolbarScope } from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {
@@ -77,8 +78,8 @@ export function InquiryRequirementTable({
                         onRetry={() => void skuDetails.refetch()}
                     />
                 )}
-                <div
-                    data-slot="detail-inline-table"
+                <DetailInlineTable
+                    frame="none"
                     className="min-w-0 border-y border-border/70"
                 >
                     <Table
@@ -155,7 +156,7 @@ export function InquiryRequirementTable({
                                                 <div className="flex items-start gap-2.5">
                                                     {productImage(line)}
                                                     <div className="min-w-0 flex-1">
-                                                        <p className="font-medium leading-5 text-foreground wrap-anywhere">
+                                                        <p className="font-medium text-foreground wrap-anywhere">
                                                             {line.product_name}
                                                         </p>
                                                         <p
@@ -223,7 +224,7 @@ export function InquiryRequirementTable({
                                                 >
                                                     <span className="flex w-full items-center justify-between gap-1">
                                                         <StatusBadge
-                                                            className="h-auto min-h-5 max-w-full justify-start text-left leading-5 whitespace-normal wrap-anywhere"
+                                                            className="h-auto min-h-5 max-w-full justify-start text-left whitespace-normal wrap-anywhere"
                                                             tone={
                                                                 progress.complete &&
                                                                 !progress.overAllocated
@@ -281,7 +282,7 @@ export function InquiryRequirementTable({
                             )}
                         </TableBody>
                     </Table>
-                </div>
+                </DetailInlineTable>
             </section>
             <QuickPreviewSheet
                 idPrefix={`${idPrefix}-delivery`}

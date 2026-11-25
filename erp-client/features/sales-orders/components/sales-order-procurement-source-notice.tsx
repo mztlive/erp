@@ -3,7 +3,7 @@
 import Link from "next/link"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import type { SalesOrderProcurementProgress } from "@/features/sales-orders/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { purchaseSourceUpdateText } from "@/lib/ui-text"
@@ -70,18 +70,20 @@ export function SalesOrderProcurementSourceNotice({
                                         <span>· 负责人 {update.ownerName}</span>
                                     ) : null}
                                     {update.blocksPayment ? (
-                                        <Badge variant="warning">
-                                            {
+                                        <StatusBadge
+                                            tone="warning"
+                                            label={
                                                 purchaseSourceUpdateText.paymentPaused
                                             }
-                                        </Badge>
+                                        />
                                     ) : null}
                                     {update.awaitingSubmission ? (
-                                        <Badge variant="outline">
-                                            {
+                                        <StatusBadge
+                                            tone="neutral"
+                                            label={
                                                 purchaseSourceUpdateText.awaitingSubmission
                                             }
-                                        </Badge>
+                                        />
                                     ) : null}
                                 </div>
                                 {update.awaitingSubmission ? null : (

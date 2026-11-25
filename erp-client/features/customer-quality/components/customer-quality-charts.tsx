@@ -33,48 +33,52 @@ export function CustomerQualityCharts({
     return (
         <>
             {/* Charts + equivalent tables */}
-            <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-                <DimensionBarChartCard
-                    dimension={scaleDimension}
-                    dimensionKey="scale"
-                    tagKey="scaleTag"
-                    titleFallback="客户规模分层"
-                    tableCaption="客户规模分层等价数据表"
-                    labelColumnHeader="分层"
-                    valueColumnHeader="成交规模"
-                    chartDimension={chartDimension}
-                    chartCode={chartCode}
-                    patchUrl={patchUrl}
-                    setPagination={setPagination}
-                />
-                <DimensionBarChartCard
-                    dimension={profitDimension}
-                    dimensionKey="profit"
-                    tagKey="profitTag"
-                    titleFallback="利润贡献分布"
-                    description={() => (
-                        <>仅成本完整非卡券；卡券收入不进入利润标签</>
-                    )}
-                    tableCaption="利润贡献分布等价数据表"
-                    labelColumnHeader="标签"
-                    valueColumnHeader="盈亏（不含税）"
-                    hiddenNotice={
-                        isVoucherOnly ? (
-                            <p className="text-xs text-muted-foreground">
-                                当前为卡券业务性质筛选，利润贡献图隐藏。
-                            </p>
-                        ) : undefined
-                    }
-                    footer={
-                        natureDimension ? (
-                            <NatureDimensionList dimension={natureDimension} />
-                        ) : undefined
-                    }
-                    chartDimension={chartDimension}
-                    chartCode={chartCode}
-                    patchUrl={patchUrl}
-                    setPagination={setPagination}
-                />
+            <div className="@container/quality-charts min-w-0">
+                <div className="grid min-w-0 gap-4 @[960px]/quality-charts:grid-cols-2">
+                    <DimensionBarChartCard
+                        dimension={scaleDimension}
+                        dimensionKey="scale"
+                        tagKey="scaleTag"
+                        titleFallback="客户规模分层"
+                        tableCaption="客户规模分层等价数据表"
+                        labelColumnHeader="分层"
+                        valueColumnHeader="成交规模"
+                        chartDimension={chartDimension}
+                        chartCode={chartCode}
+                        patchUrl={patchUrl}
+                        setPagination={setPagination}
+                    />
+                    <DimensionBarChartCard
+                        dimension={profitDimension}
+                        dimensionKey="profit"
+                        tagKey="profitTag"
+                        titleFallback="利润贡献分布"
+                        description={() => (
+                            <>仅成本完整非卡券；卡券收入不进入利润标签</>
+                        )}
+                        tableCaption="利润贡献分布等价数据表"
+                        labelColumnHeader="标签"
+                        valueColumnHeader="盈亏（不含税）"
+                        hiddenNotice={
+                            isVoucherOnly ? (
+                                <p className="text-xs text-muted-foreground">
+                                    当前为卡券业务性质筛选，利润贡献图隐藏。
+                                </p>
+                            ) : undefined
+                        }
+                        footer={
+                            natureDimension ? (
+                                <NatureDimensionList
+                                    dimension={natureDimension}
+                                />
+                            ) : undefined
+                        }
+                        chartDimension={chartDimension}
+                        chartCode={chartCode}
+                        patchUrl={patchUrl}
+                        setPagination={setPagination}
+                    />
+                </div>
             </div>
         </>
     )

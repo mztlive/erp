@@ -4,9 +4,9 @@ import * as React from "react"
 import Link from "next/link"
 
 import {
+    DetailInlineTable,
     DetailWorkspaceSection,
     MoneyValue,
-    detailWorkspaceStyles,
 } from "@/components/business"
 import {
     Table,
@@ -58,10 +58,7 @@ function CardLineItemsTable({ order }: { order: SalesOrderDetailView }) {
         (line) => line.deliveryAllocations?.length,
     )
     return (
-        <div
-            data-slot="detail-inline-table"
-            className={detailWorkspaceStyles.dataTableWrapper}
-        >
+        <DetailInlineTable frame="scroll">
             <Table data-density="comfortable" className="min-w-[54rem]">
                 <TableHeader>
                     <TableRow>
@@ -123,7 +120,7 @@ function CardLineItemsTable({ order }: { order: SalesOrderDetailView }) {
                     ))}
                 </TableBody>
             </Table>
-        </div>
+        </DetailInlineTable>
     )
 }
 
@@ -172,10 +169,7 @@ export function OverviewPanel({
                         <span className="text-xs text-muted-foreground">
                             合计（含税）
                         </span>
-                        <MoneyValue
-                            value={order.amountGross}
-                            className="text-value-compact font-semibold tracking-tight"
-                        />
+                        <MoneyValue value={order.amountGross} size="compact" />
                     </div>
                 </DetailWorkspaceSection>
             ) : null}

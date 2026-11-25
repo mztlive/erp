@@ -466,7 +466,7 @@ export function CustomerDetailSettlementTab({
                                 <DetailWorkspaceFact
                                     label="规模标签"
                                     value={
-                                        <Badge variant="info">
+                                        <Badge variant="neutral">
                                             {customer.qualitySummary.scaleLabel}
                                         </Badge>
                                     }

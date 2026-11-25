@@ -12,11 +12,9 @@ import {
     DetailWorkspacePage,
     DetailWorkspaceSection,
     DetailWorkspaceSkeleton,
-} from "@/components/business"
-import {
     WorkspaceTaskPane,
     type WorkspaceTaskPaneProps,
-} from "@/components/business/workspace-task-pane"
+} from "@/components/business"
 import { buttonVariants } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { isWorkspaceFrame, workspaceHost } from "@/lib/workspace-tabs"

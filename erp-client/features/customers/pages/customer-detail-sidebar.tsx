@@ -190,7 +190,7 @@ export function CustomerDetailSidebar({
                         </Button>
                     </div>
                 ) : !hasRecentBusiness ? (
-                    <p className="text-xs leading-relaxed text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         暂无关联单据，可通过顶部入口新建销售单或上传合同。
                     </p>
                 ) : (

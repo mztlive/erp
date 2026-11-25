@@ -142,8 +142,8 @@ export function SalesOrderPaperPreviewDialog({
                                 </div>
                                 <MoneyValue
                                     display="exact"
+                                    size="compact"
                                     value={order.amountGross}
-                                    className="text-value-compact font-semibold tracking-tight text-foreground"
                                 />
                             </div>
                         ) : null}

@@ -12,12 +12,13 @@ import {
 } from "lucide-react"
 import {
     BusinessFailureState,
+    DetailInlineTable,
     MoneyValue,
     QuantityValue,
     RateValue,
+    TableToolbarScope,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { TableToolbarScope } from "@/components/business/table-toolbar"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -693,11 +694,12 @@ export function InquiryFeedbackTable({
                                             />
                                             <Input
                                                 id={`${idPrefix}-search`}
+                                                size="sm"
                                                 type="search"
                                                 value={searchText}
                                                 aria-label="筛选商品名称、规格或 SKU"
                                                 placeholder="筛商品 / SKU"
-                                                className="h-control-sm min-w-0 border-transparent bg-surface-sunken pr-7 pl-7 shadow-none hover:bg-card focus-visible:bg-card [&::-webkit-search-cancel-button]:hidden"
+                                                className="min-w-0 border-transparent bg-surface-sunken pr-7 pl-7 shadow-none hover:bg-card focus-visible:bg-card [&::-webkit-search-cancel-button]:hidden"
                                                 onChange={(event) => {
                                                     setSearchText(
                                                         event.target.value,
@@ -854,11 +856,12 @@ export function InquiryFeedbackTable({
                                             />
                                             <Input
                                                 id="procurement-feedback-search"
+                                                size="sm"
                                                 type="text"
                                                 value={searchText}
                                                 aria-label="筛选商品名称或 SKU"
                                                 placeholder="筛商品 / SKU"
-                                                className="h-control-sm border-transparent bg-muted/65 pr-7 pl-8 text-body-compact shadow-none hover:bg-muted focus-visible:border-primary/60 focus-visible:bg-card"
+                                                className="border-transparent bg-muted/65 pr-7 pl-8 shadow-none hover:bg-muted focus-visible:border-primary/60 focus-visible:bg-card"
                                                 onChange={(event) =>
                                                     setSearchText(
                                                         event.target.value,
@@ -897,7 +900,7 @@ export function InquiryFeedbackTable({
                                             type="button"
                                             size="sm"
                                             variant="ghost"
-                                            className="h-control-sm border border-primary/20 bg-sidebar-accent/70 px-2.5 text-body-compact font-medium text-sidebar-accent-foreground shadow-none hover:bg-sidebar-accent"
+                                            className="border border-primary/20 bg-sidebar-accent/70 px-2.5 text-body-compact font-medium text-sidebar-accent-foreground shadow-none hover:bg-sidebar-accent"
                                             disabled={disabled}
                                             title="一键将当前列表中全部待确认商品设为可供应"
                                             onClick={markPendingAvailable}
@@ -907,7 +910,7 @@ export function InquiryFeedbackTable({
                                                 data-icon="inline-start"
                                             />
                                             待确认全部设为可供
-                                            <span className="num rounded-sm bg-primary/12 px-1 text-tiny leading-4 font-semibold text-primary">
+                                            <span className="num rounded-sm bg-primary/12 px-1 text-tiny font-semibold text-primary">
                                                 {visiblePendingCount}
                                             </span>
                                         </Button>
@@ -954,8 +957,8 @@ export function InquiryFeedbackTable({
                     )}
 
                     <div className="min-w-0">
-                        <div
-                            data-slot="detail-inline-table"
+                        <DetailInlineTable
+                            frame="none"
                             className={cn(
                                 "min-w-0",
                                 !workbench && "border-y border-border/70",
@@ -1357,7 +1360,7 @@ export function InquiryFeedbackTable({
                                                                 <div className="min-w-0 flex-1 space-y-1">
                                                                     <p
                                                                         className={cn(
-                                                                            "line-clamp-2 font-medium leading-5 wrap-anywhere",
+                                                                            "line-clamp-2 font-medium wrap-anywhere",
                                                                             unavailable
                                                                                 ? "text-muted-foreground"
                                                                                 : "text-foreground",
@@ -1523,11 +1526,12 @@ export function InquiryFeedbackTable({
                                                                     <div className="flex items-center justify-end gap-1.5">
                                                                         <Input
                                                                             id={`${prefix}-available-quantity`}
+                                                                            size="sm"
                                                                             disabled={
                                                                                 disabled
                                                                             }
                                                                             className={cn(
-                                                                                "h-control-sm num flex-1 text-right",
+                                                                                "num flex-1 text-right",
                                                                                 workbench
                                                                                     ? workbenchNumberInput
                                                                                     : "min-w-16",
@@ -1705,7 +1709,6 @@ export function InquiryFeedbackTable({
                                                                             showHint={
                                                                                 false
                                                                             }
-                                                                            className="font-medium text-foreground"
                                                                         />
                                                                     ) : (
                                                                         <span className="text-muted-foreground">
@@ -1761,11 +1764,12 @@ export function InquiryFeedbackTable({
                                                                         </span>
                                                                         <Input
                                                                             id={`${prefix}-gross-price`}
+                                                                            size="sm"
                                                                             disabled={
                                                                                 disabled
                                                                             }
                                                                             className={cn(
-                                                                                "h-control-sm num pl-6 text-right",
+                                                                                "num pl-6 text-right",
                                                                                 workbench &&
                                                                                     workbenchNumberInput,
                                                                             )}
@@ -1993,7 +1997,6 @@ export function InquiryFeedbackTable({
                                                                         showHint={
                                                                             false
                                                                         }
-                                                                        className="font-semibold text-foreground"
                                                                     />
                                                                 ) : !hasIssues ? (
                                                                     <span className="text-muted-foreground/60">
@@ -2088,7 +2091,7 @@ export function InquiryFeedbackTable({
                                                                                     : "缺货原因"}
                                                                                 <RequiredMark />
                                                                             </Label>
-                                                                            <span className="rounded-sm bg-muted/85 px-1.5 py-0.5 text-tiny leading-4 text-muted-foreground">
+                                                                            <span className="rounded-sm bg-muted/85 px-1.5 py-0.5 text-tiny text-muted-foreground">
                                                                                 销售可见
                                                                             </span>
                                                                         </div>
@@ -2122,7 +2125,7 @@ export function InquiryFeedbackTable({
                                                                                         : "说明缺货原因与补货计划（如：厂方库存不足，预计下周补齐），提交后销售可见"
                                                                                 }
                                                                                 className={cn(
-                                                                                    "min-h-control-sm px-2.5 py-1 text-body-compact leading-5",
+                                                                                    "min-h-control-sm px-2.5 py-1 text-body-compact",
                                                                                     workbench &&
                                                                                         workbenchNumberInput,
                                                                                 )}
@@ -2179,9 +2182,9 @@ export function InquiryFeedbackTable({
                                         <TableRow className="hover:bg-transparent">
                                             <TableCell
                                                 colSpan={columnCount - 2}
-                                                className="py-2.5 text-xs text-muted-foreground"
+                                                className="py-2.5 text-muted-foreground"
                                             >
-                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                                                     <span className="font-medium text-foreground">
                                                         {workbench
                                                             ? "整单合计 · 共 "
@@ -2260,7 +2263,6 @@ export function InquiryFeedbackTable({
                                                                             showHint={
                                                                                 false
                                                                             }
-                                                                            className="font-medium text-foreground"
                                                                         />
                                                                     </>
                                                                 ) : null}
@@ -2299,7 +2301,7 @@ export function InquiryFeedbackTable({
                                     </TableFooter>
                                 )}
                             </Table>
-                        </div>
+                        </DetailInlineTable>
 
                         {workbench && totalPages > 1 ? (
                             <nav

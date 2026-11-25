@@ -39,10 +39,9 @@ export function SalesOrderNegativeProfitConfirmDialog({
                     <AlertDialogTitle>预估毛利为负</AlertDialogTitle>
                     <AlertDialogDescription>
                         该销售单的预估毛利（含税）为{" "}
-                        <MoneyValue
-                            value={grossProfit}
-                            className="font-semibold text-destructive"
-                        />
+                        <span className="font-semibold text-destructive">
+                            <MoneyValue value={grossProfit} inheritColor />
+                        </span>
                         。提交后仍会进入审批，请确认成交价与采购供给价填写无误。
                     </AlertDialogDescription>
                 </AlertDialogHeader>

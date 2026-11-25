@@ -16,11 +16,13 @@ import {
 import { z } from "zod"
 
 import {
+    DetailFormGrid,
+    DetailInlineTable,
     DetailWorkspaceSubTabs,
+    OptionCombobox,
     QuantityValue,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { OptionCombobox } from "@/components/business/option-combobox"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -801,12 +803,13 @@ function ProductDeliveryPane({
                     />
                     <Input
                         id={`${prefix}-address-search`}
+                        size="sm"
                         value={addressSearch}
                         onChange={(event) =>
                             setAddressSearch(event.target.value)
                         }
                         placeholder="按收货人、电话或地址筛选…"
-                        className="h-control-sm pl-8"
+                        className="pl-8"
                     />
                 </div>
             ) : null}
@@ -826,8 +829,8 @@ function ProductDeliveryPane({
                     </p>
                 </div>
             ) : (
-                <div
-                    data-slot="detail-inline-table"
+                <DetailInlineTable
+                    frame="none"
                     className="overflow-hidden rounded-lg border border-border/75"
                 >
                     <Table>
@@ -847,7 +850,7 @@ function ProductDeliveryPane({
                                 <TableRow>
                                     <TableCell
                                         colSpan={3}
-                                        className="py-8 text-center text-xs text-muted-foreground"
+                                        className="py-8 text-center text-muted-foreground"
                                     >
                                         未找到匹配的收货地址。
                                     </TableCell>
@@ -916,6 +919,7 @@ function ProductDeliveryPane({
                                                     <div className="flex items-center justify-end gap-1">
                                                         <Input
                                                             id={`${rowPrefix}-quantity`}
+                                                            size="sm"
                                                             aria-label={`${row.recipient || `地址 ${index + 1}`}分配数量`}
                                                             aria-invalid={
                                                                 qtyInvalid ||
@@ -924,7 +928,7 @@ function ProductDeliveryPane({
                                                             type="text"
                                                             inputMode="decimal"
                                                             value={row.quantity}
-                                                            className="h-control-sm num w-20 text-right"
+                                                            className="num w-20 text-right"
                                                             onChange={(
                                                                 event,
                                                             ) => {
@@ -1030,7 +1034,7 @@ function ProductDeliveryPane({
                             )}
                         </TableBody>
                     </Table>
-                </div>
+                </DetailInlineTable>
             )}
         </div>
     )
@@ -1114,8 +1118,6 @@ function SingleAddressInlineForm({
             />
 
             <form
-                data-slot="detail-form-grid"
-                className="space-y-3"
                 noValidate
                 onSubmit={(event) => {
                     event.preventDefault()
@@ -1123,111 +1125,117 @@ function SingleAddressInlineForm({
                     void form.handleSubmit()
                 }}
             >
-                <div className="grid gap-3 sm:grid-cols-2">
-                    <form.AppField name="recipient">
-                        {(field) => (
-                            <field.TextField
-                                id={`${formPrefix}-recipient`}
-                                label="收货人"
-                                required
-                            />
-                        )}
-                    </form.AppField>
-                    <form.AppField name="phone">
-                        {(field) => (
-                            <field.TextField
-                                id={`${formPrefix}-phone`}
-                                label="联系电话"
-                                type="tel"
-                                required
-                            />
-                        )}
-                    </form.AppField>
-                </div>
-
-                <form.AppField name="region_code">
-                    {(field) => (
-                        <DeliveryRegionField
-                            id={`${formPrefix}-region`}
-                            required
-                            value={field.state.value}
-                            onValueChange={(code) => field.handleChange(code)}
-                            onBlur={field.handleBlur}
-                            invalid={
-                                field.state.meta.isTouched &&
-                                !field.state.meta.isValid
-                            }
-                            errors={toFieldErrors(field.state.meta.errors)}
-                            hint={
-                                field.state.value ? (
-                                    <InlineCoverageHint
-                                        sku={line.sku}
-                                        regionCode={field.state.value}
-                                        id={`${formPrefix}-coverage`}
-                                    />
-                                ) : null
-                            }
-                        />
-                    )}
-                </form.AppField>
-
-                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
-                    <form.AppField name="address">
-                        {(field) => (
-                            <field.TextField
-                                id={`${formPrefix}-address`}
-                                label="详细地址"
-                                placeholder="街道、门牌号"
-                                required
-                            />
-                        )}
-                    </form.AppField>
-                    <form.AppField name="quantity">
-                        {(field) => (
-                            <div className="space-y-1">
+                <DetailFormGrid layout="stack" className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <form.AppField name="recipient">
+                            {(field) => (
                                 <field.TextField
-                                    id={`${formPrefix}-quantity`}
-                                    label={`分配数量（${unitName || "单位"}）`}
-                                    type="text"
-                                    inputMode="decimal"
-                                    inputClassName="num text-right"
+                                    id={`${formPrefix}-recipient`}
+                                    label="收货人"
                                     required
                                 />
-                                {mode === "add" && remaining ? (
-                                    <button
-                                        id={`${formPrefix}-fill-remaining`}
-                                        type="button"
-                                        className="cursor-pointer text-xs text-primary hover:underline"
-                                        onClick={() =>
-                                            field.handleChange(remaining)
-                                        }
-                                    >
-                                        填入剩余 {remaining} {unitName}
-                                    </button>
-                                ) : null}
-                            </div>
+                            )}
+                        </form.AppField>
+                        <form.AppField name="phone">
+                            {(field) => (
+                                <field.TextField
+                                    id={`${formPrefix}-phone`}
+                                    label="联系电话"
+                                    type="tel"
+                                    required
+                                />
+                            )}
+                        </form.AppField>
+                    </div>
+
+                    <form.AppField name="region_code">
+                        {(field) => (
+                            <DeliveryRegionField
+                                id={`${formPrefix}-region`}
+                                required
+                                value={field.state.value}
+                                onValueChange={(code) =>
+                                    field.handleChange(code)
+                                }
+                                onBlur={field.handleBlur}
+                                invalid={
+                                    field.state.meta.isTouched &&
+                                    !field.state.meta.isValid
+                                }
+                                errors={toFieldErrors(field.state.meta.errors)}
+                                hint={
+                                    field.state.value ? (
+                                        <InlineCoverageHint
+                                            sku={line.sku}
+                                            regionCode={field.state.value}
+                                            id={`${formPrefix}-coverage`}
+                                        />
+                                    ) : null
+                                }
+                            />
                         )}
                     </form.AppField>
-                </div>
 
-                <div className="flex justify-end gap-2 pt-1">
-                    <Button
-                        id={`${formPrefix}-cancel`}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={onCancel}
-                    >
-                        取消
-                    </Button>
-                    <form.AppForm>
-                        <form.SubmitButton
-                            id={`${formPrefix}-submit`}
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem]">
+                        <form.AppField name="address">
+                            {(field) => (
+                                <field.TextField
+                                    id={`${formPrefix}-address`}
+                                    label="详细地址"
+                                    placeholder="街道、门牌号"
+                                    required
+                                />
+                            )}
+                        </form.AppField>
+                        <form.AppField name="quantity">
+                            {(field) => (
+                                <div className="space-y-1">
+                                    <field.TextField
+                                        id={`${formPrefix}-quantity`}
+                                        label={`分配数量（${unitName || "单位"}）`}
+                                        type="text"
+                                        inputMode="decimal"
+                                        inputClassName="num text-right"
+                                        required
+                                    />
+                                    {mode === "add" && remaining ? (
+                                        <button
+                                            id={`${formPrefix}-fill-remaining`}
+                                            type="button"
+                                            className="cursor-pointer text-xs text-primary hover:underline"
+                                            onClick={() =>
+                                                field.handleChange(remaining)
+                                            }
+                                        >
+                                            填入剩余 {remaining} {unitName}
+                                        </button>
+                                    ) : null}
+                                </div>
+                            )}
+                        </form.AppField>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-1">
+                        <Button
+                            id={`${formPrefix}-cancel`}
+                            type="button"
+                            variant="outline"
                             size="sm"
-                            label={mode === "edit" ? "保存修改" : "确认添加"}
-                        />
-                    </form.AppForm>
-                </div>
+                            onClick={onCancel}
+                        >
+                            取消
+                        </Button>
+                        <form.AppForm>
+                            <form.SubmitButton
+                                id={`${formPrefix}-submit`}
+                                size="sm"
+                                label={
+                                    mode === "edit" ? "保存修改" : "确认添加"
+                                }
+                            />
+                        </form.AppForm>
+                    </div>
+                </DetailFormGrid>
             </form>
         </div>
     )
@@ -1586,10 +1594,11 @@ function AddressOverviewPane({
                     />
                     <Input
                         id="sales-delivery-overview-search"
+                        size="sm"
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
                         placeholder="按收货人、电话、地址或商品名搜索…"
-                        className="h-control-sm pl-8"
+                        className="pl-8"
                     />
                 </div>
             ) : null}
@@ -1830,8 +1839,6 @@ function OverviewAddressEditForm({
 
     return (
         <form
-            data-slot="detail-form-grid"
-            className="space-y-3 rounded-lg border border-primary/25 bg-surface-sunken/60 p-3.5"
             noValidate
             onSubmit={(event) => {
                 event.preventDefault()
@@ -1839,77 +1846,82 @@ function OverviewAddressEditForm({
                 void form.handleSubmit()
             }}
         >
-            <p className="text-xs text-muted-foreground">
-                保存后将同步更新所有使用此地址的{" "}
-                <span className="num font-medium text-foreground">
-                    {affectedCount}
-                </span>{" "}
-                项商品，各商品分配数量保持不变。
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-                <form.AppField name="recipient">
+            <DetailFormGrid
+                layout="stack"
+                className="space-y-3 rounded-lg border border-primary/25 bg-surface-sunken/60 p-3.5"
+            >
+                <p className="text-xs text-muted-foreground">
+                    保存后将同步更新所有使用此地址的{" "}
+                    <span className="num font-medium text-foreground">
+                        {affectedCount}
+                    </span>{" "}
+                    项商品，各商品分配数量保持不变。
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                    <form.AppField name="recipient">
+                        {(field) => (
+                            <field.TextField
+                                id={`${idPrefix}-edit-recipient`}
+                                label="收货人"
+                                required
+                            />
+                        )}
+                    </form.AppField>
+                    <form.AppField name="phone">
+                        {(field) => (
+                            <field.TextField
+                                id={`${idPrefix}-edit-phone`}
+                                label="联系电话"
+                                type="tel"
+                                required
+                            />
+                        )}
+                    </form.AppField>
+                </div>
+                <form.AppField name="region_code">
+                    {(field) => (
+                        <DeliveryRegionField
+                            id={`${idPrefix}-edit-region`}
+                            required
+                            value={field.state.value}
+                            onValueChange={(code) => field.handleChange(code)}
+                            onBlur={field.handleBlur}
+                            invalid={
+                                field.state.meta.isTouched &&
+                                !field.state.meta.isValid
+                            }
+                            errors={toFieldErrors(field.state.meta.errors)}
+                        />
+                    )}
+                </form.AppField>
+                <form.AppField name="address">
                     {(field) => (
                         <field.TextField
-                            id={`${idPrefix}-edit-recipient`}
-                            label="收货人"
+                            id={`${idPrefix}-edit-address`}
+                            label="详细地址"
                             required
                         />
                     )}
                 </form.AppField>
-                <form.AppField name="phone">
-                    {(field) => (
-                        <field.TextField
-                            id={`${idPrefix}-edit-phone`}
-                            label="联系电话"
-                            type="tel"
-                            required
-                        />
-                    )}
-                </form.AppField>
-            </div>
-            <form.AppField name="region_code">
-                {(field) => (
-                    <DeliveryRegionField
-                        id={`${idPrefix}-edit-region`}
-                        required
-                        value={field.state.value}
-                        onValueChange={(code) => field.handleChange(code)}
-                        onBlur={field.handleBlur}
-                        invalid={
-                            field.state.meta.isTouched &&
-                            !field.state.meta.isValid
-                        }
-                        errors={toFieldErrors(field.state.meta.errors)}
-                    />
-                )}
-            </form.AppField>
-            <form.AppField name="address">
-                {(field) => (
-                    <field.TextField
-                        id={`${idPrefix}-edit-address`}
-                        label="详细地址"
-                        required
-                    />
-                )}
-            </form.AppField>
-            <div className="flex justify-end gap-2">
-                <Button
-                    id={`${idPrefix}-edit-cancel`}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={onCancel}
-                >
-                    取消
-                </Button>
-                <form.AppForm>
-                    <form.SubmitButton
-                        id={`${idPrefix}-edit-save`}
+                <div className="flex justify-end gap-2">
+                    <Button
+                        id={`${idPrefix}-edit-cancel`}
+                        type="button"
+                        variant="outline"
                         size="sm"
-                        label={`同步更新 ${affectedCount} 项`}
-                    />
-                </form.AppForm>
-            </div>
+                        onClick={onCancel}
+                    >
+                        取消
+                    </Button>
+                    <form.AppForm>
+                        <form.SubmitButton
+                            id={`${idPrefix}-edit-save`}
+                            size="sm"
+                            label={`同步更新 ${affectedCount} 项`}
+                        />
+                    </form.AppForm>
+                </div>
+            </DetailFormGrid>
         </form>
     )
 }

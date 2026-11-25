@@ -155,8 +155,8 @@ export function SalesOrderSubmitConfirmDialog({
                             </div>
                             <MoneyValue
                                 display="exact"
+                                size="compact"
                                 value={snapshot.amountGross}
-                                className="text-value-compact font-semibold tracking-tight text-foreground"
                             />
                         </div>
                     </div>
@@ -272,7 +272,6 @@ export function SalesOrderSubmitConfirmDialog({
                             <MoneyValue
                                 display="exact"
                                 value={snapshot.amountNet}
-                                className="font-medium text-foreground"
                             />
                         </span>
                         <span
@@ -286,7 +285,6 @@ export function SalesOrderSubmitConfirmDialog({
                             <MoneyValue
                                 display="exact"
                                 value={snapshot.amountTax}
-                                className="font-medium text-foreground"
                             />
                         </span>
                     </div>

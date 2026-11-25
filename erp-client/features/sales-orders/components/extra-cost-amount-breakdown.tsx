@@ -115,7 +115,7 @@ export function ExtraCostAmountBreakdown({
                             <MoneyValue
                                 value={quotaStatus.value}
                                 display="exact"
-                                className="ml-1 font-medium text-foreground"
+                                className="ml-1"
                             />
                         </p>
                     )}

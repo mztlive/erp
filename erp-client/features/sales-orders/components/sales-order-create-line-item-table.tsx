@@ -17,6 +17,7 @@ import {
 
 import {
     BusinessFailureState,
+    DetailInlineTable,
     EditableLineItemTable,
     ValidationSummary,
     detailWorkspaceStyles,
@@ -349,12 +350,7 @@ export function SalesOrderCreateLineItemTable({
                         return (
                             <>
                                 {values.lineItems.length > 0 ? (
-                                    <div
-                                        data-slot="detail-inline-table"
-                                        className={
-                                            detailWorkspaceStyles.inlineTableWrapper
-                                        }
-                                    >
+                                    <DetailInlineTable>
                                         <EditableLineItemTable
                                             id="sales-orders-create-line-items"
                                             className="[&_table]:[--table-cell-inline:0.625rem] [&_tbody_td]:py-2.5 [&_tbody_td]:align-top [&_tbody_td:last-child>div]:min-h-control [&_tbody_td:last-child>div]:items-center"
@@ -377,7 +373,7 @@ export function SalesOrderCreateLineItemTable({
                                                 "卡券销售单必须保留唯一明细"
                                             }
                                         />
-                                    </div>
+                                    </DetailInlineTable>
                                 ) : null}
                                 {lineItemIssues.length > 0 ? (
                                     <ValidationSummary
@@ -596,12 +592,13 @@ export function SalesOrderCreateLineItemTable({
                             />
                             <Input
                                 id="sales-orders-create-lines-search"
+                                size="sm"
                                 value={searchQuery}
                                 onChange={(event) =>
                                     setSearchQuery(event.target.value)
                                 }
                                 placeholder="搜索商品、规格、收货人…"
-                                className="h-control-sm pr-7 pl-8 text-body-compact"
+                                className="pr-7 pl-8"
                             />
                             {searchQuery ? (
                                 <button
@@ -893,10 +890,8 @@ export function SalesOrderCreateLineItemTable({
             ) : null}
 
             {/* 高密度内联编辑主表（多行时表头吸顶在 table-container 滚动区内，不拖垮整页滚动） */}
-            <div
-                data-slot="detail-inline-table"
+            <DetailInlineTable
                 className={cn(
-                    detailWorkspaceStyles.inlineTableWrapper,
                     useBoundedScroll &&
                         "[&>[data-slot=table-container]]:max-h-[calc(100dvh-20rem)] [&>[data-slot=table-container]]:min-h-64 [&>[data-slot=table-container]]:overflow-y-auto",
                 )}
@@ -999,7 +994,7 @@ export function SalesOrderCreateLineItemTable({
                             <TableRow>
                                 <TableCell
                                     colSpan={9}
-                                    className="py-10 text-center text-xs text-muted-foreground"
+                                    className="py-10 text-center text-muted-foreground"
                                 >
                                     当前筛选条件下没有匹配的商品。
                                     <Button
@@ -1059,7 +1054,7 @@ export function SalesOrderCreateLineItemTable({
                         )}
                     </TableBody>
                 </Table>
-            </div>
+            </DetailInlineTable>
 
             {/* 底部快捷添加 + 分页条（多行时自然呈现） */}
             {showInlineAdd || showPagination ? (

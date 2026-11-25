@@ -26,6 +26,7 @@ import {
 } from "lucide-react"
 
 import {
+    DetailFormGrid,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
     DetailWorkspaceDirtyBadge,
@@ -1052,7 +1053,7 @@ export function SalesOrderCreateForm({
                                                     ? owner
                                                     : null}
                                             </div>
-                                            <div data-slot="detail-form-grid">
+                                            <DetailFormGrid layout="stack">
                                                 {showContractSummary &&
                                                 contractQuery.data ? (
                                                     <SalesOrderCreateContractSummary
@@ -1091,7 +1092,7 @@ export function SalesOrderCreateForm({
                                                         }
                                                     />
                                                 )}
-                                            </div>
+                                            </DetailFormGrid>
                                         </section>
                                     ) : (
                                         <section
@@ -1117,7 +1118,7 @@ export function SalesOrderCreateForm({
                                                     ? owner
                                                     : null}
                                             </div>
-                                            <div data-slot="detail-form-grid">
+                                            <DetailFormGrid layout="stack">
                                                 <SalesOrderCreateContractSection
                                                     form={form}
                                                     sourceCustomerLocked={Boolean(
@@ -1137,7 +1138,7 @@ export function SalesOrderCreateForm({
                                                         picker.selectFile
                                                     }
                                                 />
-                                            </div>
+                                            </DetailFormGrid>
                                         </section>
                                     )}
 
@@ -1210,8 +1211,8 @@ export function SalesOrderCreateForm({
                                             </div>
                                         </div>
 
-                                        <div
-                                            data-slot="detail-form-grid"
+                                        <DetailFormGrid
+                                            layout="stack"
                                             className="space-y-3"
                                         >
                                             <SalesOrderCreateHeaderFields
@@ -1257,7 +1258,7 @@ export function SalesOrderCreateForm({
                                                     </Collapsible>
                                                 )}
                                             </form.AppField>
-                                        </div>
+                                        </DetailFormGrid>
                                     </section>
                                 </div>
                             </div>

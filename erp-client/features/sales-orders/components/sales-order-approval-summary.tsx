@@ -68,7 +68,7 @@ export function SalesOrderApprovalSummary({
                         >
                             流程信息
                         </summary>
-                        <p className="mt-2 break-words leading-5">
+                        <p className="mt-2 break-words">
                             {displayProcessVersion({
                                 name: instance.processName,
                                 version: instance.processVersion,

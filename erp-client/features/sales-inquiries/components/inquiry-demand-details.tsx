@@ -2,7 +2,11 @@
 
 import * as React from "react"
 import { useStore } from "@tanstack/react-form"
-import { DetailWorkspaceSection, MoneyValue } from "@/components/business"
+import {
+    DetailFormGrid,
+    DetailWorkspaceSection,
+    MoneyValue,
+} from "@/components/business"
 import { toFieldErrors, withForm } from "@/components/form"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
@@ -39,11 +43,8 @@ export const InquiryDemandDetails = withForm({
                     width="full"
                     divider={false}
                 >
-                    <div className="grid min-w-0 items-start gap-x-8 gap-y-5 lg:grid-cols-[minmax(0,1fr)_272px] xl:grid-cols-[minmax(0,1fr)_304px]">
-                        <div
-                            data-slot="detail-form-grid"
-                            className="grid min-w-0 max-w-4xl gap-x-5 gap-y-4 sm:grid-cols-12"
-                        >
+                    <div className="grid min-w-0 items-start gap-x-8 gap-y-5 lg:grid-cols-[minmax(0,1fr)_272px] @[1120px]/workspace:grid-cols-[minmax(0,1fr)_304px]">
+                        <DetailFormGrid className="max-w-4xl">
                             <form.Field
                                 name="customer_id"
                                 validators={{
@@ -133,7 +134,7 @@ export const InquiryDemandDetails = withForm({
                                     )}
                                 />
                             </div>
-                        </div>
+                        </DetailFormGrid>
 
                         <aside
                             aria-label="需求概览"
@@ -293,8 +294,8 @@ export const InquiryDemandDetails = withForm({
                 className="py-2 first:pt-0 last:pb-0"
             >
                 <div className="space-y-3">
-                    <div
-                        data-slot="detail-form-grid"
+                    <DetailFormGrid
+                        layout="stack"
                         className="grid items-start gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4"
                     >
                         <form.Field
@@ -333,13 +334,13 @@ export const InquiryDemandDetails = withForm({
                                         className="gap-1.5"
                                         rows={1}
                                         maxLength={4000}
-                                        textareaClassName="min-h-control py-1.5 leading-snug"
+                                        textareaClassName="min-h-control py-1.5"
                                         placeholder="客户交付要求、包装或需要采购确认的事项"
                                     />
                                 )}
                             />
                         </div>
-                    </div>
+                    </DetailFormGrid>
                     {feeOwner}
                 </div>
             </DetailWorkspaceSection>

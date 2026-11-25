@@ -9,17 +9,18 @@ import {
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { Spinner } from "@/components/ui/spinner"
+import { StatusBadge } from "@/components/ui/status-badge"
 import type { ContractImportTask } from "@/features/contracts/api/upload"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
 
 const STATUS = {
-    ready: { label: "等待识别", variant: "secondary" },
-    processing: { label: "正在识别", variant: "secondary" },
-    review: { label: "待确认", variant: "secondary" },
-    failed: { label: "导入失败", variant: "destructive" },
-    succeeded: { label: "已归档", variant: "success" },
+    ready: { label: "等待识别", tone: "neutral" },
+    processing: { label: "正在识别", tone: "info" },
+    review: { label: "待确认", tone: "warning" },
+    failed: { label: "导入失败", tone: "destructive" },
+    succeeded: { label: "已归档", tone: "success" },
 } as const
 
 export function ContractImportHistory({
@@ -104,9 +105,11 @@ export function ContractImportHistory({
                                             : " · 尚未开始识别"}
                                     </span>
                                 </span>
-                                <Badge variant={status.variant}>
-                                    {status.label}
-                                </Badge>
+                                <StatusBadge
+                                    tone={status.tone}
+                                    label={status.label}
+                                    className="shrink-0"
+                                />
                             </button>
                         )
                     })}

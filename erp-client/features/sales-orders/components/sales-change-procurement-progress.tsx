@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import type { SalesChangeProcurementProgress } from "@/features/sales-orders/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { purchaseSourceUpdateText } from "@/lib/ui-text"
@@ -24,27 +24,28 @@ export function SalesChangeProcurementProgressCard({
         <section
             id={id}
             aria-labelledby={`${id}-title`}
-            className="space-y-3 rounded-xl border border-border/70 px-4 py-4 md:px-5"
+            className="space-y-3 rounded-lg border border-border/70 px-4 py-4 md:px-5"
         >
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 id={`${id}-title`} className="font-semibold">
                     {procurement.predicted ? "预计影响的采购" : "采购处理"}
                 </h3>
-                <Badge
-                    variant={
+                <StatusBadge
+                    tone={
                         procurement.completed
                             ? "success"
                             : procurement.predicted
-                              ? "secondary"
+                              ? "neutral"
                               : "warning"
                     }
-                >
-                    {procurement.completed
-                        ? purchaseSourceUpdateText.completed
-                        : procurement.predicted
-                          ? `预计 ${procurement.total} 张`
-                          : `待处理 ${procurement.open} / ${procurement.total} 张`}
-                </Badge>
+                    label={
+                        procurement.completed
+                            ? purchaseSourceUpdateText.completed
+                            : procurement.predicted
+                              ? `预计 ${procurement.total} 张`
+                              : `待处理 ${procurement.open} / ${procurement.total} 张`
+                    }
+                />
             </div>
             {procurement.predicted ? (
                 <p className="text-xs text-muted-foreground">

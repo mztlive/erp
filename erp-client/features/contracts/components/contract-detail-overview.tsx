@@ -6,10 +6,11 @@ import { FileTextIcon } from "lucide-react"
 
 import {
     BusinessStatusBadge,
+    DetailWorkspaceFact,
+    DetailWorkspaceFacts,
     DetailWorkspaceSection,
     MoneyValue,
     detailWorkspaceStyles,
-    DocumentSummary,
     taxAmountToneClass,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -34,96 +35,87 @@ export function ContractDetailOverview({
 
     return (
         <DetailWorkspaceSection width="form" title="合同要点">
-            <DocumentSummary
-                columns="two"
-                className="border-0 py-0"
-                items={[
-                    {
-                        id: "no",
-                        label: "合同编号",
-                        value: contract.contractNo,
-                        numeric: true,
-                    },
-                    {
-                        id: "status",
-                        label: "状态",
-                        value: (
-                            <BusinessStatusBadge
-                                context="preview"
-                                label={contract.statusLabel}
-                                tone={contract.statusTone}
-                            />
-                        ),
-                    },
-                    {
-                        id: "customer",
-                        label: "客户",
-                        value: (
-                            <Link
-                                id="card-contracts-detail-overview-customer-link"
-                                href={customerHref}
-                                className="font-medium text-primary underline-offset-4 hover:underline"
-                            >
-                                {contract.customer.displayName}
-                            </Link>
-                        ),
-                    },
-                    {
-                        id: "signing-company",
-                        label: "我方签约主体",
-                        value: rev.signingCompanyName ?? "历史档案未记录",
-                    },
-                    {
-                        id: "recognition",
-                        label: "归档依据",
-                        value: rev.recognizedFields
-                            ? "智能识别并核对归档"
-                            : "历史归档",
-                    },
-                    {
-                        id: "settlement",
-                        label: "结算主体",
-                        value: rev.settlementParty.displayName,
-                    },
-                    {
-                        id: "signed",
-                        label: "签订日",
-                        value: rev.signedAt ?? "—",
-                        numeric: true,
-                    },
-                    {
-                        id: "valid",
-                        label: "有效期",
-                        value: `${rev.validFrom} 至 ${rev.validTo}`,
-                        numeric: true,
-                    },
-                    {
-                        id: "rev",
-                        label: "当前版本",
-                        value: `v${rev.revisionNo}`,
-                        numeric: true,
-                    },
-                    {
-                        id: "owner",
-                        label: "负责人",
-                        value: contractOwnerLabel(contract.ownerLabel),
-                    },
-                    {
-                        id: "payment",
-                        label: "付款条件",
-                        value:
-                            rev.paymentTermSnapshot.label ||
-                            rev.termsSummary ||
-                            "—",
-                        description:
-                            rev.paymentTermSnapshot.description &&
+            <DetailWorkspaceFacts columns={2}>
+                <DetailWorkspaceFact
+                    label="合同编号"
+                    value={contract.contractNo}
+                    numeric
+                />
+                <DetailWorkspaceFact
+                    label="状态"
+                    value={
+                        <BusinessStatusBadge
+                            context="preview"
+                            label={contract.statusLabel}
+                            tone={contract.statusTone}
+                        />
+                    }
+                />
+                <DetailWorkspaceFact
+                    label="客户"
+                    value={
+                        <Link
+                            id="card-contracts-detail-overview-customer-link"
+                            href={customerHref}
+                            className="font-medium text-primary underline-offset-4 hover:underline"
+                        >
+                            {contract.customer.displayName}
+                        </Link>
+                    }
+                />
+                <DetailWorkspaceFact
+                    label="我方签约主体"
+                    value={rev.signingCompanyName ?? "历史档案未记录"}
+                />
+                <DetailWorkspaceFact
+                    label="归档依据"
+                    value={
+                        rev.recognizedFields ? "智能识别并核对归档" : "历史归档"
+                    }
+                />
+                <DetailWorkspaceFact
+                    label="结算主体"
+                    value={rev.settlementParty.displayName}
+                />
+                <DetailWorkspaceFact
+                    label="签订日"
+                    value={rev.signedAt ?? "—"}
+                    numeric
+                />
+                <DetailWorkspaceFact
+                    label="有效期"
+                    value={`${rev.validFrom} 至 ${rev.validTo}`}
+                    numeric
+                />
+                <DetailWorkspaceFact
+                    label="当前版本"
+                    value={`v${rev.revisionNo}`}
+                    numeric
+                />
+                <DetailWorkspaceFact
+                    label="负责人"
+                    value={contractOwnerLabel(contract.ownerLabel)}
+                />
+                <DetailWorkspaceFact
+                    label="付款条件"
+                    value={
+                        <>
+                            <div>
+                                {rev.paymentTermSnapshot.label ||
+                                    rev.termsSummary ||
+                                    "—"}
+                            </div>
+                            {rev.paymentTermSnapshot.description &&
                             rev.paymentTermSnapshot.description !==
-                                rev.paymentTermSnapshot.label
-                                ? rev.paymentTermSnapshot.description
-                                : undefined,
-                    },
-                ]}
-            />
+                                rev.paymentTermSnapshot.label ? (
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                    {rev.paymentTermSnapshot.description}
+                                </p>
+                            ) : null}
+                        </>
+                    }
+                />
+            </DetailWorkspaceFacts>
         </DetailWorkspaceSection>
     )
 }
@@ -304,19 +296,23 @@ export function ContractDetailRelatedSalesSummary({
                                             v{so.contractRevisionNo}
                                         </span>
                                     </span>
-                                    <MoneyValue
-                                        value={so.amountGross}
-                                        taxBasis="gross"
+                                    <span
                                         className={taxAmountToneClass(
                                             "含税金额",
                                         )}
-                                    />
+                                    >
+                                        <MoneyValue
+                                            value={so.amountGross}
+                                            taxBasis="gross"
+                                            inheritColor
+                                        />
+                                    </span>
                                 </div>
                             </li>
                         ))}
                     </ul>
                 ) : (
-                    <p className="text-xs leading-relaxed text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                         暂无关联销售单
                     </p>
                 )}

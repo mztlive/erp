@@ -4,8 +4,7 @@ import * as React from "react"
 import { useStore } from "@tanstack/react-form"
 import { CopyIcon } from "lucide-react"
 import { withForm } from "@/components/form"
-import { OptionCombobox } from "@/components/business/option-combobox"
-import { QuantityValue } from "@/components/business"
+import { OptionCombobox, QuantityValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
@@ -335,7 +334,7 @@ export const InquiryDeliveryEditor = withForm({
                             <>
                                 <div className="space-y-3 border-b pb-3">
                                     <div className="flex items-start justify-between gap-3">
-                                        <p className="min-w-0 text-body-compact leading-6">
+                                        <p className="min-w-0 text-body-compact">
                                             <span className="font-medium">
                                                 {
                                                     DELIVERY_KINDS.find(

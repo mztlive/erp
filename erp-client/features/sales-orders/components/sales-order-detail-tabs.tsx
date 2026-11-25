@@ -88,11 +88,11 @@ export function SalesOrderDetailSectionTabs({
                       : item.label,
             badge:
                 warning || changing ? (
-                    <span className="rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny leading-3.5 font-medium text-warning-soft-foreground">
+                    <span className="rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny font-medium text-warning-soft-foreground">
                         {warning ? "异常" : "改单中"}
                     </span>
                 ) : pending || approving ? (
-                    <span className="rounded-sm bg-info-soft px-1.5 py-0.5 text-tiny leading-3.5 font-medium text-info-soft-foreground">
+                    <span className="rounded-sm bg-info-soft px-1.5 py-0.5 text-tiny font-medium text-info-soft-foreground">
                         {pending ? "待验收" : "审批中"}
                     </span>
                 ) : undefined,
@@ -186,15 +186,15 @@ export function SalesOrderDetailSectionContent({
                                 <span
                                     className={
                                         canAccept
-                                            ? "num rounded-sm bg-info-soft px-1.5 py-0.5 text-tiny leading-3.5 font-medium text-info-soft-foreground"
-                                            : "num rounded-sm bg-muted px-1.5 py-0.5 text-tiny leading-3.5 font-medium text-muted-foreground"
+                                            ? "num rounded-sm bg-info-soft px-1.5 py-0.5 text-tiny font-medium text-info-soft-foreground"
+                                            : "num rounded-sm bg-muted px-1.5 py-0.5 text-tiny font-medium text-muted-foreground"
                                     }
                                 >
                                     待验 {pendingAcceptanceCount}
                                 </span>
                             ) : item.id === "extra-cost" &&
                               pendingFreightCount > 0 ? (
-                                <span className="rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny leading-3.5 font-medium text-warning-soft-foreground">
+                                <span className="rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny font-medium text-warning-soft-foreground">
                                     运费待补
                                 </span>
                             ) : undefined,

@@ -21,9 +21,10 @@ import type { UpdateSelectionPricesInput } from "../api/books"
 import { PreviewTable } from "./preview-table"
 import {
     BusinessEmptyState,
-    BusinessTableFrame,
     DetailWorkspaceSubTabs,
     MoneyValue,
+    TableToolbar,
+    TableToolbarScope,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -92,7 +93,6 @@ const PreviewCard = ({
                         <div className="flex flex-wrap items-center gap-1.5">
                             <MoneyValue
                                 display="exact"
-                                className="text-body-compact font-bold text-foreground"
                                 value={item.price_gross || item.price}
                             />
                             <span className="text-xs text-muted-foreground">
@@ -111,7 +111,7 @@ const PreviewCard = ({
                         />
                         <div className="flex items-start justify-between gap-2">
                             <CardTitle
-                                className="min-w-0 flex-1 line-clamp-2 text-xs leading-snug font-medium text-foreground"
+                                className="min-w-0 flex-1 line-clamp-2 text-xs font-medium text-foreground"
                                 title={item.name}
                             >
                                 {item.name}
@@ -380,39 +380,13 @@ export const PreviewGrid = ({
             : []
 
     return (
-        <BusinessTableFrame
-            title="陈列明细"
-            headingLevel="h3"
-            className="gap-2"
-            tableActions={
-                <>
-                    {actions}
-                    {viewToggle}
-                </>
-            }
-            selectionBar={
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                    {summary}
-                    {!summary || tableItems.length !== items.length ? (
-                        <span className="text-xs text-muted-foreground">
-                            共 <span className="num">{tableItems.length}</span>{" "}
-                            项
-                            {tableItems.length !== items.length ? (
-                                <>
-                                    {" "}
-                                    / 全部{" "}
-                                    <span className="num">
-                                        {items.length}
-                                    </span>{" "}
-                                    项
-                                </>
-                            ) : null}
-                        </span>
-                    ) : null}
-                </div>
-            }
-            toolbar={
-                tierTabItems.length > 0 || missingImageCount > 0 ? (
+        <TableToolbarScope>
+            <section
+                aria-label="陈列明细"
+                className="flex min-w-0 flex-col gap-2"
+            >
+                <h3 className="sr-only">陈列明细</h3>
+                {tierTabItems.length > 0 || missingImageCount > 0 ? (
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
                         <div className="min-w-0">
                             {tierTabItems.length > 0 ? (
@@ -439,7 +413,6 @@ export const PreviewGrid = ({
                                 onClick={() =>
                                     setOnlyMissingImage(!onlyMissingImage)
                                 }
-                                className="h-7 text-xs"
                             >
                                 <AlertCircleIcon
                                     className="mr-1 size-3.5"
@@ -458,177 +431,210 @@ export const PreviewGrid = ({
                             </Button>
                         ) : null}
                     </div>
-                ) : undefined
-            }
-            table={
-                layout === "table" ? (
-                    <PreviewTable
-                        priceEditor={priceEditor}
-                        items={tableItems}
-                        pending={pending}
-                        savingSkuIds={savingSkuIds}
-                        deletingItemId={deletingItemId}
-                        onDelete={onDelete}
-                        onEditPrice={onEditPrice}
-                        onRegenerateTier={onRegenerateTier}
-                        regeneratingTierIds={regeneratingTierIds}
-                    />
-                ) : (
-                    <>
-                        {/* 单品形态平铺 */}
-                        {!visibleGroups ? (
-                            filteredItems.length === 0 ? (
-                                <BusinessEmptyState
-                                    kind="no-data"
-                                    title="当前筛选无结果"
-                                    description="没有符合条件的陈列项。"
-                                />
-                            ) : (
-                                <div className={previewGridClassName}>
-                                    {filteredItems.map((item) => (
-                                        <PreviewCard
-                                            key={item.item_id}
-                                            item={item}
-                                            onDelete={onDelete}
-                                            onEditPrice={onEditPrice}
-                                            canDelete={canDelete}
-                                            pending={pending}
-                                            deleting={
-                                                deletingItemId === item.item_id
-                                            }
-                                        />
-                                    ))}
-                                </div>
-                            )
+                ) : null}
+                <TableToolbar
+                    isFrameToolbar
+                    actions={
+                        <>
+                            {actions}
+                            {viewToggle}
+                        </>
+                    }
+                >
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                        {summary}
+                        {!summary || tableItems.length !== items.length ? (
+                            <span className="text-xs text-muted-foreground">
+                                共{" "}
+                                <span className="num">{tableItems.length}</span>{" "}
+                                项
+                                {tableItems.length !== items.length ? (
+                                    <>
+                                        {" "}
+                                        / 全部{" "}
+                                        <span className="num">
+                                            {items.length}
+                                        </span>{" "}
+                                        项
+                                    </>
+                                ) : null}
+                            </span>
                         ) : null}
+                    </div>
+                </TableToolbar>
+                <div>
+                    {layout === "table" ? (
+                        <PreviewTable
+                            priceEditor={priceEditor}
+                            items={tableItems}
+                            pending={pending}
+                            savingSkuIds={savingSkuIds}
+                            deletingItemId={deletingItemId}
+                            onDelete={onDelete}
+                            onEditPrice={onEditPrice}
+                            onRegenerateTier={onRegenerateTier}
+                            regeneratingTierIds={regeneratingTierIds}
+                        />
+                    ) : (
+                        <>
+                            {/* 单品形态平铺 */}
+                            {!visibleGroups ? (
+                                filteredItems.length === 0 ? (
+                                    <BusinessEmptyState
+                                        kind="no-data"
+                                        title="当前筛选无结果"
+                                        description="没有符合条件的陈列项。"
+                                    />
+                                ) : (
+                                    <div className={previewGridClassName}>
+                                        {filteredItems.map((item) => (
+                                            <PreviewCard
+                                                key={item.item_id}
+                                                item={item}
+                                                onDelete={onDelete}
+                                                onEditPrice={onEditPrice}
+                                                canDelete={canDelete}
+                                                pending={pending}
+                                                deleting={
+                                                    deletingItemId ===
+                                                    item.item_id
+                                                }
+                                            />
+                                        ))}
+                                    </div>
+                                )
+                            ) : null}
 
-                        {/* 套餐形态按档分组 */}
-                        {visibleGroups ? (
-                            visibleGroups.length === 0 ? (
-                                <BusinessEmptyState
-                                    kind="no-data"
-                                    title="当前筛选无结果"
-                                    description="该档位下暂无可显示的陈列项。"
-                                />
-                            ) : (
-                                <div className="flex flex-col gap-8">
-                                    {visibleGroups.map(
-                                        ([tierName, tierItems]) => {
-                                            const tierConfig = tiers?.find(
-                                                (t) =>
-                                                    t.name === tierName ||
-                                                    t.tier_id === tierName,
-                                            )
-                                            return (
-                                                <section
-                                                    key={tierName}
-                                                    aria-label={tierName}
-                                                    className="flex flex-col gap-3.5"
-                                                >
-                                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
-                                                        <div className="flex flex-wrap items-baseline gap-2.5">
-                                                            <h3 className="font-semibold text-foreground">
-                                                                {tierName}
-                                                            </h3>
-                                                            <span className="num text-xs text-muted-foreground">
-                                                                {
-                                                                    tierItems.length
-                                                                }{" "}
-                                                                套
-                                                            </span>
-                                                            {tierConfig ? (
+                            {/* 套餐形态按档分组 */}
+                            {visibleGroups ? (
+                                visibleGroups.length === 0 ? (
+                                    <BusinessEmptyState
+                                        kind="no-data"
+                                        title="当前筛选无结果"
+                                        description="该档位下暂无可显示的陈列项。"
+                                    />
+                                ) : (
+                                    <div className="flex flex-col gap-8">
+                                        {visibleGroups.map(
+                                            ([tierName, tierItems]) => {
+                                                const tierConfig = tiers?.find(
+                                                    (t) =>
+                                                        t.name === tierName ||
+                                                        t.tier_id === tierName,
+                                                )
+                                                return (
+                                                    <section
+                                                        key={tierName}
+                                                        aria-label={tierName}
+                                                        className="flex flex-col gap-3.5"
+                                                    >
+                                                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
+                                                            <div className="flex flex-wrap items-baseline gap-2.5">
+                                                                <h3 className="font-semibold text-foreground">
+                                                                    {tierName}
+                                                                </h3>
                                                                 <span className="num text-xs text-muted-foreground">
-                                                                    · 目标 ¥
                                                                     {
-                                                                        tierConfig.target_amount
+                                                                        tierItems.length
                                                                     }{" "}
-                                                                    (±¥
-                                                                    {
-                                                                        tierConfig.tolerance
-                                                                    }
-                                                                    ) · 每套{" "}
-                                                                    {
-                                                                        tierConfig.sku_count
-                                                                    }{" "}
-                                                                    件
+                                                                    套
                                                                 </span>
+                                                                {tierConfig ? (
+                                                                    <span className="num text-xs text-muted-foreground">
+                                                                        · 目标 ¥
+                                                                        {
+                                                                            tierConfig.target_amount
+                                                                        }{" "}
+                                                                        (±¥
+                                                                        {
+                                                                            tierConfig.tolerance
+                                                                        }
+                                                                        ) · 每套{" "}
+                                                                        {
+                                                                            tierConfig.sku_count
+                                                                        }{" "}
+                                                                        件
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
+
+                                                            {onRegenerateTier &&
+                                                            tierConfig ? (
+                                                                <LoadingButton
+                                                                    id={`selection-regenerate-inline-${tierConfig.tier_id}`}
+                                                                    type="button"
+                                                                    size="xs"
+                                                                    variant="ghost"
+                                                                    className={
+                                                                        detailWorkspaceStyles.subtleButton
+                                                                    }
+                                                                    disabled={
+                                                                        pending
+                                                                    }
+                                                                    loading={regeneratingTierIds?.includes(
+                                                                        tierConfig.tier_id,
+                                                                    )}
+                                                                    onClick={() =>
+                                                                        onRegenerateTier(
+                                                                            tierConfig.tier_id,
+                                                                            tierConfig.name,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <RefreshCwIcon
+                                                                        className="mr-1 size-3"
+                                                                        aria-hidden="true"
+                                                                    />
+                                                                    重新生成此档
+                                                                </LoadingButton>
                                                             ) : null}
                                                         </div>
 
-                                                        {onRegenerateTier &&
-                                                        tierConfig ? (
-                                                            <LoadingButton
-                                                                id={`selection-regenerate-inline-${tierConfig.tier_id}`}
-                                                                type="button"
-                                                                size="xs"
-                                                                variant="ghost"
-                                                                className={
-                                                                    detailWorkspaceStyles.subtleButton
-                                                                }
-                                                                disabled={
-                                                                    pending
-                                                                }
-                                                                loading={regeneratingTierIds?.includes(
-                                                                    tierConfig.tier_id,
-                                                                )}
-                                                                onClick={() =>
-                                                                    onRegenerateTier(
-                                                                        tierConfig.tier_id,
-                                                                        tierConfig.name,
-                                                                    )
-                                                                }
-                                                            >
-                                                                <RefreshCwIcon
-                                                                    className="mr-1 size-3"
-                                                                    aria-hidden="true"
-                                                                />
-                                                                重新生成此档
-                                                            </LoadingButton>
-                                                        ) : null}
-                                                    </div>
-
-                                                    <div
-                                                        className={
-                                                            previewGridClassName
-                                                        }
-                                                    >
-                                                        {tierItems.map(
-                                                            (item) => (
-                                                                <PreviewCard
-                                                                    key={
-                                                                        item.item_id
-                                                                    }
-                                                                    item={item}
-                                                                    onDelete={
-                                                                        onDelete
-                                                                    }
-                                                                    onEditPrice={
-                                                                        onEditPrice
-                                                                    }
-                                                                    canDelete={
-                                                                        canDelete
-                                                                    }
-                                                                    pending={
-                                                                        pending
-                                                                    }
-                                                                    deleting={
-                                                                        deletingItemId ===
-                                                                        item.item_id
-                                                                    }
-                                                                />
-                                                            ),
-                                                        )}
-                                                    </div>
-                                                </section>
-                                            )
-                                        },
-                                    )}
-                                </div>
-                            )
-                        ) : null}
-                    </>
-                )
-            }
-        />
+                                                        <div
+                                                            className={
+                                                                previewGridClassName
+                                                            }
+                                                        >
+                                                            {tierItems.map(
+                                                                (item) => (
+                                                                    <PreviewCard
+                                                                        key={
+                                                                            item.item_id
+                                                                        }
+                                                                        item={
+                                                                            item
+                                                                        }
+                                                                        onDelete={
+                                                                            onDelete
+                                                                        }
+                                                                        onEditPrice={
+                                                                            onEditPrice
+                                                                        }
+                                                                        canDelete={
+                                                                            canDelete
+                                                                        }
+                                                                        pending={
+                                                                            pending
+                                                                        }
+                                                                        deleting={
+                                                                            deletingItemId ===
+                                                                            item.item_id
+                                                                        }
+                                                                    />
+                                                                ),
+                                                            )}
+                                                        </div>
+                                                    </section>
+                                                )
+                                            },
+                                        )}
+                                    </div>
+                                )
+                            ) : null}
+                        </>
+                    )}
+                </div>
+            </section>
+        </TableToolbarScope>
     )
 }

@@ -5,8 +5,8 @@ import { RequiredMark } from "@/components/ui/required-mark"
 import * as React from "react"
 import { PlusIcon } from "lucide-react"
 import { MoneyValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { cn } from "@/lib/utils"
 import { SellableSkuSelectDialog } from "./sellable-sku-select-dialog"
 import { ChangeOrderSection } from "@/components/business/change-order-section"
@@ -24,11 +24,11 @@ type LineValues = SalesChangeDraftValues["lines"][number]
 
 const DIFF_BADGE: Record<
     Exclude<SalesChangeLineDiff["status"], "unchanged">,
-    { label: string; variant: "info" | "warning" | "neutral" }
+    { label: string; tone: StatusTone }
 > = {
-    added: { label: "新增", variant: "info" },
-    changed: { label: "已修改", variant: "warning" },
-    removed: { label: "已移除", variant: "neutral" },
+    added: { label: "新增", tone: "info" },
+    changed: { label: "已修改", tone: "warning" },
+    removed: { label: "已移除", tone: "neutral" },
 }
 
 const GOODS_GRID =
@@ -364,7 +364,7 @@ function SalesChangeLineRow({
                         {line.line_no}. {line.item_name_snapshot}
                     </p>
                     {badge ? (
-                        <Badge variant={badge.variant}>{badge.label}</Badge>
+                        <StatusBadge tone={badge.tone} label={badge.label} />
                     ) : null}
                 </div>
                 <p className="text-xs text-muted-foreground">

@@ -1,13 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
+import { OptionCombobox } from "@/components/business"
 import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { Button } from "@/components/ui/button"
 import {
@@ -238,8 +232,10 @@ export function CustomerConflictDialog({
                                     {!same(initial[field], draft[field]) &&
                                     !same(initial[field], latest[field]) &&
                                     !same(draft[field], latest[field]) ? (
-                                        <Select
-                                            value={choices[field] ?? ""}
+                                        <OptionCombobox
+                                            id={`customers-conflict-choice-${field.toLowerCase()}`}
+                                            aria-label={`${label}保留内容`}
+                                            value={choices[field] ?? null}
                                             onValueChange={(value) => {
                                                 if (
                                                     value === "mine" ||
@@ -250,29 +246,25 @@ export function CustomerConflictDialog({
                                                         [field]: value,
                                                     }))
                                             }}
-                                        >
-                                            <SelectTrigger
-                                                id={`customers-conflict-choice-${field.toLowerCase()}`}
-                                                aria-label={`${label}保留内容`}
-                                                className="w-48"
-                                            >
-                                                <SelectValue placeholder="请选择保留内容" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem
-                                                    id={`customers-conflict-latest-${field.toLowerCase()}`}
-                                                    value="latest"
-                                                >
-                                                    采用最新内容
-                                                </SelectItem>
-                                                <SelectItem
-                                                    id={`customers-conflict-mine-${field.toLowerCase()}`}
-                                                    value="mine"
-                                                >
-                                                    保留我的修改
-                                                </SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                            allowClear={false}
+                                            placeholder="请选择保留内容"
+                                            inputClassName="w-48"
+                                            getOptionId={(value) =>
+                                                value === "latest"
+                                                    ? `customers-conflict-latest-${field.toLowerCase()}`
+                                                    : `customers-conflict-mine-${field.toLowerCase()}`
+                                            }
+                                            options={[
+                                                {
+                                                    value: "latest",
+                                                    label: "采用最新内容",
+                                                },
+                                                {
+                                                    value: "mine",
+                                                    label: "保留我的修改",
+                                                },
+                                            ]}
+                                        />
                                     ) : (
                                         <span className="text-xs text-muted-foreground">
                                             {choice(field) === "mine"

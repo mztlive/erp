@@ -6,7 +6,6 @@ import Link from "next/link"
 import {
     ArrowLeftIcon,
     ChevronDownIcon,
-    CircleHelpIcon,
     DownloadIcon,
     FileTextIcon,
     FileSpreadsheetIcon,
@@ -16,6 +15,7 @@ import {
     XIcon,
 } from "lucide-react"
 import {
+    DecisionKpiBar,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
     DetailWorkspaceDirtyBadge,
@@ -25,15 +25,13 @@ import {
     DetailWorkspacePage,
     DetailWorkspaceSaveDock,
     MoneyValue,
-    detailWorkspaceStyles,
-} from "@/components/business"
-import { useWorkspaceTab } from "@/components/layout/workspace-tab-context"
-import {
     WorkspaceTaskFooter,
     WorkspaceTaskPane,
+    detailWorkspaceStyles,
     useWorkspaceTaskNavigation,
     type WorkspaceTaskPaneProps,
-} from "@/components/business/workspace-task-pane"
+} from "@/components/business"
+import { useWorkspaceTab } from "@/components/layout/workspace-tab-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
@@ -50,11 +48,6 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { StatusBadge } from "@/components/ui/status-badge"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
@@ -971,246 +964,220 @@ export function InquiryProcurementView({
                     remainingCount - feedbackStatus.pendingCount,
                 )
                 const embeddedKpiBand = embedded ? (
-                    <dl
-                        aria-label="询价处理关键指标"
-                        className="grid min-w-0 grid-cols-1 gap-x-5 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3 @[480px]/inquiry-workbench:grid-cols-2 @[840px]/inquiry-workbench:grid-cols-4"
-                    >
-                        <div className="min-w-0 space-y-1">
-                            <dt className="flex items-center gap-1 text-xs text-muted-foreground">
-                                {canProcess ? "报价进度" : "商品与反馈"}
-                                <Tooltip>
-                                    <TooltipTrigger
-                                        render={
-                                            <Button
-                                                id={`${referencePrefix}-kpi-progress-help`}
-                                                type="button"
-                                                variant="ghost"
-                                                size="icon-xs"
-                                                aria-label="报价进度口径"
-                                            />
-                                        }
-                                    >
-                                        <CircleHelpIcon aria-hidden="true" />
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        已完善项数 =
-                                        已确定供给结论且价格、数量与原因无缺漏的商品行数。
-                                    </TooltipContent>
-                                </Tooltip>
-                            </dt>
-                            <dd className="flex items-baseline gap-1.5">
-                                <span className="num text-value-section font-semibold tracking-tight text-foreground">
-                                    {canProcess
-                                        ? feedbackStatus.completeCount
-                                        : scopeLineCount}
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                    {canProcess ? (
-                                        <>
-                                            /{" "}
-                                            <span className="num">
-                                                {feedbackStatus.totalCount}
-                                            </span>{" "}
-                                            项
-                                        </>
-                                    ) : (
-                                        "项"
-                                    )}
-                                </span>
-                            </dd>
-                            {canProcess && feedbackStatus.totalCount > 0 ? (
-                                <dd className="space-y-1">
-                                    <div
-                                        aria-hidden="true"
-                                        className="flex h-1.5 overflow-hidden rounded-full bg-border"
-                                    >
-                                        {feedbackStatus.completeCount > 0 ? (
-                                            <span
-                                                className="bg-success"
-                                                style={{
-                                                    flexGrow:
-                                                        feedbackStatus.completeCount,
-                                                }}
-                                            />
-                                        ) : null}
-                                        {feedbackStatus.pendingCount > 0 ? (
-                                            <span
-                                                className="bg-warning"
-                                                style={{
-                                                    flexGrow:
-                                                        feedbackStatus.pendingCount,
-                                                }}
-                                            />
-                                        ) : null}
-                                        {embeddedAnomalyCount > 0 ? (
-                                            <span
-                                                className="bg-destructive"
-                                                style={{
-                                                    flexGrow:
-                                                        embeddedAnomalyCount,
-                                                }}
-                                            />
-                                        ) : null}
-                                    </div>
-                                    <p className="text-tiny text-muted-foreground">
-                                        可供{" "}
-                                        <span className="num text-foreground">
-                                            {feedbackStatus.availableCount}
-                                        </span>
-                                        {feedbackStatus.partialCount > 0 ? (
+                    <DecisionKpiBar
+                        columns={4}
+                        ariaLabel="询价处理关键指标"
+                        items={[
+                            {
+                                id: "progress",
+                                label: canProcess ? "报价进度" : "商品与反馈",
+                                emphasis: "primary",
+                                formulaTooltipId: `${referencePrefix}-kpi-progress-help`,
+                                formulaTooltipLabel: "报价进度口径",
+                                formulaTooltip:
+                                    "已完善项数 = 已确定供给结论且价格、数量与原因无缺漏的商品行数。",
+                                value: canProcess
+                                    ? feedbackStatus.completeCount
+                                    : scopeLineCount,
+                                valueMeta: (
+                                    <span className="text-xs font-normal text-muted-foreground">
+                                        {canProcess ? (
                                             <>
-                                                {" · "}部分{" "}
-                                                <span className="num text-warning-soft-foreground">
-                                                    {
-                                                        feedbackStatus.partialCount
-                                                    }
-                                                </span>
-                                            </>
-                                        ) : null}
-                                        {feedbackStatus.unavailableCount > 0 ? (
-                                            <>
-                                                {" · "}不供{" "}
+                                                /{" "}
                                                 <span className="num">
+                                                    {feedbackStatus.totalCount}
+                                                </span>{" "}
+                                                项
+                                            </>
+                                        ) : (
+                                            "项"
+                                        )}
+                                    </span>
+                                ),
+                                footnote:
+                                    canProcess && feedbackStatus.totalCount > 0
+                                        ? undefined
+                                        : publishedSummary
+                                          ? `可供 ${publishedSummary.availableCount} · 部分 ${publishedSummary.partialCount} · 不供应 ${publishedSummary.unavailableCount}`
+                                          : "等待报价处理",
+                                extra:
+                                    canProcess &&
+                                    feedbackStatus.totalCount > 0 ? (
+                                        <div className="space-y-1">
+                                            <div
+                                                aria-hidden="true"
+                                                className="flex h-1.5 overflow-hidden rounded-full bg-border"
+                                            >
+                                                {feedbackStatus.completeCount >
+                                                0 ? (
+                                                    <span
+                                                        className="bg-success"
+                                                        style={{
+                                                            flexGrow:
+                                                                feedbackStatus.completeCount,
+                                                        }}
+                                                    />
+                                                ) : null}
+                                                {feedbackStatus.pendingCount >
+                                                0 ? (
+                                                    <span
+                                                        className="bg-warning"
+                                                        style={{
+                                                            flexGrow:
+                                                                feedbackStatus.pendingCount,
+                                                        }}
+                                                    />
+                                                ) : null}
+                                                {embeddedAnomalyCount > 0 ? (
+                                                    <span
+                                                        className="bg-destructive"
+                                                        style={{
+                                                            flexGrow:
+                                                                embeddedAnomalyCount,
+                                                        }}
+                                                    />
+                                                ) : null}
+                                            </div>
+                                            <p className="text-tiny text-muted-foreground">
+                                                可供{" "}
+                                                <span className="num text-foreground">
                                                     {
-                                                        feedbackStatus.unavailableCount
+                                                        feedbackStatus.availableCount
                                                     }
                                                 </span>
-                                            </>
-                                        ) : null}
-                                    </p>
-                                </dd>
-                            ) : (
-                                <dd className="text-tiny text-muted-foreground">
-                                    {publishedSummary
-                                        ? `可供 ${publishedSummary.availableCount} · 部分 ${publishedSummary.partialCount} · 不供应 ${publishedSummary.unavailableCount}`
-                                        : "等待报价处理"}
-                                </dd>
-                            )}
-                        </div>
-
-                        <div className="min-w-0 space-y-1">
-                            <dt className="flex items-center gap-1 text-xs text-muted-foreground">
-                                含税供给合计
-                                <Tooltip>
-                                    <TooltipTrigger
-                                        render={
-                                            <Button
-                                                id={`${referencePrefix}-kpi-total-help`}
-                                                type="button"
-                                                variant="ghost"
-                                                size="icon-xs"
-                                                aria-label="含税供给合计计算公式"
-                                            />
-                                        }
-                                    >
-                                        <CircleHelpIcon aria-hidden="true" />
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        含税供给合计 = ∑(可供数量 ×
-                                        含税供给单价)，不含整单额外成本。
-                                    </TooltipContent>
-                                </Tooltip>
-                            </dt>
-                            <dd className="num text-value-compact font-semibold text-foreground">
-                                {displayGoodsTotal !== null ? (
-                                    <MoneyValue
-                                        value={displayGoodsTotal}
-                                        display="exact"
-                                        showHint={false}
-                                    />
-                                ) : (
-                                    <span className="text-muted-foreground">
-                                        —
-                                    </span>
-                                )}
-                            </dd>
-                            <dd className="text-tiny text-muted-foreground">
-                                {canProcess
+                                                {feedbackStatus.partialCount >
+                                                0 ? (
+                                                    <>
+                                                        {" · "}部分{" "}
+                                                        <span className="num text-warning-soft-foreground">
+                                                            {
+                                                                feedbackStatus.partialCount
+                                                            }
+                                                        </span>
+                                                    </>
+                                                ) : null}
+                                                {feedbackStatus.unavailableCount >
+                                                0 ? (
+                                                    <>
+                                                        {" · "}不供{" "}
+                                                        <span className="num">
+                                                            {
+                                                                feedbackStatus.unavailableCount
+                                                            }
+                                                        </span>
+                                                    </>
+                                                ) : null}
+                                            </p>
+                                        </div>
+                                    ) : undefined,
+                            },
+                            {
+                                id: "goods-total",
+                                label: "含税供给合计",
+                                emphasis: "secondary",
+                                formulaTooltipId: `${referencePrefix}-kpi-total-help`,
+                                formulaTooltipLabel: "含税供给合计计算公式",
+                                formulaTooltip:
+                                    "含税供给合计 = ∑(可供数量 × 含税供给单价)，不含整单额外成本。",
+                                value:
+                                    displayGoodsTotal !== null ? (
+                                        <MoneyValue
+                                            value={displayGoodsTotal}
+                                            display="exact"
+                                            showHint={false}
+                                        />
+                                    ) : (
+                                        <span className="text-muted-foreground">
+                                            —
+                                        </span>
+                                    ),
+                                footnote: canProcess
                                     ? feedbackStatus.pricedCount > 0
                                         ? `已定价 ${feedbackStatus.pricedCount} / ${feedbackStatus.totalCount} 项 · 含税`
                                         : "填写单价后自动汇总"
                                     : selectedFeedback
                                       ? `第 ${selectedFeedback.round} 轮商品供给小计`
-                                      : "暂无商品报价"}
-                            </dd>
-                        </div>
-
-                        <div className="min-w-0 space-y-1">
-                            <dt className="text-xs text-muted-foreground">
-                                额外成本
-                            </dt>
-                            <dd className="num text-value-compact font-semibold text-foreground">
-                                {displayFeeTotal !== null ? (
-                                    <MoneyValue
-                                        value={displayFeeTotal}
-                                        display="exact"
-                                        showHint={false}
-                                    />
-                                ) : (
-                                    <span className="text-muted-foreground">
-                                        —
-                                    </span>
-                                )}
-                            </dd>
-                            <dd className="flex flex-wrap items-center gap-x-2 text-tiny text-muted-foreground">
-                                <span>
-                                    {displayFeeCount > 0
-                                        ? `共 ${displayFeeCount} 项`
-                                        : "暂无额外成本"}
-                                </span>
-                                {canProcess ? (
-                                    <button
-                                        id="procurement-inquiry-metric-fees"
-                                        type="button"
-                                        className="cursor-pointer text-primary underline-offset-4 hover:underline"
-                                        onClick={() =>
-                                            feedbackEditor.current?.openFees()
-                                        }
-                                    >
-                                        {displayFeeCount > 0
-                                            ? "管理"
-                                            : "去登记"}
-                                    </button>
-                                ) : null}
-                            </dd>
-                        </div>
-
-                        <div className="min-w-0 space-y-1">
-                            <dt className="text-xs text-muted-foreground">
-                                询价截止与轮次
-                            </dt>
-                            <dd className="num text-body-compact font-semibold text-foreground">
-                                {deadline.label}
-                            </dd>
-                            <dd className="flex flex-wrap items-center gap-x-1.5 text-tiny text-muted-foreground">
-                                {deadline.hint ? (
-                                    <span
-                                        className={cn(
-                                            deadline.tone === "destructive" &&
-                                                "font-medium text-destructive",
-                                            deadline.tone === "warning" &&
-                                                "font-medium text-warning-soft-foreground",
-                                        )}
-                                    >
-                                        {deadline.hint}
-                                    </span>
-                                ) : null}
-                                {deadline.hint ? (
-                                    <span
-                                        aria-hidden="true"
-                                        className="text-muted-foreground/40"
-                                    >
-                                        ·
-                                    </span>
-                                ) : null}
-                                <span className="num">
-                                    {inquiry.feedback_round > 0
-                                        ? `第 ${inquiry.feedback_round} 轮反馈`
-                                        : `需求第 ${inquiry.requirement_version} 版`}
-                                </span>
-                            </dd>
-                        </div>
-                    </dl>
+                                      : "暂无商品报价",
+                            },
+                            {
+                                id: "fees",
+                                label: "额外成本",
+                                emphasis: "secondary",
+                                value:
+                                    displayFeeTotal !== null ? (
+                                        <MoneyValue
+                                            value={displayFeeTotal}
+                                            display="exact"
+                                            showHint={false}
+                                        />
+                                    ) : (
+                                        <span className="text-muted-foreground">
+                                            —
+                                        </span>
+                                    ),
+                                footnote: (
+                                    <>
+                                        <span>
+                                            {displayFeeCount > 0
+                                                ? `共 ${displayFeeCount} 项`
+                                                : "暂无额外成本"}
+                                        </span>
+                                        {canProcess ? (
+                                            <button
+                                                id="procurement-inquiry-metric-fees"
+                                                type="button"
+                                                className="cursor-pointer text-primary underline-offset-4 hover:underline"
+                                                onClick={() =>
+                                                    feedbackEditor.current?.openFees()
+                                                }
+                                            >
+                                                {displayFeeCount > 0
+                                                    ? "管理"
+                                                    : "去登记"}
+                                            </button>
+                                        ) : null}
+                                    </>
+                                ),
+                            },
+                            {
+                                id: "deadline",
+                                label: "询价截止与轮次",
+                                emphasis: "terms",
+                                value: deadline.label,
+                                footnote: (
+                                    <>
+                                        {deadline.hint ? (
+                                            <span
+                                                className={cn(
+                                                    deadline.tone ===
+                                                        "destructive" &&
+                                                        "font-medium text-destructive",
+                                                    deadline.tone ===
+                                                        "warning" &&
+                                                        "font-medium text-warning-soft-foreground",
+                                                )}
+                                            >
+                                                {deadline.hint}
+                                            </span>
+                                        ) : null}
+                                        {deadline.hint ? (
+                                            <span
+                                                aria-hidden="true"
+                                                className="text-muted-foreground/40"
+                                            >
+                                                ·
+                                            </span>
+                                        ) : null}
+                                        <span className="num">
+                                            {inquiry.feedback_round > 0
+                                                ? `第 ${inquiry.feedback_round} 轮反馈`
+                                                : `需求第 ${inquiry.requirement_version} 版`}
+                                        </span>
+                                    </>
+                                ),
+                            },
+                        ]}
+                    />
                 ) : null
 
                 const footerMetrics = canProcess

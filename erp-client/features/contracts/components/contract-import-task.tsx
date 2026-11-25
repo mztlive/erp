@@ -146,7 +146,7 @@ export function ContractImportTask({
                                   ? "识别尚未完成"
                                   : "合同已上传，等待识别"}
                         </h3>
-                        <p className="break-words text-body-compact leading-relaxed text-muted-foreground">
+                        <p className="break-words text-body-compact text-muted-foreground">
                             {failed ? (
                                 <>
                                     {stageLabel
@@ -243,7 +243,7 @@ export function ContractImportTask({
                                                 查看依据 · 第 {field.page} 页
                                             </CollapsibleTrigger>
                                             <CollapsibleContent>
-                                                <p className="mt-2 break-words rounded-md bg-muted/50 p-2 text-xs leading-relaxed text-muted-foreground">
+                                                <p className="mt-2 break-words rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
                                                     {field.quote}
                                                 </p>
                                             </CollapsibleContent>

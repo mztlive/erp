@@ -351,7 +351,6 @@ export function InquiryFeeRegisterSection({
                                                         candidate.available_amount
                                                     }
                                                     display="exact"
-                                                    className="font-semibold text-foreground"
                                                 />
                                             </div>
                                             <Button
@@ -733,7 +732,6 @@ function InquiryFeeRegistrationForm({
                                 <MoneyValue
                                     value={preview.input.grossAmount}
                                     display="exact"
-                                    className="font-semibold text-foreground"
                                 />
                             </dd>
                         </div>
@@ -866,7 +864,6 @@ function InquiryFeeRegistrationForm({
                             <MoneyValue
                                 value={candidate.available_amount}
                                 display="exact"
-                                className="font-medium text-foreground"
                             />
                             <span className="mx-1.5">·</span>
                             确认税率：

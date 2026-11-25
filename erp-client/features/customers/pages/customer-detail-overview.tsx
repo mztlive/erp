@@ -156,11 +156,13 @@ export function CustomerDetailMetrics({
                             ) : hasOpenInvoiceable ? (
                                 <span className="inline-flex items-baseline gap-1">
                                     <span>可开票</span>
-                                    <MoneyValue
-                                        value={openInvoiceable}
-                                        showHint={false}
-                                        className="font-normal text-muted-foreground"
-                                    />
+                                    <span className="font-normal text-muted-foreground">
+                                        <MoneyValue
+                                            value={openInvoiceable}
+                                            showHint={false}
+                                            inheritColor
+                                        />
+                                    </span>
                                 </span>
                             ) : (
                                 (customer.receivableSummary

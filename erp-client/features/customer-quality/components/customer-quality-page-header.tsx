@@ -3,11 +3,12 @@
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { DownloadIcon, RefreshCwIcon } from "lucide-react"
 
-import { DataFreshness, GuardedBusinessAction } from "@/components/business"
 import {
+    DataFreshness,
+    GuardedBusinessAction,
     ListWorkspaceHeader,
     listWorkspaceStyles as styles,
-} from "@/components/business/list-workspace"
+} from "@/components/business"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { formatClock, freshnessPresentation } from "../lib/presentation"
 import type { CustomerQualityView } from "../types"

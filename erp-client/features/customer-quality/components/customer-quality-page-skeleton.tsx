@@ -1,10 +1,6 @@
 "use client"
 
-import { PageScaffold } from "@/components/business"
-import {
-    ListWorkspaceHeader,
-    listWorkspaceStyles as styles,
-} from "@/components/business/list-workspace"
+import { ListWorkspacePage } from "@/components/business"
 import { Skeleton } from "@/components/ui/skeleton"
 
 const variantClasses = {
@@ -21,14 +17,10 @@ export function CustomerQualityPageSkeleton({
 }) {
     const { summary, table } = variantClasses[variant]
     return (
-        <PageScaffold density="compact" className={styles.page}>
-            <ListWorkspaceHeader
-                eyebrow={variant === "policy-loading" ? "分析" : undefined}
-                className={
-                    variant === "view-loading" ? "py-2 md:min-h-12" : undefined
-                }
-                title="客户经营质量"
-            />
+        <ListWorkspacePage
+            eyebrow={variant === "policy-loading" ? "分析" : undefined}
+            title="客户经营质量"
+        >
             <Skeleton className={`${summary} w-full rounded-lg`} />
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                 {Array.from({ length: 8 }).map((_, i) => (
@@ -43,6 +35,6 @@ export function CustomerQualityPageSkeleton({
             ) : (
                 <Skeleton className={`${table} w-full rounded-lg`} />
             )}
-        </PageScaffold>
+        </ListWorkspacePage>
     )
 }

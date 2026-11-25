@@ -4,6 +4,7 @@ import * as React from "react"
 import { SaveIcon } from "lucide-react"
 
 import {
+    DetailFormGrid,
     DetailWorkspaceSaveDock,
     DiscardConfirmDialog,
     detailWorkspaceStyles,
@@ -11,7 +12,6 @@ import {
 import { useAppForm, applyApiFormError, FormError } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
-import { FieldGroup } from "@/components/ui/field"
 import { Label } from "@/components/ui/label"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -380,10 +380,7 @@ export function CustomerForm({
                     title="客户基本资料"
                     description="修改仅对后续新业务生效，不影响已创建的合同和销售单"
                 >
-                    <FieldGroup
-                        data-slot="detail-form-grid"
-                        className="grid gap-x-5 gap-y-4 sm:grid-cols-12"
-                    >
+                    <DetailFormGrid>
                         <form.AppField
                             name="legalName"
                             children={(field) => (
@@ -446,7 +443,7 @@ export function CustomerForm({
                                 />
                             )}
                         />
-                    </FieldGroup>
+                    </DetailFormGrid>
                 </FormSection>
             ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -561,10 +558,7 @@ export function CustomerForm({
 
             {grouped && mode === "edit" ? (
                 <FormSection grouped={grouped} title="变更说明">
-                    <FieldGroup
-                        data-slot="detail-form-grid"
-                        className="space-y-2.5"
-                    >
+                    <DetailFormGrid layout="stack" className="space-y-2.5">
                         <form.AppField
                             name="changeReason"
                             children={(field) => (
@@ -603,7 +597,7 @@ export function CustomerForm({
                                 </Button>
                             ))}
                         </div>
-                    </FieldGroup>
+                    </DetailFormGrid>
                 </FormSection>
             ) : null}
 

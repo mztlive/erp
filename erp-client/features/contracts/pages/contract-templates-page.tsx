@@ -569,7 +569,7 @@ export function ContractTemplatesPage() {
                     ? {
                           ariaLabel: resultsLabel,
                           toolbar: usageHint ? (
-                              <p className="text-xs leading-relaxed text-muted-foreground">
+                              <p className="text-xs text-muted-foreground">
                                   {usageHint}
                               </p>
                           ) : undefined,

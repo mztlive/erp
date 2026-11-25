@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { PlusIcon, UploadIcon } from "lucide-react"
-import { DetailWorkspaceSection } from "@/components/business"
+import { DetailFormGrid, DetailWorkspaceSection } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -851,7 +851,7 @@ function DemandEditorContent({
                         divider={false}
                         className="py-2 first:pt-0 last:pb-0"
                     >
-                        <div data-slot="detail-form-grid" className="space-y-4">
+                        <DetailFormGrid layout="stack" className="space-y-4">
                             <form.AppField
                                 name="revision_reason"
                                 validators={{
@@ -877,7 +877,7 @@ function DemandEditorContent({
                                     />
                                 )}
                             />
-                        </div>
+                        </DetailFormGrid>
                     </DetailWorkspaceSection>
                 )}
 

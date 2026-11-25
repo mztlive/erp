@@ -5,12 +5,12 @@ import { ArrowUpRightIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
+    DetailInlineTable,
     DetailWorkspaceMetricItem,
     DetailWorkspaceMetrics,
     DetailWorkspaceSection,
     MoneyValue,
     QuantityValue,
-    detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -135,10 +135,7 @@ export function SalesOrderDeliveryOverview({
                     query={query}
                     canRead={canRead}
                 />
-                <div
-                    data-slot="detail-inline-table"
-                    className={detailWorkspaceStyles.dataTableWrapper}
-                >
+                <DetailInlineTable frame="scroll">
                     <Table data-density="comfortable" className="min-w-[46rem]">
                         <TableHeader>
                             <TableRow>
@@ -249,7 +246,6 @@ export function SalesOrderDeliveryOverview({
                                         >
                                             <MoneyValue
                                                 value={line.amountGross}
-                                                className="font-medium"
                                             />
                                             <div className="mt-0.5 text-xs text-muted-foreground">
                                                 单价{" "}
@@ -322,15 +318,12 @@ export function SalesOrderDeliveryOverview({
                             })}
                         </TableBody>
                     </Table>
-                </div>
+                </DetailInlineTable>
                 <div className="flex items-baseline justify-end gap-4 pt-1 text-body-compact">
                     <span className="text-xs text-muted-foreground">
                         合计（含税）
                     </span>
-                    <MoneyValue
-                        value={order.amountGross}
-                        className="text-value-compact font-semibold tracking-tight"
-                    />
+                    <MoneyValue value={order.amountGross} size="compact" />
                 </div>
                 {footer}
             </DetailWorkspaceSection>

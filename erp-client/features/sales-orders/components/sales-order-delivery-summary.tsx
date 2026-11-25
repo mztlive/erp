@@ -185,7 +185,7 @@ export function SalesOrderDeliverySummary({
                                 {allocation.phone}
                             </dd>
                             <dt className="text-muted-foreground">完整地址</dt>
-                            <dd className="leading-6 break-words">
+                            <dd className="break-words">
                                 {isSubmit &&
                                     !allocation.region_name &&
                                     allocation.region_code && (

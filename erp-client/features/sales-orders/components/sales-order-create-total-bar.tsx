@@ -256,18 +256,10 @@ export function SalesOrderCreateTotalBar({
                                         className="hidden h-3.5 w-px bg-border sm:inline-block"
                                     />
                                     <span>
-                                        不含税{" "}
-                                        <MoneyValue
-                                            value={totals.net}
-                                            className="text-foreground"
-                                        />
+                                        不含税 <MoneyValue value={totals.net} />
                                     </span>
                                     <span>
-                                        税额{" "}
-                                        <MoneyValue
-                                            value={totals.tax}
-                                            className="text-foreground"
-                                        />
+                                        税额 <MoneyValue value={totals.tax} />
                                         <span className="num">
                                             （{values.taxRatePercent || "0"}%）
                                         </span>
@@ -278,12 +270,16 @@ export function SalesOrderCreateTotalBar({
                                             {grossProfit === null ? (
                                                 <span>待完善</span>
                                             ) : (
-                                                <MoneyValue
-                                                    value={grossProfit}
+                                                <span
                                                     className={cn(
                                                         grossProfitTone,
                                                     )}
-                                                />
+                                                >
+                                                    <MoneyValue
+                                                        value={grossProfit}
+                                                        inheritColor
+                                                    />
+                                                </span>
                                             )}
                                         </span>
                                     ) : null}

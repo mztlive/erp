@@ -7,12 +7,13 @@ import type {
     SortingState,
 } from "@tanstack/react-table"
 
-import { BusinessEmptyState, PageScaffold } from "@/components/business"
 import {
+    BusinessEmptyState,
     ListWorkspaceHeader,
+    PageScaffold,
     listWorkspaceEmptyStateClassName,
     listWorkspaceStyles as styles,
-} from "@/components/business/list-workspace"
+} from "@/components/business"
 import type {
     BusinessTag,
     BusinessTypeFilter,

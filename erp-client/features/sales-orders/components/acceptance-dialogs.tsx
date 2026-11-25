@@ -119,7 +119,7 @@ export function AcceptanceConfirmSelection({
     return (
         <ul
             aria-label="本次验收批次"
-            className="max-h-[min(24rem,50dvh)] divide-y divide-border overflow-y-auto rounded-xl border border-border"
+            className="max-h-[min(24rem,50dvh)] divide-y divide-border overflow-y-auto rounded-lg border border-border"
         >
             {lines.map((line) => (
                 <li

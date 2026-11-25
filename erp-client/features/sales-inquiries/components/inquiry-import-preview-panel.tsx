@@ -17,6 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -669,6 +670,7 @@ export function InquiryImportPreviewPanel({
                                     />
                                     <Input
                                         id="sales-inquiry-import-line-search"
+                                        size="sm"
                                         type="text"
                                         value={lineQuery}
                                         onChange={(event) =>
@@ -676,7 +678,7 @@ export function InquiryImportPreviewPanel({
                                         }
                                         placeholder="搜索商品名称或 SKU"
                                         aria-label="搜索商品名称或 SKU"
-                                        className="h-control-sm pl-8 pr-7 text-xs"
+                                        className="pl-8 pr-7"
                                     />
                                     {lineQuery ? (
                                         <button
@@ -775,7 +777,7 @@ export function InquiryImportPreviewPanel({
                                                         <span className="flex items-start justify-between gap-2">
                                                             <span
                                                                 className={cn(
-                                                                    "line-clamp-2 leading-5 wrap-anywhere",
+                                                                    "line-clamp-2 wrap-anywhere",
                                                                     selected
                                                                         ? "font-semibold text-foreground"
                                                                         : "font-medium text-foreground",
@@ -816,12 +818,11 @@ export function InquiryImportPreviewPanel({
                                                                       ]}
                                                             </span>
                                                             {hasSkuMerge ? (
-                                                                <Badge
-                                                                    variant="warning"
+                                                                <StatusBadge
+                                                                    tone="warning"
+                                                                    label="已合并"
                                                                     className="h-4 px-1 text-tiny"
-                                                                >
-                                                                    已合并
-                                                                </Badge>
+                                                                />
                                                             ) : null}
                                                         </span>
                                                     </span>
@@ -846,27 +847,22 @@ export function InquiryImportPreviewPanel({
                                                 </h3>
                                                 {activeLine.fulfillment_kind !==
                                                 "physical" ? (
-                                                    <Badge variant="info">
-                                                        {
+                                                    <StatusBadge
+                                                        tone="info"
+                                                        label={
                                                             FULFILLMENT_LABELS[
                                                                 activeLine
                                                                     .fulfillment_kind
                                                             ]
                                                         }
-                                                    </Badge>
+                                                    />
                                                 ) : null}
                                                 {activeLineMerges.length > 0 ? (
-                                                    <Badge variant="warning">
-                                                        <GitMergeIcon
-                                                            data-icon="inline-start"
-                                                            aria-hidden="true"
-                                                        />
-                                                        含{" "}
-                                                        {
-                                                            activeLineMerges.length
-                                                        }{" "}
-                                                        组重复合并
-                                                    </Badge>
+                                                    <StatusBadge
+                                                        tone="warning"
+                                                        icon={GitMergeIcon}
+                                                        label={`含 ${activeLineMerges.length} 组重复合并`}
+                                                    />
                                                 ) : null}
                                             </div>
                                             <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
@@ -997,6 +993,7 @@ export function InquiryImportPreviewPanel({
                                             />
                                             <Input
                                                 id="sales-inquiry-import-address-search"
+                                                size="sm"
                                                 type="text"
                                                 value={addressQuery}
                                                 onChange={(event) =>
@@ -1006,7 +1003,7 @@ export function InquiryImportPreviewPanel({
                                                 }
                                                 placeholder="筛选收件人、电话或地址"
                                                 aria-label="筛选收件人、电话或地址"
-                                                className="h-control-xs pl-7 pr-6 text-xs"
+                                                className="pl-7 pr-6"
                                             />
                                             {addressQuery ? (
                                                 <button
@@ -1088,9 +1085,11 @@ export function InquiryImportPreviewPanel({
                                                         >
                                                             <TableCell
                                                                 data-align="center"
-                                                                className="num text-xs text-muted-foreground"
+                                                                className="num text-muted-foreground"
                                                             >
-                                                                {index + 1}
+                                                                <span className="text-xs">
+                                                                    {index + 1}
+                                                                </span>
                                                             </TableCell>
                                                             <TableCell className="py-2 align-top">
                                                                 <p className="font-medium text-foreground">
