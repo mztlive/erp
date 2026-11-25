@@ -78,6 +78,7 @@ export function WorkspaceApprovalContextRail({
     const hasSourceSalesTab = Boolean(sourceComparison)
     const hasTimelineTab = Boolean(timelineTarget)
     const hasSalesLines = Boolean(
+        !sourceComparison?.precomputedModel &&
         sourceComparison?.orders.some(
             (order) => order.revision.commercial_lines.length > 0,
         ),
@@ -86,7 +87,8 @@ export function WorkspaceApprovalContextRail({
     const sourceComparisonModel = useMemo(
         () =>
             sourceComparison
-                ? buildPurchaseSourceComparisonModel({
+                ? (sourceComparison.precomputedModel ??
+                  buildPurchaseSourceComparisonModel({
                       orders: sourceComparison.orders,
                       snapshots: sourceComparison.snapshots,
                       purchaseLines: sourceComparison.purchaseLines,
@@ -95,7 +97,7 @@ export function WorkspaceApprovalContextRail({
                           sourceComparison.purchaseExtraSections,
                       extraCostSummary: sourceComparison.extraCostSummary,
                       unitNames,
-                  })
+                  }))
                 : undefined,
         [sourceComparison, unitNames],
     )

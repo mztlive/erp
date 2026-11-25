@@ -16,6 +16,7 @@ import {
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
 import { countLineDeliveryPoints } from "@/features/approval-workflow/purchase-fulfillment"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
 import {
     APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
     ApprovalLineFilterBar,
@@ -31,6 +32,7 @@ import {
 } from "./workspace-purchase-comparison-model"
 import { PurchaseComparisonRow } from "./workspace-purchase-comparison-row"
 import type { PurchaseSourceComparisonTarget } from "./workspace-purchase-source-comparison"
+import type { PurchaseSourceComparisonModel } from "./workspace-purchase-source-comparison-model"
 
 export interface PurchaseComparisonTableHandle {
     revealLine: (lineId: string) => void
@@ -43,6 +45,7 @@ export function WorkspacePurchaseComparisonTable({
     evaluatedRows: externalRows,
     metrics: externalMetrics,
     sources,
+    sourceComparison,
     uniqueDeliveryPointCount = 0,
     prefix,
     riskOnly: controlledRiskOnly,
@@ -57,6 +60,7 @@ export function WorkspacePurchaseComparisonTable({
     evaluatedRows?: readonly EvaluatedPurchaseRow[]
     metrics?: PurchaseApprovalMetrics
     sources: PurchaseSource[]
+    sourceComparison?: PurchaseSourceComparisonModel
     uniqueDeliveryPointCount?: number
     prefix: string
     riskOnly?: boolean
@@ -81,8 +85,10 @@ export function WorkspacePurchaseComparisonTable({
     }
 
     const rows = useMemo(
-        () => externalRows ?? evaluatePurchaseLines(lines),
-        [externalRows, lines],
+        () =>
+            externalRows ??
+            evaluatePurchaseLines(lines, sourceComparison?.lineInsights),
+        [externalRows, lines, sourceComparison?.lineInsights],
     )
     const metrics = useMemo(
         () => externalMetrics ?? buildPurchaseApprovalMetrics(rows, []),
@@ -202,9 +208,9 @@ export function WorkspacePurchaseComparisonTable({
                             <TableHead
                                 scope="col"
                                 data-align="end"
-                                className="w-20"
+                                className="w-24"
                             >
-                                进项税率
+                                进 / 销税率
                             </TableHead>
                             <TableHead
                                 scope="col"
@@ -256,6 +262,9 @@ export function WorkspacePurchaseComparisonTable({
                                     line={line}
                                     comparison={comparison}
                                     externalLoss={externalLoss}
+                                    sourceInsight={sourceComparison?.lineInsights.get(
+                                        line.id,
+                                    )}
                                     source={
                                         sources.length > 1
                                             ? sources.find(
@@ -390,6 +399,29 @@ export function WorkspacePurchaseComparisonTable({
                                     {metrics.externalMargin ? (
                                         <div className="num mt-0.5 text-xs font-normal text-muted-foreground">
                                             {metrics.externalMargin.percent}%
+                                        </div>
+                                    ) : null}
+                                    {sourceComparison?.summary
+                                        .overallNetMargin &&
+                                    (sourceComparison.summary
+                                        .overallTaxInverted ||
+                                        sourceComparison.summary
+                                            .hasSignificantTaxDrag) ? (
+                                        <div
+                                            className={cn(
+                                                "num text-xs",
+                                                sourceComparison.summary
+                                                    .overallNetMargin.negative
+                                                    ? "font-medium text-destructive-soft-foreground"
+                                                    : "font-normal text-warning-soft-foreground",
+                                            )}
+                                        >
+                                            税后{" "}
+                                            {
+                                                sourceComparison.summary
+                                                    .overallNetMargin.percent
+                                            }
+                                            %
                                         </div>
                                     ) : null}
                                     {metrics.partialSalesCoverage ? (

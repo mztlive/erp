@@ -12,9 +12,11 @@ import {
 import {
     ChevronRightIcon,
     Columns2Icon,
+    FileCheck2Icon,
     FileTextIcon,
     InfoIcon,
     MapPinIcon,
+    MessageSquareTextIcon,
     PaperclipIcon,
     TriangleAlertIcon,
 } from "lucide-react"
@@ -45,6 +47,7 @@ import {
 } from "@/features/approval-workflow/purchase-fulfillment"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { displayBusinessText, displayName } from "@/lib/display-name"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceApprovalResubmissionBanner } from "./workspace-approval-resubmission-banner"
@@ -63,6 +66,10 @@ import {
 } from "./workspace-purchase-comparison-table"
 import { WorkspacePurchaseDeliveryDialog } from "./workspace-purchase-delivery-dialog"
 import type { PurchaseSourceComparisonTarget } from "./workspace-purchase-source-comparison"
+import type {
+    PurchaseSourceComparisonModel,
+    SourceOrderComparison,
+} from "./workspace-purchase-source-comparison-model"
 import { WorkspaceSupplierRating } from "./workspace-supplier-rating"
 
 export { purchaseApprovalRiskReasons }
@@ -79,11 +86,13 @@ function purchaseApprovalPrefix(instanceId: string) {
 export function WorkspacePurchaseApprovalSources({
     instanceId,
     sources,
+    orderComparisons,
     onPreview,
     onCompareSource,
 }: {
     instanceId: string
     sources: PurchaseSource[]
+    orderComparisons?: readonly SourceOrderComparison[]
     onPreview: (target: WorkspacePaperTarget) => void
     onCompareSource?: (target: PurchaseSourceComparisonTarget) => void
 }) {
@@ -95,72 +104,155 @@ export function WorkspacePurchaseApprovalSources({
         )
     }
     return (
-        <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-body-compact font-normal">
+        <ul className="space-y-2 text-body-compact font-normal">
             {sources.map((sales) => {
                 const documentNo =
                     displayBusinessText(sales.document_no, sales.document_id) ||
                     "未记录销售单号"
+                const comparison = orderComparisons?.find(
+                    (entry) => entry.revisionId === sales.revision_id,
+                )
+                const taxCheck = comparison?.commercialChecks.find(
+                    (check) => check.id === "tax",
+                )
+                const ledger = comparison?.ledger
+                const orderRiskChecks =
+                    sources.length > 1 && comparison
+                        ? comparison.commercialChecks.filter(
+                              (check) =>
+                                  check.status === "severe" ||
+                                  check.status === "warning",
+                          )
+                        : []
                 const contractNotices = sales.source.extra_sections.filter(
                     (field) => field.label === "合同或凭证",
                 )
                 return (
-                    <li
-                        key={sales.revision_id}
-                        className="flex flex-wrap items-center gap-x-2 gap-y-1"
-                    >
-                        <span className="num font-medium text-foreground">
-                            {documentNo}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                            {displayName(sales.source.customer) ||
-                                "未记录客户名称"}{" "}
-                            · V{sales.revision_no}
-                        </span>
-                        {onCompareSource ? (
+                    <li key={sales.revision_id} className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="num font-medium text-foreground">
+                                {documentNo}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                                {displayName(sales.source.customer) ||
+                                    "未记录客户名称"}
+                                {comparison?.projectName
+                                    ? ` · ${comparison.projectName}`
+                                    : ""}
+                                {comparison?.settlementPartyName
+                                    ? ` · ${comparison.settlementPartyName}`
+                                    : ""}
+                                {" · "}V{sales.revision_no}
+                            </span>
+                            {comparison?.hasFullOrder ? (
+                                comparison.contractNo ? (
+                                    <span className="num inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                        <FileCheck2Icon
+                                            aria-hidden="true"
+                                            className="size-3 shrink-0"
+                                        />
+                                        {comparison.contractNo}
+                                    </span>
+                                ) : (
+                                    <Badge variant="neutral">无合同</Badge>
+                                )
+                            ) : null}
+                            {taxCheck &&
+                            taxCheck.compactSalesValue !== "未记录" ? (
+                                <span className="num text-xs text-muted-foreground">
+                                    {taxCheck.compactSalesValue}
+                                </span>
+                            ) : null}
+                            {ledger &&
+                            !ledger.isExpenseOrder &&
+                            ledger.totalSalesLineCount > 0 ? (
+                                ledger.excessCount > 0 ? (
+                                    <span className="num text-xs font-medium text-destructive-soft-foreground">
+                                        超需求 {ledger.excessCount} 项
+                                    </span>
+                                ) : (
+                                    <span className="num text-xs text-muted-foreground">
+                                        {ledger.isFullOrderCovered
+                                            ? "全量覆盖"
+                                            : `覆盖 ${ledger.coveredLineCount}/${ledger.totalSalesLineCount} 行`}
+                                        {ledger.salesCoveragePercent
+                                            ? ` · 占额 ${ledger.salesCoveragePercent}%`
+                                            : ""}
+                                    </span>
+                                )
+                            ) : null}
+                            {orderRiskChecks.map((check) => (
+                                <Badge
+                                    key={check.id}
+                                    variant={
+                                        check.status === "severe"
+                                            ? "destructive"
+                                            : "warning"
+                                    }
+                                >
+                                    {check.badge}
+                                </Badge>
+                            ))}
+                            {onCompareSource ? (
+                                <Button
+                                    id={`${purchaseApprovalPrefix(instanceId)}-source-compare-${toAutomationIdSegment(sales.revision_id)}`}
+                                    type="button"
+                                    variant="ghost"
+                                    size="xs"
+                                    className={
+                                        detailWorkspaceStyles.inlineLinkButton
+                                    }
+                                    onClick={() =>
+                                        onCompareSource({
+                                            revisionId: sales.revision_id,
+                                        })
+                                    }
+                                >
+                                    <Columns2Icon aria-hidden="true" />
+                                    采销对照
+                                </Button>
+                            ) : null}
                             <Button
-                                id={`${purchaseApprovalPrefix(instanceId)}-source-compare-${toAutomationIdSegment(sales.revision_id)}`}
+                                id={`${purchaseApprovalPrefix(instanceId)}-source-${toAutomationIdSegment(sales.revision_id)}`}
                                 type="button"
                                 variant="ghost"
                                 size="xs"
-                                className={
-                                    detailWorkspaceStyles.inlineLinkButton
-                                }
+                                className={detailWorkspaceStyles.subtleButton}
                                 onClick={() =>
-                                    onCompareSource({
-                                        revisionId: sales.revision_id,
+                                    onPreview({
+                                        kind: "approval_snapshot",
+                                        objectId: instanceId,
+                                        materialsView: "source-sales",
+                                        sourceRevisionId: sales.revision_id,
                                     })
                                 }
                             >
-                                <Columns2Icon aria-hidden="true" />
-                                采销对照
+                                <FileTextIcon aria-hidden="true" />
+                                预览销售单
                             </Button>
+                            {contractNotices.map((field) => (
+                                <span
+                                    key={`${field.label}-${field.value}`}
+                                    className="text-xs text-warning-soft-foreground"
+                                >
+                                    （{field.value}）
+                                </span>
+                            ))}
+                        </div>
+                        {comparison?.businessRemark ? (
+                            <div className="flex items-start gap-2 rounded-r-md border-l-2 border-info bg-info-soft/30 px-2.5 py-1.5 text-xs">
+                                <MessageSquareTextIcon
+                                    aria-hidden="true"
+                                    className="mt-0.5 size-3.5 shrink-0 text-info-soft-foreground"
+                                />
+                                <p className="min-w-0 whitespace-pre-wrap wrap-anywhere text-foreground/90">
+                                    <span className="font-medium text-info-soft-foreground">
+                                        销售备注：
+                                    </span>
+                                    {comparison.businessRemark}
+                                </p>
+                            </div>
                         ) : null}
-                        <Button
-                            id={`${purchaseApprovalPrefix(instanceId)}-source-${toAutomationIdSegment(sales.revision_id)}`}
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            className={detailWorkspaceStyles.subtleButton}
-                            onClick={() =>
-                                onPreview({
-                                    kind: "approval_snapshot",
-                                    objectId: instanceId,
-                                    materialsView: "source-sales",
-                                    sourceRevisionId: sales.revision_id,
-                                })
-                            }
-                        >
-                            <FileTextIcon aria-hidden="true" />
-                            预览销售单
-                        </Button>
-                        {contractNotices.map((field) => (
-                            <span
-                                key={`${field.label}-${field.value}`}
-                                className="text-xs text-warning-soft-foreground"
-                            >
-                                （{field.value}）
-                            </span>
-                        ))}
                     </li>
                 )
             })}
@@ -173,6 +265,7 @@ export function WorkspacePurchaseApproval({
     instanceId,
     item,
     materials,
+    sourceComparison,
     riskReasons,
     onPreview,
     onSelectFile,
@@ -186,6 +279,7 @@ export function WorkspacePurchaseApproval({
     instanceId: string
     item: WorkspaceWorkItem
     materials: ReturnType<typeof useApprovalMaterials>
+    sourceComparison?: PurchaseSourceComparisonModel
     riskReasons: readonly string[]
     onPreview: (target: WorkspacePaperTarget) => void
     onSelectFile?: (fileId: string) => void
@@ -233,8 +327,11 @@ export function WorkspacePurchaseApproval({
     }, [])
 
     const evaluatedRows = useMemo(
-        () => (lines?.length ? evaluatePurchaseLines(lines) : []),
-        [lines],
+        () =>
+            lines?.length
+                ? evaluatePurchaseLines(lines, sourceComparison?.lineInsights)
+                : [],
+        [lines, sourceComparison?.lineInsights],
     )
     const metrics = useMemo(
         () => buildPurchaseApprovalMetrics(evaluatedRows, extraSections),
@@ -350,26 +447,97 @@ export function WorkspacePurchaseApproval({
     const isPureExpenseOrder = Boolean(
         extraCost && metrics.goodsLineCount === 0,
     )
+    const summary = sourceComparison?.summary
+    const singleOrderComparison =
+        sourceComparison?.orders.length === 1
+            ? sourceComparison.orders[0]
+            : undefined
+    const singleOrderExtraCost = singleOrderComparison?.ledger?.extraCostSummary
+    const singlePaymentCheck = singleOrderComparison?.commercialChecks.find(
+        (check) => check.id === "payment",
+    )
+    const singleFulfillmentCheck = singleOrderComparison?.commercialChecks.find(
+        (check) => check.id === "fulfillment",
+    )
+    const hasTaxInverted = Boolean(
+        summary &&
+        (summary.overallTaxInverted || summary.taxInvertedLineCount > 0),
+    )
     const isSevereRisk =
         metrics.externalLossCount > 0 ||
         metrics.quantityExcessCount > 0 ||
-        metrics.mismatchCount > 0
+        metrics.mismatchCount > 0 ||
+        hasTaxInverted ||
+        (summary?.splitMergedExcessLineCount ?? 0) > 0
+
+    const paymentRiskChip =
+        summary && summary.paymentRiskChecks.length === 1
+            ? `${summary.paymentRiskChecks[0]!.check.badge}${summary.paymentRiskChecks[0]!.check.metric ? `（${summary.paymentRiskChecks[0]!.check.metric}）` : ""}`
+            : summary && summary.paymentRiskChecks.length > 1
+              ? `资金错配 ${summary.paymentRiskChecks.length} 单`
+              : null
+
+    const taxRiskChip =
+        !hasTaxInverted && summary
+            ? summary.lowerInputTaxLineCount > 0
+                ? `进项偏低 ${summary.lowerInputTaxLineCount}`
+                : summary.specialInvoiceRiskOrderCount > 0
+                  ? "核对专票抵扣"
+                  : null
+            : null
+
+    const fulfillmentRiskChip =
+        summary && summary.fulfillmentRiskChecks.length === 1
+            ? summary.fulfillmentRiskChecks[0]!.check.badge
+            : summary && summary.fulfillmentRiskChecks.length > 1
+              ? `履约/取价关注 ${summary.fulfillmentRiskChecks.length} 单`
+              : null
 
     const riskChipsSummary = [
         metrics.externalLossCount > 0
             ? `对外负毛利 ${metrics.externalLossCount}`
             : null,
+        summary?.overallTaxInverted
+            ? "整单税后倒挂"
+            : summary && summary.taxInvertedLineCount > 0
+              ? `税后倒挂 ${summary.taxInvertedLineCount}`
+              : null,
         metrics.quantityExcessCount > 0
             ? `超需求 ${metrics.quantityExcessCount}`
-            : null,
+            : summary && summary.splitMergedExcessLineCount > 0
+              ? `拆笔超需求 ${summary.splitMergedExcessLineCount}`
+              : null,
         metrics.mismatchCount > 0 ? `品规差异 ${metrics.mismatchCount}` : null,
+        paymentRiskChip,
+        taxRiskChip,
         metrics.costAboveSupplyCount > 0
             ? `采购倒挂 ${metrics.costAboveSupplyCount}`
             : null,
         metrics.delayCount > 0 ? `交期晚 ${metrics.delayCount}` : null,
+        fulfillmentRiskChip,
     ]
         .filter(Boolean)
         .join(" · ")
+
+    const firstCommercialRiskOrder =
+        summary?.paymentRiskChecks[0] ??
+        summary?.taxRiskChecks[0] ??
+        summary?.fulfillmentRiskChecks[0]
+    const hasCommercialRisk = Boolean(firstCommercialRiskOrder)
+
+    const overallNetMargin = summary?.overallNetMargin ?? null
+    const overallTaxInverted = Boolean(summary?.overallTaxInverted)
+    const hasSignificantTaxDrag = Boolean(summary?.hasSignificantTaxDrag)
+    const hasPositiveVatGap = Boolean(
+        summary?.overallVatGap &&
+        (() => {
+            try {
+                return compareDecimal(summary.overallVatGap, "0", 2) > 0
+            } catch {
+                return false
+            }
+        })(),
+    )
 
     const purchaseMarginLimited = Boolean(
         metrics.purchaseMargin &&
@@ -389,89 +557,121 @@ export function WorkspacePurchaseApproval({
             fulfillment?.responsibility === "SERVICE")
 
     return (
-        <div
-            data-slot="workspace-purchase-approval"
-            className="@container/purchase-lines flex min-w-0 flex-col"
-        >
-            {!hideTopBanners &&
-            (parsedExtras.resubmission || riskReasons.length > 0) ? (
-                <div className="space-y-2 pt-3">
-                    {parsedExtras.resubmission ? (
-                        <WorkspaceApprovalResubmissionBanner
-                            roundNo={parsedExtras.resubmission.roundNo}
-                            resubmissionReason={
-                                parsedExtras.resubmission.resubmissionReason
-                            }
-                            diffBaseline={
-                                parsedExtras.resubmission.diffBaseline
-                            }
-                            diffSummary={parsedExtras.resubmission.diffSummary}
-                            diffs={parsedExtras.resubmission.diffs}
-                            previousRejection={
-                                parsedExtras.resubmission.previousRejection
-                            }
-                        />
-                    ) : null}
+        <TooltipProvider>
+            <div
+                data-slot="workspace-purchase-approval"
+                className="@container/purchase-lines flex min-w-0 flex-col"
+            >
+                {!hideTopBanners &&
+                (parsedExtras.resubmission || riskReasons.length > 0) ? (
+                    <div className="space-y-2 pt-3">
+                        {parsedExtras.resubmission ? (
+                            <WorkspaceApprovalResubmissionBanner
+                                roundNo={parsedExtras.resubmission.roundNo}
+                                resubmissionReason={
+                                    parsedExtras.resubmission.resubmissionReason
+                                }
+                                diffBaseline={
+                                    parsedExtras.resubmission.diffBaseline
+                                }
+                                diffSummary={
+                                    parsedExtras.resubmission.diffSummary
+                                }
+                                diffs={parsedExtras.resubmission.diffs}
+                                previousRejection={
+                                    parsedExtras.resubmission.previousRejection
+                                }
+                            />
+                        ) : null}
 
-                    {riskReasons.length > 0 ? (
-                        <div
-                            role="alert"
-                            data-slot="purchase-approval-risk-strip"
-                            title={riskReasons.join("；")}
-                            className={cn(
-                                "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border-l-2 px-3 py-1.5 text-xs",
-                                isSevereRisk
-                                    ? "border-l-destructive bg-destructive-soft/65 text-destructive-soft-foreground"
-                                    : "border-l-warning bg-warning-soft/75 text-warning-soft-foreground",
-                            )}
-                        >
-                            <div className="flex min-w-0 flex-1 items-center gap-2">
-                                <TriangleAlertIcon
-                                    aria-hidden="true"
-                                    className="size-3.5 shrink-0"
-                                />
-                                <p className="min-w-0 truncate">
-                                    <span className="font-medium">
-                                        {isSevereRisk ? "高危复核" : "需复核"}
-                                    </span>
-                                    <span
+                        {riskReasons.length > 0 ? (
+                            <div
+                                role="alert"
+                                data-slot="purchase-approval-risk-strip"
+                                title={riskReasons.join("；")}
+                                className={cn(
+                                    "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border-l-2 px-3 py-1.5 text-xs",
+                                    isSevereRisk
+                                        ? "border-l-destructive bg-destructive-soft/65 text-destructive-soft-foreground"
+                                        : "border-l-warning bg-warning-soft/75 text-warning-soft-foreground",
+                                )}
+                            >
+                                <div className="flex min-w-0 flex-1 items-center gap-2">
+                                    <TriangleAlertIcon
                                         aria-hidden="true"
-                                        className="mx-1.5 opacity-60"
-                                    >
-                                        ·
-                                    </span>
-                                    <span>
-                                        {riskChipsSummary ||
-                                            riskReasons.join("；")}
-                                    </span>
-                                </p>
+                                        className="size-3.5 shrink-0"
+                                    />
+                                    <p className="min-w-0 truncate">
+                                        <span className="font-medium">
+                                            {isSevereRisk
+                                                ? "高危复核"
+                                                : "需复核"}
+                                        </span>
+                                        <span
+                                            aria-hidden="true"
+                                            className="mx-1.5 opacity-60"
+                                        >
+                                            ·
+                                        </span>
+                                        <span>
+                                            {riskChipsSummary ||
+                                                riskReasons.join("；")}
+                                        </span>
+                                    </p>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1">
+                                    {metrics.actionableRiskLineCount > 0 &&
+                                    !riskOnly ? (
+                                        <Button
+                                            id={`${prefix}-alert-filter-risk`}
+                                            type="button"
+                                            variant="ghost"
+                                            size="xs"
+                                            className={cn(
+                                                "h-control-xs shrink-0 gap-0.5 px-1.5 text-xs font-medium shadow-none",
+                                                isSevereRisk
+                                                    ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
+                                                    : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
+                                            )}
+                                            onClick={handleFilterToRisks}
+                                        >
+                                            仅看风险项（
+                                            {metrics.actionableRiskLineCount}）
+                                            <ChevronRightIcon aria-hidden="true" />
+                                        </Button>
+                                    ) : null}
+                                    {hasCommercialRisk && onCompareSource ? (
+                                        <Button
+                                            id={`${prefix}-alert-compare-source`}
+                                            type="button"
+                                            variant="ghost"
+                                            size="xs"
+                                            className={cn(
+                                                "h-control-xs shrink-0 gap-0.5 px-1.5 text-xs font-medium shadow-none",
+                                                isSevereRisk
+                                                    ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
+                                                    : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
+                                            )}
+                                            onClick={() =>
+                                                onCompareSource({
+                                                    revisionId:
+                                                        firstCommercialRiskOrder?.revisionId ??
+                                                        sourceComparison
+                                                            ?.orders[0]
+                                                            ?.revisionId,
+                                                })
+                                            }
+                                        >
+                                            采销对照
+                                            <ChevronRightIcon aria-hidden="true" />
+                                        </Button>
+                                    ) : null}
+                                </div>
                             </div>
-                            {metrics.actionableRiskLineCount > 0 &&
-                            !riskOnly ? (
-                                <Button
-                                    id={`${prefix}-alert-filter-risk`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="xs"
-                                    className={cn(
-                                        "h-control-xs shrink-0 gap-0.5 px-1.5 text-xs font-medium shadow-none",
-                                        isSevereRisk
-                                            ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                            : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
-                                    )}
-                                    onClick={handleFilterToRisks}
-                                >
-                                    仅看风险项（
-                                    {metrics.actionableRiskLineCount}）
-                                    <ChevronRightIcon aria-hidden="true" />
-                                </Button>
-                            ) : null}
-                        </div>
-                    ) : null}
-                </div>
-            ) : null}
+                        ) : null}
+                    </div>
+                ) : null}
 
-            <TooltipProvider>
                 <div
                     role="region"
                     aria-label="采购审批关键决策指标"
@@ -605,31 +805,141 @@ export function WorkspacePurchaseApproval({
                     />
 
                     {isPureExpenseOrder && extraCost ? (
-                        <PurchaseKpiCell
-                            label="来源销售附加费"
-                            basis="本单外"
-                            value={
-                                <MoneyValue
-                                    display="exact"
-                                    value={extraCost.occurred_gross_total}
-                                />
-                            }
-                            detail={
-                                <>
-                                    <span>已发生如上</span>
-                                    <span aria-hidden="true">·</span>
-                                    <span>
-                                        待发生{" "}
+                        singleOrderExtraCost?.combinedWithCurrentFeeTotal !=
+                        null ? (
+                            <PurchaseKpiCell
+                                label="来源销售附加费"
+                                basis="含本单累计"
+                                tooltipId={`${prefix}-kpi-extra-cost-info`}
+                                tooltipLabel="来源销售附加费累计明细"
+                                tooltipContent={
+                                    <div className="num space-y-0.5">
+                                        <div>
+                                            已有附加费（已发生）：
+                                            <MoneyValue
+                                                display="exact"
+                                                value={
+                                                    singleOrderExtraCost.occurredGrossTotal
+                                                }
+                                                inheritColor
+                                            />
+                                        </div>
+                                        <div>
+                                            待发生附加费：
+                                            <MoneyValue
+                                                display="exact"
+                                                value={
+                                                    singleOrderExtraCost.pendingGrossTotal
+                                                }
+                                                inheritColor
+                                            />
+                                        </div>
+                                        {singleOrderComparison?.ledger
+                                            ?.purchaseFeeGrossTotal ? (
+                                            <div>
+                                                本单费用：
+                                                <MoneyValue
+                                                    display="exact"
+                                                    value={
+                                                        singleOrderComparison
+                                                            .ledger
+                                                            .purchaseFeeGrossTotal
+                                                    }
+                                                    inheritColor
+                                                />
+                                                {singleOrderComparison.ledger
+                                                    .purchaseFeeRatioPercent
+                                                    ? `（占销售 ${singleOrderComparison.ledger.purchaseFeeRatioPercent}%）`
+                                                    : ""}
+                                            </div>
+                                        ) : null}
+                                        {singleOrderComparison?.ledger
+                                            ?.salesGrossTotal ? (
+                                            <div>
+                                                来源销售总额：
+                                                <MoneyValue
+                                                    display="exact"
+                                                    value={
+                                                        singleOrderComparison
+                                                            .ledger
+                                                            .salesGrossTotal
+                                                    }
+                                                    inheritColor
+                                                />
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                }
+                                value={
+                                    <span className="inline-flex flex-wrap items-baseline gap-x-2">
                                         <MoneyValue
                                             display="exact"
                                             value={
-                                                extraCost.pending_gross_total
+                                                singleOrderExtraCost.combinedWithCurrentFeeTotal
                                             }
                                         />
+                                        {singleOrderExtraCost.combinedRatioPercent ? (
+                                            <span className="num text-body-compact font-medium text-muted-foreground">
+                                                占销{" "}
+                                                {
+                                                    singleOrderExtraCost.combinedRatioPercent
+                                                }
+                                                %
+                                            </span>
+                                        ) : null}
                                     </span>
-                                </>
-                            }
-                        />
+                                }
+                                detail={
+                                    <>
+                                        <span>
+                                            已有{" "}
+                                            <MoneyValue
+                                                display="exact"
+                                                value={
+                                                    singleOrderExtraCost.occurredGrossTotal
+                                                }
+                                            />
+                                        </span>
+                                        <span aria-hidden="true">·</span>
+                                        <span>
+                                            待发生{" "}
+                                            <MoneyValue
+                                                display="exact"
+                                                value={
+                                                    singleOrderExtraCost.pendingGrossTotal
+                                                }
+                                            />
+                                        </span>
+                                    </>
+                                }
+                            />
+                        ) : (
+                            <PurchaseKpiCell
+                                label="来源销售附加费"
+                                basis="本单外"
+                                value={
+                                    <MoneyValue
+                                        display="exact"
+                                        value={extraCost.occurred_gross_total}
+                                    />
+                                }
+                                detail={
+                                    <>
+                                        <span>已发生如上</span>
+                                        <span aria-hidden="true">·</span>
+                                        <span>
+                                            待发生{" "}
+                                            <MoneyValue
+                                                display="exact"
+                                                value={
+                                                    extraCost.pending_gross_total
+                                                }
+                                            />
+                                        </span>
+                                    </>
+                                }
+                            />
+                        )
                     ) : (
                         <>
                             <PurchaseKpiCell
@@ -753,7 +1063,11 @@ export function WorkspacePurchaseApproval({
 
                             <PurchaseKpiCell
                                 label="公司对外毛利"
-                                basis="销售 − 采购"
+                                basis={
+                                    overallNetMargin
+                                        ? "含税 / 税后"
+                                        : "销售 − 采购"
+                                }
                                 tooltipId={
                                     metrics.externalGrossMargin != null
                                         ? `${prefix}-kpi-external-margin-info`
@@ -765,15 +1079,28 @@ export function WorkspacePurchaseApproval({
                                         <div className="num space-y-0.5">
                                             <div>
                                                 口径：对应对外销售总额 −
-                                                对应实际采购成本（含税）
+                                                对应实际采购成本（含税 /
+                                                不含税）
                                             </div>
                                             {metrics.correspondingSalesTotal ? (
                                                 <div>
-                                                    对应对外销售总额：
+                                                    对应对外销售（含税）：
                                                     <MoneyValue
                                                         display="exact"
                                                         value={
                                                             metrics.correspondingSalesTotal
+                                                        }
+                                                        inheritColor
+                                                    />
+                                                </div>
+                                            ) : null}
+                                            {summary?.overallCorrespondingSalesNetTotal ? (
+                                                <div>
+                                                    对应对外销售（不含税）：
+                                                    <MoneyValue
+                                                        display="exact"
+                                                        value={
+                                                            summary.overallCorrespondingSalesNetTotal
                                                         }
                                                         inheritColor
                                                     />
@@ -791,15 +1118,71 @@ export function WorkspacePurchaseApproval({
                                                     />
                                                 </div>
                                             ) : null}
-                                            <div className="text-background/75">
-                                                税后口径可在右侧「采销对照」查看
-                                            </div>
+                                            {summary?.overallGrossMargin ? (
+                                                <div>
+                                                    含税毛利：
+                                                    {summary.overallGrossMargin
+                                                        .negative
+                                                        ? "亏 "
+                                                        : ""}
+                                                    <MoneyValue
+                                                        display="exact"
+                                                        value={
+                                                            summary
+                                                                .overallGrossMargin
+                                                                .absAmount
+                                                        }
+                                                        inheritColor
+                                                    />{" "}
+                                                    (
+                                                    {
+                                                        summary
+                                                            .overallGrossMargin
+                                                            .percent
+                                                    }
+                                                    %)
+                                                </div>
+                                            ) : null}
+                                            {overallNetMargin ? (
+                                                <div>
+                                                    税后（不含税）毛利：
+                                                    {overallNetMargin.negative
+                                                        ? "亏 "
+                                                        : ""}
+                                                    <MoneyValue
+                                                        display="exact"
+                                                        value={
+                                                            overallNetMargin.absAmount
+                                                        }
+                                                        inheritColor
+                                                    />{" "}
+                                                    ({overallNetMargin.percent}
+                                                    %)
+                                                </div>
+                                            ) : (
+                                                <div className="text-background/75">
+                                                    部分进项税率或来源销售正文未完整记录，暂无法核算税后口径
+                                                </div>
+                                            )}
+                                            {hasPositiveVatGap &&
+                                            summary?.overallVatGap ? (
+                                                <div>
+                                                    进销项税差：
+                                                    <MoneyValue
+                                                        display="exact"
+                                                        value={
+                                                            summary.overallVatGap
+                                                        }
+                                                        inheritColor
+                                                    />
+                                                </div>
+                                            ) : null}
                                         </div>
                                     ) : undefined
                                 }
                                 value={
                                     metrics.externalGrossMargin != null ? (
-                                        <span className="inline-flex flex-wrap items-baseline gap-x-2">
+                                        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
                                             <PurchaseProfitValue
                                                 amount={
                                                     metrics.externalGrossMargin
@@ -815,6 +1198,11 @@ export function WorkspacePurchaseApproval({
                                                     %
                                                 </span>
                                             ) : null}
+                                            {overallTaxInverted ? (
+                                                <Badge variant="destructive">
+                                                    税后倒挂
+                                                </Badge>
+                                            ) : null}
                                         </span>
                                     ) : (
                                         <span className="text-body-compact font-medium text-muted-foreground">
@@ -823,33 +1211,85 @@ export function WorkspacePurchaseApproval({
                                     )
                                 }
                                 detail={
+                                    overallNetMargin ||
                                     metrics.correspondingSalesTotal ? (
-                                        <>
-                                            <span>
-                                                对外销售{" "}
-                                                <MoneyValue
-                                                    display="exact"
-                                                    value={
-                                                        metrics.correspondingSalesTotal
-                                                    }
-                                                />
-                                            </span>
-                                            {metrics.partialSalesCoverage ? (
-                                                <>
-                                                    <span aria-hidden="true">
-                                                        ·
-                                                    </span>
-                                                    <span className="num text-warning-soft-foreground">
-                                                        {
-                                                            metrics.salesCoveredCount
+                                        <div className="flex w-full flex-col gap-0.5">
+                                            {overallNetMargin ? (
+                                                <span className="inline-flex flex-wrap items-baseline gap-x-1">
+                                                    <span>税后</span>
+                                                    <PurchaseProfitValue
+                                                        amount={
+                                                            overallNetMargin.amount
                                                         }
-                                                        /
-                                                        {metrics.goodsLineCount}{" "}
-                                                        项
+                                                        className={cn(
+                                                            overallTaxInverted &&
+                                                                "font-semibold",
+                                                        )}
+                                                    />
+                                                    <span
+                                                        className={cn(
+                                                            "num",
+                                                            overallNetMargin.negative
+                                                                ? "font-medium text-destructive-soft-foreground"
+                                                                : hasSignificantTaxDrag
+                                                                  ? "font-medium text-warning-soft-foreground"
+                                                                  : undefined,
+                                                        )}
+                                                    >
+                                                        (
+                                                        {
+                                                            overallNetMargin.percent
+                                                        }
+                                                        %)
                                                     </span>
-                                                </>
+                                                    {!overallTaxInverted &&
+                                                    hasSignificantTaxDrag &&
+                                                    summary?.overallTaxDragPoints ? (
+                                                        <span className="num font-medium text-warning-soft-foreground">
+                                                            · 税损 -
+                                                            {
+                                                                summary.overallTaxDragPoints
+                                                            }
+                                                            pp
+                                                        </span>
+                                                    ) : null}
+                                                </span>
                                             ) : null}
-                                        </>
+                                            <span className="flex flex-wrap items-center gap-x-2">
+                                                {metrics.correspondingSalesTotal ? (
+                                                    <>
+                                                        <span>
+                                                            对外销售{" "}
+                                                            <MoneyValue
+                                                                display="exact"
+                                                                value={
+                                                                    metrics.correspondingSalesTotal
+                                                                }
+                                                            />
+                                                        </span>
+                                                        {metrics.partialSalesCoverage ? (
+                                                            <>
+                                                                <span aria-hidden="true">
+                                                                    ·
+                                                                </span>
+                                                                <span className="num text-warning-soft-foreground">
+                                                                    {
+                                                                        metrics.salesCoveredCount
+                                                                    }
+                                                                    /
+                                                                    {
+                                                                        metrics.goodsLineCount
+                                                                    }{" "}
+                                                                    项
+                                                                </span>
+                                                            </>
+                                                        ) : null}
+                                                    </>
+                                                ) : (
+                                                    "暂无可比对对外售价"
+                                                )}
+                                            </span>
+                                        </div>
                                     ) : (
                                         "暂无可比对对外售价"
                                     )
@@ -866,12 +1306,83 @@ export function WorkspacePurchaseApproval({
                                 {metrics.isPrepayGate ? (
                                     <Badge variant="warning">先款门禁</Badge>
                                 ) : null}
+                                {singlePaymentCheck &&
+                                (singlePaymentCheck.status === "warning" ||
+                                    singlePaymentCheck.status === "severe") ? (
+                                    <Badge
+                                        variant={
+                                            singlePaymentCheck.status ===
+                                            "severe"
+                                                ? "destructive"
+                                                : "warning"
+                                        }
+                                    >
+                                        {singlePaymentCheck.badge}
+                                    </Badge>
+                                ) : (sourceComparison?.orders.length ?? 0) >
+                                      1 &&
+                                  summary &&
+                                  summary.paymentRiskChecks.length > 0 ? (
+                                    <Badge variant="warning">
+                                        {summary.paymentRiskChecks.length}{" "}
+                                        单资金风险
+                                    </Badge>
+                                ) : null}
                             </span>
                         }
                         detail={
                             <>
+                                {singlePaymentCheck &&
+                                singlePaymentCheck.compactSalesValue !==
+                                    "未记录" ? (
+                                    singlePaymentCheck.status === "warning" ||
+                                    singlePaymentCheck.status === "severe" ? (
+                                        <span
+                                            className={cn(
+                                                "w-full font-medium",
+                                                singlePaymentCheck.status ===
+                                                    "severe"
+                                                    ? "text-destructive-soft-foreground"
+                                                    : "text-warning-soft-foreground",
+                                            )}
+                                        >
+                                            客户{" "}
+                                            {
+                                                singlePaymentCheck.compactSalesValue
+                                            }{" "}
+                                            → 采{" "}
+                                            {
+                                                singlePaymentCheck.compactPurchaseValue
+                                            }
+                                            {singlePaymentCheck.metric
+                                                ? `（${singlePaymentCheck.metric}）`
+                                                : ""}
+                                        </span>
+                                    ) : singlePaymentCheck.status === "ok" ||
+                                      singlePaymentCheck.status === "info" ? (
+                                        <span className="w-full">
+                                            客户{" "}
+                                            {
+                                                singlePaymentCheck.compactSalesValue
+                                            }
+                                            {singlePaymentCheck.direction ===
+                                            "up"
+                                                ? " · 资金顺差"
+                                                : ""}
+                                        </span>
+                                    ) : null
+                                ) : null}
                                 {fulfillmentModeLabel ? (
-                                    <span>{fulfillmentModeLabel}</span>
+                                    <span>
+                                        {fulfillmentModeLabel}
+                                        {singleFulfillmentCheck?.status ===
+                                        "warning" ? (
+                                            <span className="text-warning-soft-foreground">
+                                                {" "}
+                                                · {singleFulfillmentCheck.badge}
+                                            </span>
+                                        ) : null}
+                                    </span>
                                 ) : null}
                                 {uniqueDeliveryPointCount > 0 ? (
                                     <>
@@ -939,169 +1450,172 @@ export function WorkspacePurchaseApproval({
                         }
                     />
                 </div>
-            </TooltipProvider>
 
-            {submission ? (
-                <section
-                    aria-label="采购单商业与来源信息"
-                    className="space-y-3 pt-3.5 pb-1"
-                >
-                    <WorkspaceFactGrid columns={3}>
-                        <WorkspaceFactItem label="供应商评估">
-                            <WorkspaceSupplierRating
-                                rating={submission.latest_supplier_rating}
-                                compact
-                            />
-                        </WorkspaceFactItem>
-                        {parsedExtras.staticFacts.map((fact) => (
-                            <WorkspaceFactItem
-                                key={fact.label}
-                                label={fact.label}
-                                value={fact.value}
-                                numeric={fact.numeric}
-                                span={
-                                    fact.value.length > 30 ||
-                                    fact.value.includes("\n") ||
-                                    /(?:说明|备注|地址)/.test(fact.label)
-                                        ? "full"
-                                        : 1
-                                }
-                            />
-                        ))}
-                        {submitter ? (
-                            <WorkspaceFactItem
-                                label="申请人"
-                                value={submitter}
-                            />
-                        ) : null}
-                        {item.enteredAtLabel ? (
-                            <WorkspaceFactItem
-                                label="进入时间"
-                                value={item.enteredAtLabel}
-                                numeric
-                            />
-                        ) : null}
-                        <WorkspaceFactItem label="来源销售单" span="full">
-                            <WorkspacePurchaseApprovalSources
-                                instanceId={instanceId}
-                                sources={sources}
-                                onPreview={onPreview}
-                                onCompareSource={onCompareSource}
-                            />
-                        </WorkspaceFactItem>
-                    </WorkspaceFactGrid>
-
-                    {extraCost && metrics.goodsLineCount > 0 ? (
-                        <div className="flex items-center gap-2 rounded-md bg-info-soft/45 px-3 py-1.5 text-xs text-info-soft-foreground">
-                            <InfoIcon
-                                aria-hidden="true"
-                                className="size-3.5 shrink-0"
-                            />
-                            <span>
-                                来源销售单已有附加费用（本次提交之外）：已发生{" "}
-                                <MoneyValue
-                                    display="exact"
-                                    value={extraCost.occurred_gross_total}
-                                    inheritColor
-                                    className="font-medium"
+                {submission ? (
+                    <section
+                        aria-label="采购单商业与来源信息"
+                        className="space-y-3 pt-3.5 pb-1"
+                    >
+                        <WorkspaceFactGrid columns={3}>
+                            <WorkspaceFactItem label="供应商评估">
+                                <WorkspaceSupplierRating
+                                    rating={submission.latest_supplier_rating}
+                                    compact
                                 />
-                                {" · 待发生 "}
-                                <MoneyValue
-                                    display="exact"
-                                    value={extraCost.pending_gross_total}
-                                    inheritColor
-                                    className="font-medium"
+                            </WorkspaceFactItem>
+                            {parsedExtras.staticFacts.map((fact) => (
+                                <WorkspaceFactItem
+                                    key={fact.label}
+                                    label={fact.label}
+                                    value={fact.value}
+                                    numeric={fact.numeric}
+                                    span={
+                                        fact.value.length > 30 ||
+                                        fact.value.includes("\n") ||
+                                        /(?:说明|备注|地址)/.test(fact.label)
+                                            ? "full"
+                                            : 1
+                                    }
                                 />
-                            </span>
-                        </div>
-                    ) : null}
-                </section>
-            ) : null}
+                            ))}
+                            {submitter ? (
+                                <WorkspaceFactItem
+                                    label="申请人"
+                                    value={submitter}
+                                />
+                            ) : null}
+                            {item.enteredAtLabel ? (
+                                <WorkspaceFactItem
+                                    label="进入时间"
+                                    value={item.enteredAtLabel}
+                                    numeric
+                                />
+                            ) : null}
+                            <WorkspaceFactItem label="来源销售单" span="full">
+                                <WorkspacePurchaseApprovalSources
+                                    instanceId={instanceId}
+                                    sources={sources}
+                                    orderComparisons={sourceComparison?.orders}
+                                    onPreview={onPreview}
+                                    onCompareSource={onCompareSource}
+                                />
+                            </WorkspaceFactItem>
+                        </WorkspaceFactGrid>
 
-            <DetailWorkspaceSection
-                id={linesSectionId}
-                divider={false}
-                title="采购明细"
-                ariaLabel="采购明细"
-                subtitle={
-                    lines
-                        ? metrics.feeLineCount > 0 && metrics.goodsLineCount > 0
-                            ? `共 ${lines.length} 行 · 含 ${metrics.feeLineCount} 项费用 · 金额含税`
-                            : `共 ${lines.length} 行 · 金额含税`
-                        : undefined
-                }
-                className="pt-4 pb-5"
-            >
-                {lines?.length ? (
-                    <WorkspacePurchaseComparisonTable
-                        lines={lines}
-                        evaluatedRows={evaluatedRows}
-                        metrics={metrics}
-                        sources={sources}
-                        uniqueDeliveryPointCount={uniqueDeliveryPointCount}
-                        prefix={prefix}
-                        riskOnly={riskOnly}
-                        onRiskOnlyChange={setRiskOnly}
-                        highlightedLineId={highlightedLineId}
-                        tableHandleRef={tableHandleRef}
-                        onPreview={(revisionId) =>
-                            onPreview({
-                                kind: "approval_snapshot",
-                                objectId: instanceId,
-                                materialsView: "source-sales",
-                                sourceRevisionId: revisionId,
-                            })
-                        }
-                        onCompareSource={onCompareSource}
-                        onInspectDeliveryLine={(lineId) =>
-                            openDeliveryDialog(lineId)
-                        }
-                    />
-                ) : lines ? (
-                    <p className="text-xs text-muted-foreground">
-                        本次提交没有采购明细。
-                    </p>
-                ) : (
-                    <Alert variant="warning">
-                        <AlertDescription>
-                            本次提交的采购明细暂不可用，请联系申请人核对。
-                        </AlertDescription>
-                    </Alert>
-                )}
-            </DetailWorkspaceSection>
+                        {extraCost && metrics.goodsLineCount > 0 ? (
+                            <div className="flex items-center gap-2 rounded-md bg-info-soft/45 px-3 py-1.5 text-xs text-info-soft-foreground">
+                                <InfoIcon
+                                    aria-hidden="true"
+                                    className="size-3.5 shrink-0"
+                                />
+                                <span>
+                                    来源销售单已有附加费用（本次提交之外）：已发生{" "}
+                                    <MoneyValue
+                                        display="exact"
+                                        value={extraCost.occurred_gross_total}
+                                        inheritColor
+                                        className="font-medium"
+                                    />
+                                    {" · 待发生 "}
+                                    <MoneyValue
+                                        display="exact"
+                                        value={extraCost.pending_gross_total}
+                                        inheritColor
+                                        className="font-medium"
+                                    />
+                                </span>
+                            </div>
+                        ) : null}
+                    </section>
+                ) : null}
 
-            {submission && !hideEmbeddedMaterials ? (
                 <DetailWorkspaceSection
-                    id={materialsSectionId}
-                    title="合同、凭证及附件"
+                    id={linesSectionId}
+                    divider={false}
+                    title="采购明细"
+                    ariaLabel="采购明细"
                     subtitle={
-                        attachments.length
-                            ? `共 ${attachments.length} 个文件`
+                        lines
+                            ? metrics.feeLineCount > 0 &&
+                              metrics.goodsLineCount > 0
+                                ? `共 ${lines.length} 行 · 含 ${metrics.feeLineCount} 项费用 · 金额含税`
+                                : `共 ${lines.length} 行 · 金额含税`
                             : undefined
                     }
-                    ariaLabel="合同、凭证及附件"
+                    className="pt-4 pb-5"
                 >
-                    <ApprovalMaterialFiles
-                        instanceId={instanceId}
-                        attachments={attachments}
-                        idPrefix={`${prefix}-file`}
-                        emptyMessage="本次提交未附带合同、凭证或其他附件。"
-                        onSelectFile={onSelectFile}
-                        activeFileId={activeFileId}
-                    />
+                    {lines?.length ? (
+                        <WorkspacePurchaseComparisonTable
+                            lines={lines}
+                            evaluatedRows={evaluatedRows}
+                            metrics={metrics}
+                            sources={sources}
+                            sourceComparison={sourceComparison}
+                            uniqueDeliveryPointCount={uniqueDeliveryPointCount}
+                            prefix={prefix}
+                            riskOnly={riskOnly}
+                            onRiskOnlyChange={setRiskOnly}
+                            highlightedLineId={highlightedLineId}
+                            tableHandleRef={tableHandleRef}
+                            onPreview={(revisionId) =>
+                                onPreview({
+                                    kind: "approval_snapshot",
+                                    objectId: instanceId,
+                                    materialsView: "source-sales",
+                                    sourceRevisionId: revisionId,
+                                })
+                            }
+                            onCompareSource={onCompareSource}
+                            onInspectDeliveryLine={(lineId) =>
+                                openDeliveryDialog(lineId)
+                            }
+                        />
+                    ) : lines ? (
+                        <p className="text-xs text-muted-foreground">
+                            本次提交没有采购明细。
+                        </p>
+                    ) : (
+                        <Alert variant="warning">
+                            <AlertDescription>
+                                本次提交的采购明细暂不可用，请联系申请人核对。
+                            </AlertDescription>
+                        </Alert>
+                    )}
                 </DetailWorkspaceSection>
-            ) : null}
 
-            <WorkspacePurchaseDeliveryDialog
-                idPrefix={`${prefix}-delivery-dialog`}
-                open={deliveryDialogOpen}
-                onOpenChange={setDeliveryDialogOpen}
-                lines={lines ?? []}
-                fulfillment={fulfillment}
-                focusedLineId={focusedDeliveryLineId}
-                onClearFocus={() => setFocusedDeliveryLineId(null)}
-            />
-        </div>
+                {submission && !hideEmbeddedMaterials ? (
+                    <DetailWorkspaceSection
+                        id={materialsSectionId}
+                        title="合同、凭证及附件"
+                        subtitle={
+                            attachments.length
+                                ? `共 ${attachments.length} 个文件`
+                                : undefined
+                        }
+                        ariaLabel="合同、凭证及附件"
+                    >
+                        <ApprovalMaterialFiles
+                            instanceId={instanceId}
+                            attachments={attachments}
+                            idPrefix={`${prefix}-file`}
+                            emptyMessage="本次提交未附带合同、凭证或其他附件。"
+                            onSelectFile={onSelectFile}
+                            activeFileId={activeFileId}
+                        />
+                    </DetailWorkspaceSection>
+                ) : null}
+
+                <WorkspacePurchaseDeliveryDialog
+                    idPrefix={`${prefix}-delivery-dialog`}
+                    open={deliveryDialogOpen}
+                    onOpenChange={setDeliveryDialogOpen}
+                    lines={lines ?? []}
+                    fulfillment={fulfillment}
+                    focusedLineId={focusedDeliveryLineId}
+                    onClearFocus={() => setFocusedDeliveryLineId(null)}
+                />
+            </div>
+        </TooltipProvider>
     )
 }
 

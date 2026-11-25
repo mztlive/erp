@@ -14,6 +14,10 @@ import {
 import { salesLinePriceComparison } from "@/lib/sales-line-prices"
 import type { WorkspaceWorkItem } from "../types"
 import type { ResubmissionFieldDiff } from "./workspace-approval-resubmission-banner"
+import type {
+    PurchaseLineSourceInsight,
+    PurchaseSourceComparisonModel,
+} from "./workspace-purchase-source-comparison-model"
 
 export type PurchaseSource = NonNullable<
     ApprovalMaterials["display"]["source_sales"]
@@ -366,6 +370,10 @@ export type EvaluatedPurchaseRow = Readonly<{
     line: ApprovalPurchaseLine
     comparison: PurchaseComparison
     externalLoss: boolean
+    sourceInsight?: PurchaseLineSourceInsight
+    taxInverted: boolean
+    splitMergedExcess: boolean
+    lowerInputTax: boolean
     effectiveSeverity: PurchaseLineRiskSeverity
     /** 用于「仅看风险项」筛选（仅命中高危或中危可操作异常，排除纯参考缺省）。 */
     hasActionableRisk: boolean
@@ -373,6 +381,7 @@ export type EvaluatedPurchaseRow = Readonly<{
 
 export function evaluatePurchaseLines(
     lines: readonly ApprovalPurchaseLine[],
+    lineInsights?: ReadonlyMap<string, PurchaseLineSourceInsight>,
 ): EvaluatedPurchaseRow[] {
     return lines.map((line) => {
         const comparison = purchaseComparison(line)
@@ -380,16 +389,39 @@ export function evaluatePurchaseLines(
             line,
             line.source?.unit_price_gross,
         )
+        const sourceInsight = lineInsights?.get(line.id)
+        const taxInverted = Boolean(sourceInsight?.taxInverted)
+        const splitMergedExcess = Boolean(
+            sourceInsight &&
+            sourceInsight.splitPurchaseLineCount > 1 &&
+            sourceInsight.mergedQuantityExcess != null,
+        )
+        const lowerInputTax = Boolean(
+            sourceInsight?.lowerInputTaxGapPoints != null,
+        )
         const effectiveSeverity: PurchaseLineRiskSeverity =
-            externalLoss || comparison.severity === "high"
+            externalLoss ||
+            comparison.severity === "high" ||
+            taxInverted ||
+            splitMergedExcess
                 ? "high"
-                : comparison.severity
+                : comparison.severity === "medium" || lowerInputTax
+                  ? "medium"
+                  : comparison.severity
         const hasActionableRisk =
-            externalLoss || comparison.actionableWarnings.length > 0
+            externalLoss ||
+            comparison.actionableWarnings.length > 0 ||
+            taxInverted ||
+            splitMergedExcess ||
+            lowerInputTax
         return {
             line,
             comparison,
             externalLoss,
+            sourceInsight,
+            taxInverted,
+            splitMergedExcess,
+            lowerInputTax,
             effectiveSeverity,
             hasActionableRisk,
         }
@@ -399,9 +431,13 @@ export function evaluatePurchaseLines(
 /** 决策提示和 ADR-1 高危核对共用同一采购风控规则。 */
 export function purchaseApprovalRiskReasons(
     lines?: ApprovalPurchaseLine[] | null,
+    sourceComparison?: PurchaseSourceComparisonModel,
 ): string[] {
     if (!lines?.length) return []
-    const evaluated = evaluatePurchaseLines(lines)
+    const evaluated = evaluatePurchaseLines(
+        lines,
+        sourceComparison?.lineInsights,
+    )
     let externalLossCount = 0
     let quantityExcessCount = 0
     let mismatchCount = 0
@@ -422,11 +458,50 @@ export function purchaseApprovalRiskReasons(
             `存在 ${externalLossCount} 项实际采购单价高于对外含税售价（对外负毛利风险）`,
         )
     }
+    const summary = sourceComparison?.summary
+    const hasTaxInverted = Boolean(
+        summary &&
+        (summary.overallTaxInverted || summary.taxInvertedLineCount > 0),
+    )
+    if (summary?.overallTaxInverted && summary.overallNetMargin) {
+        reasons.push(
+            `整单对外税后倒挂：扣除进销项税差后不含税亏损 ¥${summary.overallNetMargin.absAmount}（-${summary.overallNetMargin.absPercent}%）`,
+        )
+    } else if (summary && summary.taxInvertedLineCount > 0) {
+        reasons.push(
+            `存在 ${summary.taxInvertedLineCount} 项商品含税盈利但扣除进销项税差后对外税后倒挂`,
+        )
+    }
     if (quantityExcessCount > 0) {
         reasons.push(`存在 ${quantityExcessCount} 项采购数量超过来源销售需求`)
+    } else if (summary && summary.splitMergedExcessLineCount > 0) {
+        reasons.push(
+            `存在 ${summary.splitMergedExcessLineCount} 项同销售行拆笔采购合计超过来源销售需求`,
+        )
     }
     if (mismatchCount > 0) {
         reasons.push(`存在 ${mismatchCount} 项采购商品或规格与来源销售不一致`)
+    }
+    if (summary && summary.paymentRiskChecks.length > 0) {
+        if (summary.paymentRiskChecks.length === 1) {
+            const c = summary.paymentRiskChecks[0]!.check
+            reasons.push(`资金条款风险（${c.badge}）：${c.detail}`)
+        } else {
+            reasons.push(
+                `有 ${summary.paymentRiskChecks.length} 张来源销售单存在采购垫资或账期错配风险`,
+            )
+        }
+    }
+    if (!hasTaxInverted && summary) {
+        if (summary.lowerInputTaxLineCount > 0) {
+            reasons.push(
+                `存在 ${summary.lowerInputTaxLineCount} 项采购进项税率低于销售销项税率，存在税差侵蚀毛利`,
+            )
+        } else if (summary.specialInvoiceRiskOrderCount > 0) {
+            reasons.push(
+                "来源销售要求开具增值税专用发票，但采购存在 0% 或未填写进项税率明细",
+            )
+        }
     }
     if (delayCount > 0) {
         reasons.push(`存在 ${delayCount} 项预计交期晚于客户承诺交期`)
@@ -436,6 +511,16 @@ export function purchaseApprovalRiskReasons(
             `存在 ${costAboveSupplyCount} 项实际采购单价高于采购供给价（采购倒挂）`,
         )
     }
+    if (summary && summary.fulfillmentRiskChecks.length > 0) {
+        if (summary.fulfillmentRiskChecks.length === 1) {
+            const c = summary.fulfillmentRiskChecks[0]!.check
+            reasons.push(`履约与取价提示（${c.badge}）：${c.detail}`)
+        } else {
+            reasons.push(
+                `有 ${summary.fulfillmentRiskChecks.length} 张来源销售单存在履约方式与供给取价不符或供给价已调整`,
+            )
+        }
+    }
     return reasons
 }
 
@@ -443,9 +528,13 @@ export function purchaseApprovalRiskReasons(
 export function buildPurchaseDynamicRejectPhrases(
     lines?: ApprovalPurchaseLine[] | null,
     attachmentCount?: number,
+    sourceComparison?: PurchaseSourceComparisonModel,
 ): string[] {
     if (!lines?.length) return []
-    const evaluated = evaluatePurchaseLines(lines)
+    const evaluated = evaluatePurchaseLines(
+        lines,
+        sourceComparison?.lineInsights,
+    )
     const phrases: string[] = []
     const negativeLines = evaluated.filter((row) => row.externalLoss)
     if (negativeLines.length === 1) {
@@ -455,17 +544,45 @@ export function buildPurchaseDynamicRejectPhrases(
     } else if (negativeLines.length > 1) {
         phrases.push(`共 ${negativeLines.length} 项对外负毛利，请核对采购价格`)
     }
+    const summary = sourceComparison?.summary
+    const hasTaxInverted = Boolean(
+        summary &&
+        (summary.overallTaxInverted || summary.taxInvertedLineCount > 0),
+    )
+    if (hasTaxInverted) {
+        phrases.push("扣除进销项税差后对外税后倒挂，请重新核价或确认进项税率")
+    }
     if (evaluated.some((row) => row.comparison.quantityExcess)) {
         phrases.push("采购数量超过来源销售需求，请核对数量依据")
+    } else if (summary && summary.splitMergedExcessLineCount > 0) {
+        phrases.push("同销售行拆笔采购合计超过来源销售需求，请核对数量依据")
     }
     if (evaluated.some((row) => row.comparison.mismatchedProduct)) {
         phrases.push("采购商品或规格与来源销售不一致")
+    }
+    if (summary && summary.paymentRiskChecks.length > 0) {
+        phrases.push("采购付款条件早于客户回款，存在垫资或账期错配风险")
+    }
+    if (
+        !hasTaxInverted &&
+        summary &&
+        (summary.lowerInputTaxLineCount > 0 ||
+            summary.specialInvoiceRiskOrderCount > 0)
+    ) {
+        phrases.push("采购进项税率偏低或专票抵扣不匹配，请核对税票条件")
     }
     if (evaluated.some((row) => row.comparison.delayDays > 0)) {
         phrases.push("预计交期晚于客户承诺交期，请协调供应商")
     }
     if (evaluated.some((row) => row.comparison.supplyUnitShortfall)) {
         phrases.push(PURCHASE_SUPPLY_PRICE_RISK)
+    }
+    if (
+        summary?.fulfillmentRiskChecks.some(
+            (entry) => entry.check.badge === "取价与履约不符",
+        )
+    ) {
+        phrases.push("按集采价取价但改由供应商直发，请核对直发成本及运费")
     }
     if (attachmentCount === 0) {
         phrases.push("缺少报价单、合同或相关凭证附件")
@@ -492,6 +609,9 @@ export type PurchaseApprovalMetrics = Readonly<{
     quantityExcessCount: number
     delayCount: number
     mismatchCount: number
+    taxInvertedLineCount: number
+    splitMergedExcessCount: number
+    lowerInputTaxCount: number
     highRiskLineCount: number
     actionableRiskLineCount: number
     missingSupplyCount: number
@@ -525,6 +645,9 @@ export function buildPurchaseApprovalMetrics(
     let quantityExcessCount = 0
     let delayCount = 0
     let mismatchCount = 0
+    let taxInvertedLineCount = 0
+    let splitMergedExcessCount = 0
+    let lowerInputTaxCount = 0
     let highRiskLineCount = 0
     let actionableRiskLineCount = 0
     let missingSupplyCount = 0
@@ -564,6 +687,9 @@ export function buildPurchaseApprovalMetrics(
         if (comparison.quantityExcess) quantityExcessCount += 1
         if (comparison.delayDays > 0) delayCount += 1
         if (comparison.mismatchedProduct) mismatchCount += 1
+        if (row.taxInverted) taxInvertedLineCount += 1
+        if (row.splitMergedExcess) splitMergedExcessCount += 1
+        if (row.lowerInputTax) lowerInputTaxCount += 1
         if (comparison.missingSupply) missingSupplyCount += 1
         if (row.effectiveSeverity === "high") highRiskLineCount += 1
         if (row.hasActionableRisk) actionableRiskLineCount += 1
@@ -649,6 +775,9 @@ export function buildPurchaseApprovalMetrics(
         quantityExcessCount,
         delayCount,
         mismatchCount,
+        taxInvertedLineCount,
+        splitMergedExcessCount,
+        lowerInputTaxCount,
         highRiskLineCount,
         actionableRiskLineCount,
         missingSupplyCount,

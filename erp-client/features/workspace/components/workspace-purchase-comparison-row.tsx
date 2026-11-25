@@ -1,10 +1,15 @@
 import { useState } from "react"
-import { MapPinIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowUpIcon, MapPinIcon } from "lucide-react"
 
 import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TableCell, TableRow } from "@/components/ui/table"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
 import { inputTaxRatePercent } from "@/features/purchase-orders/lib/input-tax-rate"
 import { displayName } from "@/lib/display-name"
@@ -21,6 +26,7 @@ import {
     PurchaseLineRiskStrip,
 } from "./workspace-purchase-line-supplement"
 import type { PurchaseSourceComparisonTarget } from "./workspace-purchase-source-comparison"
+import type { PurchaseLineSourceInsight } from "./workspace-purchase-source-comparison-model"
 
 export function PurchaseComparisonRow({
     rowId,
@@ -28,6 +34,7 @@ export function PurchaseComparisonRow({
     line,
     comparison,
     externalLoss,
+    sourceInsight,
     source,
     deliveryPointCount,
     prefix,
@@ -40,6 +47,7 @@ export function PurchaseComparisonRow({
     line: ApprovalPurchaseLine
     comparison: PurchaseComparison
     externalLoss: boolean
+    sourceInsight?: PurchaseLineSourceInsight
     source?: PurchaseSource
     deliveryPointCount?: number
     prefix: string
@@ -57,8 +65,19 @@ export function PurchaseComparisonRow({
     const canCompare =
         sales != null || line.input_tax_rate != null || line.tax_amount != null
     const lineNotes = purchaseLineRiskNotes(comparison, externalLoss)
+    const taxInverted = Boolean(sourceInsight?.taxInverted)
+    const splitMergedExcess = Boolean(
+        !comparison.quantityExcess &&
+        sourceInsight &&
+        sourceInsight.splitPurchaseLineCount > 1 &&
+        sourceInsight.mergedQuantityExcess != null,
+    )
     const showRiskStrip = Boolean(
-        lineNotes.externalPriceRisk || lineNotes.warnings.length || source,
+        lineNotes.externalPriceRisk ||
+        lineNotes.warnings.length ||
+        source ||
+        taxInverted ||
+        splitMergedExcess,
     )
     const inlineDetailsId = `${prefix}-prices`
 
@@ -67,7 +86,9 @@ export function PurchaseComparisonRow({
             <TableRow
                 id={rowId}
                 className={cn(
-                    comparison.highWarnings.length > 0 &&
+                    (comparison.highWarnings.length > 0 ||
+                        taxInverted ||
+                        splitMergedExcess) &&
                         "bg-destructive-soft/35 hover:bg-destructive-soft/50",
                     highlighted &&
                         "bg-info-soft/50 ring-1 ring-inset ring-info-border",
@@ -86,8 +107,13 @@ export function PurchaseComparisonRow({
                         {comparison.fee ? (
                             <Badge variant="neutral">费用</Badge>
                         ) : null}
+                        {taxInverted ? (
+                            <Badge variant="destructive">税后倒挂</Badge>
+                        ) : null}
                         {comparison.quantityExcess ? (
                             <Badge variant="destructive">超需求</Badge>
+                        ) : splitMergedExcess ? (
+                            <Badge variant="destructive">拆笔超需求</Badge>
                         ) : null}
                         {comparison.mismatchedProduct ? (
                             <Badge variant="destructive">品规差异</Badge>
@@ -177,6 +203,15 @@ export function PurchaseComparisonRow({
                                 unit={line.unitName}
                             />
                         </p>
+                    ) : splitMergedExcess &&
+                      sourceInsight?.mergedQuantityExcess ? (
+                        <p className="mt-1 text-xs font-medium text-destructive-soft-foreground">
+                            合并超需求 +
+                            <QuantityValue
+                                value={sourceInsight.mergedQuantityExcess}
+                                unit={line.unitName}
+                            />
+                        </p>
                     ) : comparison.partial && sales ? (
                         <p className="mt-1 text-xs text-muted-foreground">
                             销售{" "}
@@ -207,15 +242,43 @@ export function PurchaseComparisonRow({
                     ) : null}
                 </TableCell>
 
-                <TableCell data-align="end" className="py-3 align-top">
-                    {line.input_tax_rate == null ? (
-                        "—"
-                    ) : (
-                        <RateValue
-                            value={inputTaxRatePercent(line.input_tax_rate)}
-                            precision={2}
-                        />
-                    )}
+                <TableCell
+                    data-align="end"
+                    className="py-3 align-top whitespace-nowrap"
+                >
+                    <div
+                        className={cn(
+                            taxInverted &&
+                                "font-medium text-destructive-soft-foreground",
+                            !taxInverted &&
+                                sourceInsight?.lowerInputTaxGapPoints != null &&
+                                "font-medium text-warning-soft-foreground",
+                        )}
+                    >
+                        {line.input_tax_rate == null ? (
+                            "—"
+                        ) : (
+                            <RateValue
+                                value={inputTaxRatePercent(line.input_tax_rate)}
+                                precision={2}
+                            />
+                        )}
+                    </div>
+                    {sourceInsight ? (
+                        <div
+                            className={cn(
+                                "num mt-0.5 text-xs",
+                                sourceInsight.lowerInputTaxGapPoints != null
+                                    ? "text-warning-soft-foreground"
+                                    : "text-muted-foreground",
+                            )}
+                        >
+                            销 {sourceInsight.salesTaxRatePercent}%
+                            {sourceInsight.lowerInputTaxGapPoints != null
+                                ? ` · 低${sourceInsight.lowerInputTaxGapPoints}pp`
+                                : ""}
+                        </div>
+                    ) : null}
                 </TableCell>
 
                 <TableCell data-align="end" className="py-3 align-top">
@@ -223,6 +286,56 @@ export function PurchaseComparisonRow({
                         display="exact"
                         value={sales?.procurement_supply_price_gross}
                     />
+                    {sourceInsight &&
+                    (sourceInsight.priceBasisLabel ||
+                        sourceInsight.supplyAdjustment === "increased" ||
+                        sourceInsight.supplyAdjustment === "decreased") ? (
+                        <div className="mt-0.5 flex items-center justify-end gap-1 text-tiny text-muted-foreground">
+                            {sourceInsight.priceBasisLabel ? (
+                                <span>
+                                    {sourceInsight.priceBasisLabel ===
+                                    "一件代发"
+                                        ? "代发"
+                                        : sourceInsight.priceBasisLabel}
+                                </span>
+                            ) : null}
+                            {sourceInsight.originalSupplyPrice &&
+                            (sourceInsight.supplyAdjustment === "increased" ||
+                                sourceInsight.supplyAdjustment ===
+                                    "decreased") ? (
+                                <Tooltip>
+                                    <TooltipTrigger
+                                        render={
+                                            <span className="inline-flex cursor-help items-center text-info-soft-foreground" />
+                                        }
+                                    >
+                                        {sourceInsight.supplyAdjustment ===
+                                        "increased" ? (
+                                            <ArrowUpIcon
+                                                aria-hidden="true"
+                                                className="size-3"
+                                            />
+                                        ) : (
+                                            <ArrowDownIcon
+                                                aria-hidden="true"
+                                                className="size-3"
+                                            />
+                                        )}
+                                    </TooltipTrigger>
+                                    <TooltipContent className="block">
+                                        原参考价{" "}
+                                        <MoneyValue
+                                            display="exact"
+                                            value={
+                                                sourceInsight.originalSupplyPrice
+                                            }
+                                            inheritColor
+                                        />
+                                    </TooltipContent>
+                                </Tooltip>
+                            ) : null}
+                        </div>
+                    ) : null}
                 </TableCell>
 
                 <TableCell data-align="end" className="py-3 align-top">
@@ -246,6 +359,26 @@ export function PurchaseComparisonRow({
                     comparison.externalMargin ? (
                         <div className="num mt-0.5 text-xs text-muted-foreground">
                             {comparison.externalMargin.percent}%
+                        </div>
+                    ) : null}
+                    {sourceInsight?.netMargin &&
+                    (taxInverted ||
+                        sourceInsight.lowerInputTaxGapPoints != null) ? (
+                        <div
+                            className={cn(
+                                "num mt-0.5 text-xs whitespace-nowrap",
+                                sourceInsight.netMargin.negative
+                                    ? "font-semibold text-destructive-soft-foreground"
+                                    : "text-warning-soft-foreground",
+                            )}
+                        >
+                            税后 {sourceInsight.netMargin.negative ? "亏 " : ""}
+                            <MoneyValue
+                                display="exact"
+                                value={sourceInsight.netMargin.absAmount}
+                                inheritColor
+                            />{" "}
+                            ({sourceInsight.netMargin.percent}%)
                         </div>
                     ) : null}
                 </TableCell>
@@ -299,6 +432,7 @@ export function PurchaseComparisonRow({
                             line={line}
                             comparison={comparison}
                             notes={lineNotes}
+                            sourceInsight={sourceInsight}
                             source={source}
                             prefix={prefix}
                             onPreview={onPreview}

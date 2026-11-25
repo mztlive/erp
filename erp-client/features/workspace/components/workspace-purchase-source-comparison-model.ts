@@ -216,8 +216,57 @@ export type SourceOrderComparison = Readonly<{
     mergedOrderCount: number
 }>
 
+export type PurchaseLineSourceInsight = Readonly<{
+    revisionId: string
+    salesLineId: string
+    salesLineNo: number
+    salesTaxRatePercent: string
+    inputTaxRatePercent: string | null
+    lowerInputTaxGapPoints: string | null
+    netMargin: ExternalMarginSummary | null
+    taxInverted: boolean
+    mergedQuantityExcess: string | null
+    splitPurchaseLineCount: number
+    priceBasisLabel: "集采" | "一件代发" | null
+    originalSupplyPrice: string | null
+    supplyAdjustment: "increased" | "decreased" | "unchanged" | null
+}>
+
+export type CommercialRiskCheckEntry = Readonly<{
+    revisionId: string
+    documentNo: string
+    check: CommercialComparisonItem
+}>
+
+export type PurchaseSourceComparisonSummary = Readonly<{
+    overallGrossMargin: ExternalMarginSummary | null
+    overallNetMargin: ExternalMarginSummary | null
+    overallCorrespondingSalesNetTotal: string | null
+    overallVatGap: string | null
+    overallTaxDragPoints: string | null
+    overallTaxInverted: boolean
+    hasSignificantTaxDrag: boolean
+    taxInvertedOrderCount: number
+    taxInvertedLineCount: number
+    lowerInputTaxLineCount: number
+    specialInvoiceRiskOrderCount: number
+    paymentRiskChecks: readonly CommercialRiskCheckEntry[]
+    taxRiskChecks: readonly CommercialRiskCheckEntry[]
+    fulfillmentRiskChecks: readonly CommercialRiskCheckEntry[]
+    splitMergedExcessLineCount: number
+    missingContractOrderCount: number
+    businessRemarks: readonly Readonly<{
+        revisionId: string
+        documentNo: string
+        customerName: string
+        remark: string
+    }>[]
+}>
+
 export type PurchaseSourceComparisonModel = Readonly<{
     orders: readonly SourceOrderComparison[]
+    lineInsights: ReadonlyMap<string, PurchaseLineSourceInsight>
+    summary: PurchaseSourceComparisonSummary
     totalAttentionCount: number
     hasSevereAttention: boolean
 }>
@@ -702,6 +751,23 @@ function formatRateList(rates: readonly string[]): string {
         .join(" / ")
 }
 
+type OrderComparableParts = Readonly<{
+    salesGross: readonly string[]
+    salesNet: readonly string[]
+    salesTax: readonly string[]
+    costGross: readonly string[]
+    costNet: readonly string[]
+    costTax: readonly string[]
+    allComparableHaveNet: boolean
+}>
+
+type BuiltOrderComparisonResult = Readonly<{
+    comparison: SourceOrderComparison
+    lineInsights: ReadonlyMap<string, PurchaseLineSourceInsight>
+    splitMergedExcessLineCount: number
+    comparableParts: OrderComparableParts | null
+}>
+
 function buildOrderComparison({
     order,
     snapshot,
@@ -720,7 +786,8 @@ function buildOrderComparison({
     purchasePaymentLabel: string | null
     extraCostSummary?: ApprovalMaterials["extra_cost_summary"]
     unitNames?: ReadonlyMap<string, string>
-}): SourceOrderComparison {
+}): BuiltOrderComparisonResult {
+    const lineInsights = new Map<string, PurchaseLineSourceInsight>()
     const revision = order?.revision
     const revisionId = revision?.id ?? snapshot?.revision_id ?? ""
     const documentNo =
@@ -751,23 +818,28 @@ function buildOrderComparison({
 
     if (!revision) {
         return {
-            revisionId,
-            documentNo,
-            revisionNo,
-            customerName,
-            projectName: null,
-            settlementPartyName: null,
-            contractNo: null,
-            contractNotices,
-            businessRemark: null,
-            hasFullOrder: false,
-            commercialChecks: [],
-            ledger: null,
-            coverageRows: [],
-            extraPurchaseLines: [],
-            attentionCount: 0,
-            hasSevereAttention: false,
-            mergedOrderCount,
+            comparison: {
+                revisionId,
+                documentNo,
+                revisionNo,
+                customerName,
+                projectName: null,
+                settlementPartyName: null,
+                contractNo: null,
+                contractNotices,
+                businessRemark: null,
+                hasFullOrder: false,
+                commercialChecks: [],
+                ledger: null,
+                coverageRows: [],
+                extraPurchaseLines: [],
+                attentionCount: 0,
+                hasSevereAttention: false,
+                mergedOrderCount,
+            },
+            lineInsights,
+            splitMergedExcessLineCount: 0,
+            comparableParts: null,
         }
     }
 
@@ -913,6 +985,7 @@ function buildOrderComparison({
     let excessCount = 0
     let mismatchCount = 0
     let uncoveredCount = 0
+    let splitMergedExcessLineCount = 0
 
     for (const salesLine of salesLines) {
         const matched = assignedPurchaseLinesBySalesId.get(salesLine.id) ?? []
@@ -1014,6 +1087,13 @@ function buildOrderComparison({
         let lineMaxDelayDays = 0
         let lineMaxTaxGap: string | null = null
         let lineAllNetReady = true
+        const pendingLineInsights: Array<{
+            purchaseLineId: string
+            inputRatePercent: string | null
+            lowerInputTaxGapPoints: string | null
+            netMargin: ExternalMarginSummary | null
+            taxInverted: boolean
+        }> = []
 
         for (const pLine of matched) {
             const cmp = purchaseComparison(pLine)
@@ -1028,6 +1108,7 @@ function buildOrderComparison({
                 lineMaxDelayDays = cmp.delayDays
             }
 
+            let pLineTaxGap: string | null = null
             const inputRatePercent = formatRatePercent(pLine.input_tax_rate)
             if (inputRatePercent != null) {
                 lineInputRatesPercent.push(inputRatePercent)
@@ -1051,6 +1132,7 @@ function buildOrderComparison({
                                 { maxScale: 2, outputScale: 2 },
                             ),
                         )
+                        pLineTaxGap = gap
                         if (
                             lineMaxTaxGap == null ||
                             compareDecimal(gap, lineMaxTaxGap, 2) > 0
@@ -1081,6 +1163,8 @@ function buildOrderComparison({
                 allComparableHaveNet = false
             }
 
+            let pLineSalesGross: string | null = null
+            let pLineSalesNet: string | null = null
             if (!cmp.unitMismatch && pLine.quantity != null) {
                 lineQuantities.push(pLine.quantity)
                 try {
@@ -1121,6 +1205,8 @@ function buildOrderComparison({
                           }
                         : splitGrossByPercentRate(sGross, salesTaxRatePercent)
 
+                    pLineSalesGross = sGross
+                    pLineSalesNet = sSplit.net
                     lineSalesGrossParts.push(sGross)
                     lineSalesNetParts.push(sSplit.net)
                     lineSalesTaxParts.push(sSplit.tax)
@@ -1144,6 +1230,31 @@ function buildOrderComparison({
                     allComparableHaveNet = false
                 }
             }
+
+            const pLineGrossMargin =
+                pLineSalesGross && pLine.gross_amount != null
+                    ? calculateMargin(pLineSalesGross, pLine.gross_amount)
+                    : null
+            const pLineNetMargin =
+                pLineSalesNet &&
+                pLine.net_amount != null &&
+                pLine.tax_amount != null &&
+                pLine.input_tax_rate != null
+                    ? calculateMargin(pLineSalesNet, pLine.net_amount)
+                    : null
+            const pLineTaxInverted = Boolean(
+                pLineGrossMargin &&
+                !pLineGrossMargin.negative &&
+                pLineNetMargin?.negative,
+            )
+
+            pendingLineInsights.push({
+                purchaseLineId: pLine.id,
+                inputRatePercent,
+                lowerInputTaxGapPoints: pLineTaxGap,
+                netMargin: pLineNetMargin,
+                taxInverted: pLineTaxInverted,
+            })
 
             matchedSummaries.push({
                 id: pLine.id,
@@ -1216,6 +1327,30 @@ function buildOrderComparison({
                 coverageStatus = "mismatch"
                 mismatchCount += 1
             }
+        }
+
+        if (coverageStatus === "excess" && matched.length > 1) {
+            splitMergedExcessLineCount += 1
+        }
+
+        for (const item of pendingLineInsights) {
+            lineInsights.set(item.purchaseLineId, {
+                revisionId,
+                salesLineId: salesLine.id,
+                salesLineNo: salesLine.line_no,
+                salesTaxRatePercent,
+                inputTaxRatePercent: item.inputRatePercent,
+                lowerInputTaxGapPoints: item.lowerInputTaxGapPoints,
+                netMargin: item.netMargin,
+                taxInverted: item.taxInverted,
+                mergedQuantityExcess:
+                    coverageStatus === "excess" ? excessQuantity : null,
+                splitPurchaseLineCount: matched.length,
+                priceBasisLabel,
+                originalSupplyPrice:
+                    salesLine.original_procurement_supply_price_gross ?? null,
+                supplyAdjustment: salesPriceCheck.adjustment,
+            })
         }
 
         const purchaseGrossTotal = linePurchaseGross.length
@@ -1853,79 +1988,93 @@ function buildOrderComparison({
         coverageRows.some((row) => row.severity === "severe")
 
     return {
-        revisionId,
-        documentNo,
-        revisionNo,
-        customerName,
-        projectName: displayName(revision.project_name) || null,
-        settlementPartyName:
-            displayName(revision.settlement_party_name) || null,
-        contractNo: revision.contract_no?.trim() || null,
-        contractNotices,
-        businessRemark: revision.business_remark?.trim() || null,
-        hasFullOrder: true,
-        commercialChecks,
-        ledger: {
-            isExpenseOrder,
-            salesGrossTotal: revision.gross_amount,
-            salesNetTotal: revision.net_amount,
-            salesTaxTotal: revision.tax_amount,
-            totalSalesLineCount: salesLines.length,
-            fullCount,
-            partialCount,
-            excessCount,
-            mismatchCount,
-            uncoveredCount,
-            coveredLineCount: salesLines.length - uncoveredCount,
-            purchaseGoodsGrossTotal,
-            purchaseGoodsLineCount: goodsPurchaseLines.length,
-            purchaseMargin: sumPurchaseMargins(orderPurchaseMargins),
-            purchaseGoodsNetTotal,
-            purchaseFeeGrossTotal: includeFeesInThisOrder
-                ? purchaseFeeGrossTotal
-                : null,
-            purchaseFeeRatioPercent:
-                includeFeesInThisOrder && purchaseFeeGrossTotal
-                    ? safeRatioPercent(
-                          purchaseFeeGrossTotal,
-                          revision.gross_amount,
-                      )
+        comparison: {
+            revisionId,
+            documentNo,
+            revisionNo,
+            customerName,
+            projectName: displayName(revision.project_name) || null,
+            settlementPartyName:
+                displayName(revision.settlement_party_name) || null,
+            contractNo: revision.contract_no?.trim() || null,
+            contractNotices,
+            businessRemark: revision.business_remark?.trim() || null,
+            hasFullOrder: true,
+            commercialChecks,
+            ledger: {
+                isExpenseOrder,
+                salesGrossTotal: revision.gross_amount,
+                salesNetTotal: revision.net_amount,
+                salesTaxTotal: revision.tax_amount,
+                totalSalesLineCount: salesLines.length,
+                fullCount,
+                partialCount,
+                excessCount,
+                mismatchCount,
+                uncoveredCount,
+                coveredLineCount: salesLines.length - uncoveredCount,
+                purchaseGoodsGrossTotal,
+                purchaseGoodsLineCount: goodsPurchaseLines.length,
+                purchaseMargin: sumPurchaseMargins(orderPurchaseMargins),
+                purchaseGoodsNetTotal,
+                purchaseFeeGrossTotal: includeFeesInThisOrder
+                    ? purchaseFeeGrossTotal
                     : null,
-            unallocatedSharedFeeTotal: !includeFeesInThisOrder
-                ? purchaseFeeGrossTotal
-                : null,
-            correspondingSalesGrossTotal,
-            correspondingSalesNetTotal,
-            salesCoveragePercent,
-            costBarPercent,
-            goodsCostBarPercent,
-            feeCostBarPercent,
-            expenseFeeBarPercent,
-            grossMargin,
-            netMargin,
-            vatGap,
-            taxDragPoints,
-            taxInverted: orderTaxInverted,
-            isFullOrderCovered:
-                !isExpenseOrder &&
-                salesLines.length > 0 &&
-                uncoveredCount === 0 &&
-                partialCount === 0 &&
-                mismatchCount === 0,
-            extraCostSummary: resolvedExtraCost,
+                purchaseFeeRatioPercent:
+                    includeFeesInThisOrder && purchaseFeeGrossTotal
+                        ? safeRatioPercent(
+                              purchaseFeeGrossTotal,
+                              revision.gross_amount,
+                          )
+                        : null,
+                unallocatedSharedFeeTotal: !includeFeesInThisOrder
+                    ? purchaseFeeGrossTotal
+                    : null,
+                correspondingSalesGrossTotal,
+                correspondingSalesNetTotal,
+                salesCoveragePercent,
+                costBarPercent,
+                goodsCostBarPercent,
+                feeCostBarPercent,
+                expenseFeeBarPercent,
+                grossMargin,
+                netMargin,
+                vatGap,
+                taxDragPoints,
+                taxInverted: orderTaxInverted,
+                isFullOrderCovered:
+                    !isExpenseOrder &&
+                    salesLines.length > 0 &&
+                    uncoveredCount === 0 &&
+                    partialCount === 0 &&
+                    mismatchCount === 0,
+                extraCostSummary: resolvedExtraCost,
+            },
+            coverageRows,
+            extraPurchaseLines,
+            attentionCount: commercialAttentionCount + lineAttentionCount,
+            hasSevereAttention,
+            mergedOrderCount,
         },
-        coverageRows,
-        extraPurchaseLines,
-        attentionCount: commercialAttentionCount + lineAttentionCount,
-        hasSevereAttention,
-        mergedOrderCount,
+        lineInsights,
+        splitMergedExcessLineCount,
+        comparableParts: {
+            salesGross: orderComparableSalesGross,
+            salesNet: orderComparableSalesNet,
+            salesTax: orderComparableSalesTax,
+            costGross: orderComparableCostGross,
+            costNet: orderComparableCostNet,
+            costTax: orderComparableCostTax,
+            allComparableHaveNet,
+        },
     }
 }
 
 /**
  * 构建采购审批「采销对照」模型（纯基于本次审批冻结数据）：
  * 1. 商务、资金（垫资/账期）、票税（进销项税差与税后不含税毛利）及履约口径对照；
- * 2. 整张来源销售单的全局覆盖进度、含税/不含税双口径毛利及未含明细清单。
+ * 2. 整张来源销售单的全局覆盖进度、含税/不含税双口径毛利及未含明细清单；
+ * 3. 汇总供主画布、风控提示与高危确认共用的行级洞察与整单风控摘要。
  */
 export function buildPurchaseSourceComparisonModel({
     orders,
@@ -1965,7 +2114,7 @@ export function buildPurchaseSourceComparisonModel({
     }
 
     const mergedOrderCount = revisionIds.length
-    const builtOrders = revisionIds.map((revisionId) =>
+    const builtResults = revisionIds.map((revisionId) =>
         buildOrderComparison({
             order: orderByRevisionId.get(revisionId),
             snapshot: snapshotByRevisionId.get(revisionId),
@@ -1978,6 +2127,215 @@ export function buildPurchaseSourceComparisonModel({
         }),
     )
 
+    const builtOrders = builtResults.map((result) => result.comparison)
+    const lineInsights = new Map<string, PurchaseLineSourceInsight>()
+    let splitMergedExcessLineCount = 0
+    for (const result of builtResults) {
+        splitMergedExcessLineCount += result.splitMergedExcessLineCount
+        for (const [lineId, insight] of result.lineInsights.entries()) {
+            lineInsights.set(lineId, insight)
+        }
+    }
+
+    let taxInvertedLineCount = 0
+    let lowerInputTaxLineCount = 0
+    for (const insight of lineInsights.values()) {
+        if (insight.taxInverted) taxInvertedLineCount += 1
+        if (insight.lowerInputTaxGapPoints != null) {
+            lowerInputTaxLineCount += 1
+        }
+    }
+
+    const paymentRiskChecks: CommercialRiskCheckEntry[] = []
+    const taxRiskChecks: CommercialRiskCheckEntry[] = []
+    const fulfillmentRiskChecks: CommercialRiskCheckEntry[] = []
+    const businessRemarks: Array<{
+        revisionId: string
+        documentNo: string
+        customerName: string
+        remark: string
+    }> = []
+    let taxInvertedOrderCount = 0
+    let specialInvoiceRiskOrderCount = 0
+    let missingContractOrderCount = 0
+
+    for (const order of builtOrders) {
+        if (order.ledger?.taxInverted) {
+            taxInvertedOrderCount += 1
+        }
+        if (order.hasFullOrder && !order.contractNo) {
+            missingContractOrderCount += 1
+        }
+        if (order.businessRemark) {
+            businessRemarks.push({
+                revisionId: order.revisionId,
+                documentNo: order.documentNo,
+                customerName: order.customerName,
+                remark: order.businessRemark,
+            })
+        }
+        for (const check of order.commercialChecks) {
+            if (check.id === "tax" && check.badge === "核对专票抵扣") {
+                specialInvoiceRiskOrderCount += 1
+            }
+            if (check.status !== "severe" && check.status !== "warning") {
+                continue
+            }
+            const entry = {
+                revisionId: order.revisionId,
+                documentNo: order.documentNo,
+                check,
+            }
+            if (check.id === "payment") paymentRiskChecks.push(entry)
+            else if (check.id === "tax") taxRiskChecks.push(entry)
+            else if (check.id === "fulfillment")
+                fulfillmentRiskChecks.push(entry)
+        }
+    }
+
+    let overallGrossMargin: ExternalMarginSummary | null = null
+    let overallNetMargin: ExternalMarginSummary | null = null
+    let overallCorrespondingSalesNetTotal: string | null = null
+    let overallVatGap: string | null = null
+    let overallTaxDragPoints: string | null = null
+    let overallTaxInverted = false
+
+    if (builtResults.length === 1) {
+        const singleLedger = builtResults[0]!.comparison.ledger
+        if (singleLedger) {
+            overallGrossMargin = singleLedger.grossMargin
+            overallNetMargin = singleLedger.netMargin
+            overallCorrespondingSalesNetTotal =
+                singleLedger.correspondingSalesNetTotal
+            overallVatGap = singleLedger.vatGap
+            overallTaxDragPoints = singleLedger.taxDragPoints
+            overallTaxInverted = singleLedger.taxInverted
+        }
+    } else if (builtResults.length > 1) {
+        const fullOrderRevisionIds = new Set(
+            builtOrders
+                .filter((order) => order.hasFullOrder)
+                .map((order) => order.revisionId),
+        )
+        const allLinkedGoodsOrdersFull = lines.every(
+            (line) =>
+                isPurchaseFeeLine(line) ||
+                !line.source?.revision_id ||
+                fullOrderRevisionIds.has(line.source.revision_id),
+        )
+        const allSalesGross: string[] = []
+        const allSalesNet: string[] = []
+        const allSalesTax: string[] = []
+        const allCostGross: string[] = []
+        const allCostNet: string[] = []
+        const allCostTax: string[] = []
+        let allComparableHaveNet = true
+
+        for (const result of builtResults) {
+            const parts = result.comparableParts
+            if (!parts) continue
+            if (!parts.allComparableHaveNet) allComparableHaveNet = false
+            allSalesGross.push(...parts.salesGross)
+            allSalesNet.push(...parts.salesNet)
+            allSalesTax.push(...parts.salesTax)
+            allCostGross.push(...parts.costGross)
+            allCostNet.push(...parts.costNet)
+            allCostTax.push(...parts.costTax)
+        }
+
+        const feeGrossAmounts: string[] = []
+        const feeNetAmounts: string[] = []
+        const feeTaxAmounts: string[] = []
+        let allFeesHaveNet = true
+        for (const line of lines) {
+            if (!isPurchaseFeeLine(line)) continue
+            if (line.gross_amount != null) {
+                feeGrossAmounts.push(line.gross_amount)
+            }
+            if (
+                line.net_amount != null &&
+                line.tax_amount != null &&
+                line.input_tax_rate != null
+            ) {
+                feeNetAmounts.push(line.net_amount)
+                feeTaxAmounts.push(line.tax_amount)
+            } else {
+                allFeesHaveNet = false
+            }
+        }
+
+        const combinedSalesGross = allSalesGross.length
+            ? sumFixed(allSalesGross, { maxScale: 2, outputScale: 2 })
+            : null
+        const combinedCostGross = allCostGross.length
+            ? sumFixed([...allCostGross, ...feeGrossAmounts], {
+                  maxScale: 2,
+                  outputScale: 2,
+              })
+            : null
+        overallGrossMargin =
+            combinedSalesGross && combinedCostGross
+                ? calculateMargin(combinedSalesGross, combinedCostGross)
+                : null
+
+        if (
+            allLinkedGoodsOrdersFull &&
+            allComparableHaveNet &&
+            allFeesHaveNet &&
+            allCostNet.length > 0 &&
+            allSalesNet.length > 0
+        ) {
+            overallCorrespondingSalesNetTotal = sumFixed(allSalesNet, {
+                maxScale: 2,
+                outputScale: 2,
+            })
+            const combinedSalesTax = sumFixed(allSalesTax, {
+                maxScale: 2,
+                outputScale: 2,
+            })
+            const combinedCostNet = sumFixed(
+                [...allCostNet, ...feeNetAmounts],
+                { maxScale: 2, outputScale: 2 },
+            )
+            const combinedCostTax = sumFixed(
+                [...allCostTax, ...feeTaxAmounts],
+                { maxScale: 2, outputScale: 2 },
+            )
+            overallNetMargin = calculateMargin(
+                overallCorrespondingSalesNetTotal,
+                combinedCostNet,
+            )
+            overallVatGap = subtractFixed(combinedSalesTax, combinedCostTax, {
+                maxScale: 2,
+                outputScale: 2,
+            })
+            overallTaxDragPoints =
+                overallGrossMargin && overallNetMargin
+                    ? signedSubtract(
+                          overallGrossMargin.percent,
+                          overallNetMargin.percent,
+                          1,
+                      )
+                    : null
+            overallTaxInverted = Boolean(
+                overallGrossMargin &&
+                !overallGrossMargin.negative &&
+                overallNetMargin?.negative,
+            )
+        }
+    }
+
+    const hasSignificantTaxDrag = Boolean(
+        overallTaxDragPoints &&
+        (() => {
+            try {
+                return compareDecimal(overallTaxDragPoints, "0.5", 1) >= 0
+            } catch {
+                return false
+            }
+        })(),
+    )
+
     const totalAttentionCount = builtOrders.reduce(
         (sum, entry) => sum + entry.attentionCount,
         0,
@@ -1988,6 +2346,26 @@ export function buildPurchaseSourceComparisonModel({
 
     return {
         orders: builtOrders,
+        lineInsights,
+        summary: {
+            overallGrossMargin,
+            overallNetMargin,
+            overallCorrespondingSalesNetTotal,
+            overallVatGap,
+            overallTaxDragPoints,
+            overallTaxInverted,
+            hasSignificantTaxDrag,
+            taxInvertedOrderCount,
+            taxInvertedLineCount,
+            lowerInputTaxLineCount,
+            specialInvoiceRiskOrderCount,
+            paymentRiskChecks,
+            taxRiskChecks,
+            fulfillmentRiskChecks,
+            splitMergedExcessLineCount,
+            missingContractOrderCount,
+            businessRemarks,
+        },
         totalAttentionCount,
         hasSevereAttention,
     }

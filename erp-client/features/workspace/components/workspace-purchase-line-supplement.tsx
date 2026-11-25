@@ -11,6 +11,7 @@ import {
     type PurchaseComparison,
     type PurchaseSource,
 } from "./workspace-purchase-comparison-model"
+import type { PurchaseLineSourceInsight } from "./workspace-purchase-source-comparison-model"
 
 const warningDetails: Record<string, string> = {
     来源销售缺失: "未保留可核对的来源销售明细，请联系申请人补充依据",
@@ -45,6 +46,7 @@ export function PurchaseLineRiskStrip({
     line,
     comparison,
     notes,
+    sourceInsight,
     source,
     prefix,
     onPreview,
@@ -52,6 +54,7 @@ export function PurchaseLineRiskStrip({
     line: ApprovalPurchaseLine
     comparison: PurchaseComparison
     notes: ReturnType<typeof purchaseLineRiskNotes>
+    sourceInsight?: PurchaseLineSourceInsight
     source?: PurchaseSource
     prefix: string
     onPreview: (revisionId: string) => void
@@ -60,9 +63,23 @@ export function PurchaseLineRiskStrip({
     const otherWarnings = notes.warnings.filter(
         (warning) => warning !== "商品 / 规格不一致",
     )
+    const taxInverted = Boolean(sourceInsight?.taxInverted)
+    const splitMergedExcess = Boolean(
+        !comparison.quantityExcess &&
+        sourceInsight &&
+        sourceInsight.splitPurchaseLineCount > 1 &&
+        sourceInsight.mergedQuantityExcess != null,
+    )
     const isHighRisk =
-        notes.externalPriceRisk || comparison.highWarnings.length > 0
-    const hasRisk = notes.externalPriceRisk || notes.warnings.length > 0
+        notes.externalPriceRisk ||
+        comparison.highWarnings.length > 0 ||
+        taxInverted ||
+        splitMergedExcess
+    const hasRisk =
+        notes.externalPriceRisk ||
+        notes.warnings.length > 0 ||
+        taxInverted ||
+        splitMergedExcess
 
     return (
         <div
@@ -89,6 +106,38 @@ export function PurchaseLineRiskStrip({
                             {notes.externalPriceRisk ? (
                                 <li className="font-medium">
                                     实际采购单价高于销售单含税成交单价
+                                </li>
+                            ) : null}
+                            {taxInverted && sourceInsight?.netMargin ? (
+                                <li className="font-medium">
+                                    对外税后倒挂：含税盈利，扣税后不含税亏{" "}
+                                    <MoneyValue
+                                        value={
+                                            sourceInsight.netMargin.absAmount
+                                        }
+                                        display="exact"
+                                        inheritColor
+                                    />
+                                    （{sourceInsight.netMargin.percent}%，销项{" "}
+                                    {sourceInsight.salesTaxRatePercent}% vs 进项{" "}
+                                    {sourceInsight.inputTaxRatePercent ??
+                                        "未填"}
+                                    %）
+                                </li>
+                            ) : null}
+                            {splitMergedExcess &&
+                            sourceInsight?.mergedQuantityExcess ? (
+                                <li className="font-medium">
+                                    同销售行拆分为{" "}
+                                    {sourceInsight.splitPurchaseLineCount}{" "}
+                                    笔采购，合并超来源销售需求 +
+                                    <QuantityValue
+                                        value={
+                                            sourceInsight.mergedQuantityExcess
+                                        }
+                                        unit={line.unitName}
+                                    />
+                                    ，请核对数量依据
                                 </li>
                             ) : null}
                             {otherWarnings.map((warning) => (

@@ -63,6 +63,7 @@ import { downloadFileAsset } from "@/features/file-assets/api"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { displayName } from "@/lib/display-name"
 import { compareDecimal } from "@/lib/fixed-decimal"
+import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { hasPermission } from "@/lib/permissions"
 import { useRouter } from "@/lib/navigation"
 import { cn } from "@/lib/utils"
@@ -123,6 +124,7 @@ import {
     parsePurchaseExtraSections,
 } from "./workspace-purchase-comparison-model"
 import { WorkspacePurchasePayment } from "./workspace-purchase-payment"
+import { buildPurchaseSourceComparisonModel } from "./workspace-purchase-source-comparison-model"
 import type { PurchaseSourceComparisonTarget } from "./workspace-purchase-source-comparison"
 import {
     WorkspaceReceiptApproval,
@@ -350,6 +352,32 @@ export function WorkspaceDocumentTaskDetail({
         item,
     )
     const submission = canReadSubmission ? materials.data : undefined
+    const hasSourceSalesLines = Boolean(
+        purchaseApproval &&
+        submission?.source_sales_orders?.some(
+            (order) => order.revision.commercial_lines.length > 0,
+        ),
+    )
+    const { names: sourceSalesUnitNames } = useProductUnitNames(
+        [],
+        hasSourceSalesLines,
+    )
+    const purchaseSourceComparisonModel = useMemo(
+        () =>
+            purchaseApproval && submission
+                ? buildPurchaseSourceComparisonModel({
+                      orders: submission.source_sales_orders ?? [],
+                      snapshots: submission.display.source_sales,
+                      purchaseLines: submission.purchase_lines,
+                      purchaseFulfillment: submission.purchase_fulfillment,
+                      purchaseExtraSections:
+                          submission.display.source.extra_sections,
+                      extraCostSummary: submission.extra_cost_summary,
+                      unitNames: sourceSalesUnitNames,
+                  })
+                : undefined,
+        [purchaseApproval, sourceSalesUnitNames, submission],
+    )
     const salesSubmission = submission?.sales_order
     const useStructuredDiffRenderer = Boolean(
         structuredDiffDocType && submission,
@@ -718,9 +746,16 @@ export function WorkspaceDocumentTaskDetail({
     const purchaseRiskReasons = useMemo(
         () =>
             purchaseApproval
-                ? purchaseApprovalRiskReasons(submission?.purchase_lines)
+                ? purchaseApprovalRiskReasons(
+                      submission?.purchase_lines,
+                      purchaseSourceComparisonModel,
+                  )
                 : [],
-        [purchaseApproval, submission?.purchase_lines],
+        [
+            purchaseApproval,
+            purchaseSourceComparisonModel,
+            submission?.purchase_lines,
+        ],
     )
 
     const highRiskReasons = useMemo(() => {
@@ -798,6 +833,7 @@ export function WorkspaceDocumentTaskDetail({
             return buildPurchaseDynamicRejectPhrases(
                 submission.purchase_lines,
                 submission.attachments.length,
+                purchaseSourceComparisonModel,
             )
         }
         if (invoiceApproval && invoiceReviewQuery.data) {
@@ -832,6 +868,7 @@ export function WorkspaceDocumentTaskDetail({
         invoiceApproval,
         invoiceReviewQuery.data,
         purchaseApproval,
+        purchaseSourceComparisonModel,
         receiptApproval,
         salesApproval,
         salesSubmission,
@@ -1251,6 +1288,8 @@ export function WorkspaceDocumentTaskDetail({
                                                         .extra_sections,
                                                 extraCostSummary:
                                                     submission.extra_cost_summary,
+                                                precomputedModel:
+                                                    purchaseSourceComparisonModel,
                                                 target: sourceComparisonTarget,
                                                 onTargetChange:
                                                     setSourceComparisonTarget,
@@ -1722,6 +1761,7 @@ export function WorkspaceDocumentTaskDetail({
                         instanceId={instanceId}
                         item={item}
                         materials={materials}
+                        sourceComparison={purchaseSourceComparisonModel}
                         riskReasons={purchaseRiskReasons}
                         onPreview={setPaper}
                         onSelectFile={
