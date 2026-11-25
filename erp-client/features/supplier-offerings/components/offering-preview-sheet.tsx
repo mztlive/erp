@@ -3,15 +3,14 @@ import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 
 import Link from "next/link"
 import { ArrowUpRightIcon } from "lucide-react"
-import { QuickPreviewSheet } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { hasPermission } from "@/lib/permissions"
 import { OfferingTerms } from "./offering-terms"
 import { OfferingAvailability, OfferingLinks } from "./offering-context"
 import { offeringDetailHref } from "../lib/detail"
-import { statusVariant } from "../lib/presentation"
+import { statusTone } from "../lib/presentation"
 import { OFFERING_STATUS_LABELS, type SupplierOfferingView } from "../types"
 
 export function OfferingPreviewSheet({
@@ -62,9 +61,11 @@ export function OfferingPreviewSheet({
             summary={
                 offering ? (
                     <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={statusVariant(offering.status)}>
-                            {OFFERING_STATUS_LABELS[offering.status]}
-                        </Badge>
+                        <BusinessStatusBadge
+                            context="preview"
+                            tone={statusTone(offering.status)}
+                            label={OFFERING_STATUS_LABELS[offering.status]}
+                        />
                         <span className="text-xs text-muted-foreground">
                             条款 v{offering.current_revision_no ?? "—"}
                         </span>

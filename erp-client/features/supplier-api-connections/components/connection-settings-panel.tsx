@@ -249,7 +249,7 @@ export function ConnectionSettingsPanel({
                         ? "允许向供应商发送新的采购订单。"
                         : "已暂停向供应商发送新的采购订单。"}
                 </p>
-                <p className="text-body-compact leading-6 text-muted-foreground">
+                <p className="text-body-compact text-muted-foreground">
                     开启前自动验证连接，采购审批与执行条件仍须满足。
                     关闭不影响商品同步、选品、原请求查询、取消处理和已有订单跟踪。
                 </p>
@@ -350,7 +350,7 @@ export function ConnectionSettingsPanel({
                 width="form"
             >
                 {conn.deploymentMessage && canCreateOrders ? (
-                    <p className="text-body-compact leading-6 text-muted-foreground">
+                    <p className="text-body-compact text-muted-foreground">
                         {conn.deploymentMessage}
                     </p>
                 ) : null}

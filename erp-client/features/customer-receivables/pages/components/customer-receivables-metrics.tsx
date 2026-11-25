@@ -107,16 +107,17 @@ export function CustomerReceivablesMetrics({
                         value={
                             <span
                                 id={`customer-receivables-metrics-${item.id}`}
+                                className={
+                                    item.tone === "destructive"
+                                        ? "text-destructive"
+                                        : undefined
+                                }
                             >
                                 <MoneyValue
                                     display="compact"
                                     showHint={false}
                                     value={item.value}
-                                    className={
-                                        item.tone === "destructive"
-                                            ? "text-destructive"
-                                            : undefined
-                                    }
+                                    inheritColor={item.tone === "destructive"}
                                     unavailableReason={
                                         item.value === null
                                             ? "未取得完整统计，请刷新或检查数据范围"

@@ -14,8 +14,8 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import {
+    DetailInlineTable,
     DetailWorkspaceSection,
-    detailWorkspaceStyles,
     MoneyValue,
 } from "@/components/business"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -103,10 +103,7 @@ export function ItemsSection({
 
     return (
         <DetailWorkspaceSection title="商品明细" width="full">
-            <div
-                data-slot="detail-inline-table"
-                className={detailWorkspaceStyles.dataTableWrapper}
-            >
+            <DetailInlineTable frame="scroll">
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -183,7 +180,7 @@ export function ItemsSection({
                         </TableFooter>
                     ) : null}
                 </Table>
-            </div>
+            </DetailInlineTable>
         </DetailWorkspaceSection>
     )
 }

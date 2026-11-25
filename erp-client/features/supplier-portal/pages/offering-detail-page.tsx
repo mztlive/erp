@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useAppForm } from "@/components/form"
 import {
+    DetailFormGrid,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
     DetailWorkspaceMetricItem,
@@ -290,66 +291,71 @@ export function PortalOfferingDetailPage({
                 {canMaintain && (
                     <DetailWorkspaceSection title="申请停止供应" width="form">
                         <form
-                            data-slot="detail-form-grid"
-                            className="flex flex-col gap-3"
                             onSubmit={(event) => {
                                 event.preventDefault()
                                 void form.handleSubmit()
                             }}
                         >
-                            <p className="text-xs text-muted-foreground">
-                                采购确认后停止关系。当前临时缺货请在可供情况中单独报送。
-                            </p>
-                            <PortalError error={error} />
-                            <PortalCommandConflict
-                                error={error}
-                                id="supplier-portal-stop-create-recheck-conflict"
-                                currentSummary={
-                                    query.data
-                                        ? `当前供给：${offeringName(query.data)}；${relationLabels[query.data.status] ?? "待核对"}。请核对停止供应原因。`
-                                        : undefined
-                                }
-                                disabled={mutation.isPending}
-                                onRecheck={async () => {
-                                    const result = await query.refetch()
-                                    if (!result.data || result.isError)
-                                        throw (
-                                            result.error ??
-                                            new Error(
-                                                "供给资料暂不可用，请重新读取",
+                            <DetailFormGrid
+                                layout="stack"
+                                className="flex flex-col gap-3"
+                            >
+                                <p className="text-xs text-muted-foreground">
+                                    采购确认后停止关系。当前临时缺货请在可供情况中单独报送。
+                                </p>
+                                <PortalError error={error} />
+                                <PortalCommandConflict
+                                    error={error}
+                                    id="supplier-portal-stop-create-recheck-conflict"
+                                    currentSummary={
+                                        query.data
+                                            ? `当前供给：${offeringName(query.data)}；${relationLabels[query.data.status] ?? "待核对"}。请核对停止供应原因。`
+                                            : undefined
+                                    }
+                                    disabled={mutation.isPending}
+                                    onRecheck={async () => {
+                                        const result = await query.refetch()
+                                        if (!result.data || result.isError)
+                                            throw (
+                                                result.error ??
+                                                new Error(
+                                                    "供给资料暂不可用，请重新读取",
+                                                )
                                             )
-                                        )
-                                }}
-                                onConfirmed={() => {
-                                    intent.current = null
-                                    setError(null)
-                                }}
-                            />
-                            <form.AppField name="reason">
-                                {(field) => (
-                                    <field.TextareaField
-                                        id="supplier-portal-stop-reason"
-                                        label="停止供应原因"
-                                        required
+                                    }}
+                                    onConfirmed={() => {
+                                        intent.current = null
+                                        setError(null)
+                                    }}
+                                />
+                                <form.AppField name="reason">
+                                    {(field) => (
+                                        <field.TextareaField
+                                            id="supplier-portal-stop-reason"
+                                            label="停止供应原因"
+                                            required
+                                            disabled={
+                                                !writable ||
+                                                mutation.isPending ||
+                                                !!intent.current
+                                            }
+                                        />
+                                    )}
+                                </form.AppField>
+                                <form.AppForm>
+                                    <form.SubmitButton
+                                        id="supplier-portal-stop-save"
+                                        label={
+                                            intent.current
+                                                ? "重试原停止申请"
+                                                : "保存停止供应草稿"
+                                        }
                                         disabled={
-                                            !writable ||
-                                            mutation.isPending ||
-                                            !!intent.current
+                                            !writable || mutation.isPending
                                         }
                                     />
-                                )}
-                            </form.AppField>
-                            <form.AppForm>
-                                <form.SubmitButton
-                                    id="supplier-portal-stop-save"
-                                    label={
-                                        intent.current
-                                            ? "重试原停止申请"
-                                            : "保存停止供应草稿"
-                                    }
-                                    disabled={!writable || mutation.isPending}
-                                />
-                            </form.AppForm>
+                                </form.AppForm>
+                            </DetailFormGrid>
                         </form>
                     </DetailWorkspaceSection>
                 )}

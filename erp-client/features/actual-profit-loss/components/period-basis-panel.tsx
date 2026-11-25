@@ -1,7 +1,7 @@
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Label } from "@/components/ui/label"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { OptionCombobox } from "@/components/business"
 import type { ProfitLossPeriodBasisConfig } from "@/features/actual-profit-loss/types"
 import type { ProfitLossUrlPatch } from "@/features/actual-profit-loss/hooks/use-actual-profit-loss-page"
@@ -146,9 +146,9 @@ export function PeriodBasisPanel({
                     />
                 </div>
                 {periodBasisValid ? (
-                    <Badge variant="secondary">口径已选择</Badge>
+                    <StatusBadge tone="success" label="口径已选择" />
                 ) : (
-                    <Badge variant="secondary">选择口径后查看结果</Badge>
+                    <StatusBadge tone="neutral" label="选择口径后查看结果" />
                 )}
             </CardContent>
         </Card>

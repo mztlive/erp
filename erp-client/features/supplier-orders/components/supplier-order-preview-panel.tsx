@@ -149,7 +149,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                                 aria-label="异常说明"
                             >
                                 <SectionTitle>异常 / 下一步</SectionTitle>
-                                <p className="text-xs leading-relaxed text-muted-foreground">
+                                <p className="text-xs text-muted-foreground">
                                     {seedError(order)}
                                 </p>
                                 {order.actionBlockers.length > 0 ? (
@@ -194,20 +194,18 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                                             {codeVersion(item.supplyVersion)}
                                         </span>
                                         {item.unitCostGross != null ? (
-                                            <MoneyValue
-                                                display="exact"
-                                                value={item.unitCostGross}
-                                                taxBasis="gross"
-                                                className="text-xs"
-                                            />
+                                            <span className="text-xs">
+                                                <MoneyValue
+                                                    display="exact"
+                                                    value={item.unitCostGross}
+                                                    taxBasis="gross"
+                                                />
+                                            </span>
                                         ) : (
                                             <span>成本 •••</span>
                                         )}
                                     </div>
-                                    <Badge
-                                        variant="secondary"
-                                        className="mt-1 text-xs"
-                                    >
+                                    <Badge variant="secondary" className="mt-1">
                                         下单记录不可变
                                     </Badge>
                                 </li>

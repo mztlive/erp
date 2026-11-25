@@ -166,11 +166,7 @@ export function RechargePaymentDialog({
                     ) : null}
                     <span aria-hidden="true">·</span>
                     <span className="inline-flex items-baseline gap-1">
-                        <MoneyValue
-                            value={request.amount}
-                            display="exact"
-                            className="font-semibold text-foreground"
-                        />
+                        <MoneyValue value={request.amount} display="exact" />
                         {amountReadout ? (
                             <span>（{amountReadout}）</span>
                         ) : null}
@@ -208,7 +204,6 @@ export function RechargePaymentDialog({
                                     <MoneyValue
                                         value={request.amount}
                                         display="exact"
-                                        className="font-semibold"
                                     />
                                     {amountReadout ? (
                                         <div className="text-xs text-muted-foreground">

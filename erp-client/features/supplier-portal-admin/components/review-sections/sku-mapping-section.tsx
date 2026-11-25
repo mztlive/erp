@@ -616,17 +616,18 @@ export const SkuMappingSection = withForm({
                                             ) : null}
                                             {isBatchAppliedActive &&
                                             batchRecord ? (
-                                                <Badge
-                                                    variant={
+                                                <StatusBadge
+                                                    tone={
                                                         batchRecord.overwritten
                                                             ? "warning"
                                                             : "info"
                                                     }
-                                                >
-                                                    {batchRecord.overwritten
-                                                        ? `批量覆盖：${batchRecord.unitName}`
-                                                        : `批量默认：${batchRecord.unitName}`}
-                                                </Badge>
+                                                    label={
+                                                        batchRecord.overwritten
+                                                            ? `批量覆盖：${batchRecord.unitName}`
+                                                            : `批量默认：${batchRecord.unitName}`
+                                                    }
+                                                />
                                             ) : null}
                                             {isManuallyOverridden ? (
                                                 <Badge variant="outline">

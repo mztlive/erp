@@ -274,7 +274,7 @@ export function useSupplierOrdersListColumns({
                             resultUnknown &&
                             !canQuery &&
                             queryBlocker ? (
-                                <span className="max-w-36 text-xs leading-4 whitespace-normal text-muted-foreground">
+                                <span className="max-w-36 text-xs whitespace-normal text-muted-foreground">
                                     {queryBlocker.message}
                                     {canOpenIntegrationErrors &&
                                     queryBlocker.destinationWorkspaceId ? (

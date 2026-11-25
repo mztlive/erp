@@ -125,7 +125,7 @@ export function SupplierPaymentSubmitConfirmDialog({
                                                 />
                                             </span>
                                         </div>
-                                        <p className="text-body-compact leading-relaxed text-muted-foreground">
+                                        <p className="text-body-compact text-muted-foreground">
                                             {result.outcome}
                                         </p>
                                     </div>
@@ -134,7 +134,7 @@ export function SupplierPaymentSubmitConfirmDialog({
                         </section>
                     ) : null}
 
-                    <p className="flex items-start gap-2 border-t border-border pt-4 text-xs leading-relaxed text-muted-foreground">
+                    <p className="flex items-start gap-2 border-t border-border pt-4 text-xs text-muted-foreground">
                         <TriangleAlertIcon
                             aria-hidden="true"
                             className="mt-0.5 size-3.5 shrink-0 text-warning"

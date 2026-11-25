@@ -6,7 +6,6 @@ import {
     TableIdentityCell,
     TableRowActions,
     TableTextCell,
-    taxAmountToneClass,
 } from "@/components/business"
 import type { SalesInvoiceRow } from "@/features/customer-receivables/types"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -90,11 +89,7 @@ export function createInvoiceColumns(
                 numeric: true,
             },
             cell: ({ row }) => (
-                <MoneyValue
-                    value={row.original.grossAmount}
-                    display="exact"
-                    className={taxAmountToneClass("含税金额")}
-                />
+                <MoneyValue value={row.original.grossAmount} display="exact" />
             ),
         },
         {

@@ -2,19 +2,15 @@
 
 import { useEffect, useRef } from "react"
 import Link from "next/link"
-import {
-    ArrowUpRightIcon,
-    ChevronDownIcon,
-    ChevronRightIcon,
-    CircleAlertIcon,
-} from "lucide-react"
+import { ArrowUpRightIcon, ChevronDownIcon } from "lucide-react"
 
 import {
+    TaskRiskSummaryBar,
     WorkspaceFactGrid,
     WorkspaceFactGroup,
     WorkspaceFactItem,
+    WorkspaceTaskFooter,
 } from "@/components/business"
-import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import { Button } from "@/components/ui/button"
 import {
     DropdownMenu,
@@ -32,7 +28,6 @@ import {
     type SettlementDifferenceView,
 } from "@/features/supplier-settlements/types"
 import { formatDateTime } from "@/lib/datetime"
-import { cn } from "@/lib/utils"
 import { subscribeWorkspaceHotkeyAction } from "@/lib/workspace-hotkeys"
 
 import { SettlementCenterAudit } from "./settlement-center-audit"
@@ -352,53 +347,34 @@ export function SettlementReviewWorkspace({
 
     return (
         <div className="min-w-0 space-y-3 bg-card py-3">
-            {unresolved > 0 && (
-                <section
-                    aria-label="未处理差异"
-                    className={cn(
-                        "flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-r-md border-l-2 px-3 py-1.5 text-body-compact",
-                        rows.disputed > 0
-                            ? "border-l-destructive bg-destructive-soft text-destructive-soft-foreground"
-                            : "border-l-warning bg-warning-soft text-warning-soft-foreground",
-                    )}
-                >
-                    <p
-                        className="flex min-w-0 items-center gap-1.5"
-                        aria-live="polite"
-                    >
-                        <CircleAlertIcon
-                            className="size-4 shrink-0"
-                            aria-hidden="true"
-                        />
-                        <span>
-                            <span className="num font-semibold">
-                                {unresolved}
-                            </span>{" "}
-                            项差异待处理
-                            {rows.disputed > 0 && (
-                                <span>
-                                    ，其中{" "}
-                                    <span className="num">{rows.disputed}</span>{" "}
-                                    项阻塞复核
-                                </span>
-                            )}
-                        </span>
-                    </p>
-                    <Button
-                        id={`${idPrefix}-only-differences`}
-                        variant="ghost"
-                        size="xs"
-                        className="shrink-0 text-current"
-                        onClick={locateDifferences}
-                    >
-                        仅看差异项<span className="num">（{unresolved}）</span>
-                        <ChevronRightIcon
-                            data-icon="inline-end"
-                            aria-hidden="true"
-                        />
-                    </Button>
-                </section>
-            )}
+            <TaskRiskSummaryBar
+                riskCount={unresolved}
+                severity={rows.disputed > 0 ? "destructive" : "warning"}
+                leadLabel={null}
+                aria-label="未处理差异"
+                summary={
+                    <>
+                        <span className="num font-semibold">{unresolved}</span>{" "}
+                        项差异待处理
+                        {rows.disputed > 0 && (
+                            <span>
+                                ，其中{" "}
+                                <span className="num">{rows.disputed}</span>{" "}
+                                项阻塞复核
+                            </span>
+                        )}
+                    </>
+                }
+                actions={[
+                    {
+                        id: "only-differences",
+                        buttonId: `${idPrefix}-only-differences`,
+                        label: "仅看差异项",
+                        count: unresolved,
+                        onClick: locateDifferences,
+                    },
+                ]}
+            />
             <SettlementReviewMetrics
                 detail={detail}
                 idPrefix={idPrefix}

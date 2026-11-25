@@ -1,10 +1,11 @@
+import type { StatusTone } from "@/components/ui/status-badge"
 import type { OfferingStatus } from "@/features/supplier-offerings/types"
 
-/** 返回关系状态对应的徽标样式。 */
-export const statusVariant = (status: OfferingStatus) => {
-    if (status === "ACTIVE") return "success" as const
-    if (status === "STOPPED") return "destructive" as const
-    return "secondary" as const
+/** 返回关系状态对应的语义色。 */
+export const statusTone = (status: OfferingStatus): StatusTone => {
+    if (status === "ACTIVE") return "success"
+    if (status === "STOPPED") return "destructive"
+    return "neutral"
 }
 
 /** 格式化可选金额。 */

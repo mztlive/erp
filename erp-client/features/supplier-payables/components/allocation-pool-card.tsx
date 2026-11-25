@@ -169,8 +169,6 @@ export function AllocationPoolCard({
                                         </Label>
                                         <MoneyInput
                                             id={`supplier-payables-allocation-pool-row-${toAutomationIdSegment(item.payableAccountId)}-amount`}
-                                            className="num h-control min-h-0"
-                                            inputMode="decimal"
                                             value={
                                                 amounts[
                                                     item.payableAccountId

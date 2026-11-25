@@ -94,7 +94,7 @@ export function useConnectionListColumns(
                         <TableTextCell
                             value={row.original.nextStep}
                             clamp={2}
-                            className="max-w-table-column-status text-xs leading-4 whitespace-normal text-muted-foreground"
+                            className="max-w-table-column-status text-xs whitespace-normal text-muted-foreground"
                         />
                     </div>
                 ),

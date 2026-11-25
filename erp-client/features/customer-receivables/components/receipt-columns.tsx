@@ -66,11 +66,7 @@ export function createReceiptColumns(
                 numeric: true,
             },
             cell: ({ row }) => (
-                <MoneyValue
-                    display="exact"
-                    value={row.original.amount}
-                    className="font-semibold"
-                />
+                <MoneyValue display="exact" value={row.original.amount} />
             ),
         },
         {

@@ -367,7 +367,7 @@ function PaymentReversalHistory({ row }: { row: PaymentRow }) {
                     {row.relatedReversals.map((reversal) => (
                         <li
                             key={reversal.reversalId}
-                            className="rounded-xl border px-3 py-2 text-body-compact"
+                            className="rounded-lg border px-3 py-2 text-body-compact"
                         >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                                 <span className="flex flex-wrap items-center gap-2">
@@ -569,7 +569,7 @@ function AllocationLineItem({
         allocation.sourceHref ??
         sourceDocumentHref(allocation.sourceType, allocation.sourceDocumentId)
     return (
-        <li className="rounded-xl border px-3 py-2 text-body-compact">
+        <li className="rounded-lg border px-3 py-2 text-body-compact">
             <div className="flex justify-between gap-2">
                 <span>
                     {

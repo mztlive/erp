@@ -1,10 +1,7 @@
 /** 开票附件与登记命令使用同一请求提交。 */
 
 import { apiPost, apiPostForm, createApiError } from "@/lib/api"
-import {
-    invoiceFileReference,
-    invoiceFilesError,
-} from "@/features/customer-receivables/lib/invoice-files"
+import { invoiceFileReference, invoiceFilesError } from "@/lib/invoice-files"
 import type { BackendInvoice } from "./dto"
 
 /** 有新增附件时上传文件；无附件时沿用 JSON 登记合同。 */

@@ -223,7 +223,6 @@ export function SalesOrderLinesImportDialog({
                                         <MoneyValue
                                             value={selectedTotal}
                                             display="exact"
-                                            className="font-semibold"
                                         />
                                     </span>
                                 ) : null}
@@ -237,7 +236,6 @@ export function SalesOrderLinesImportDialog({
                                         <MoneyValue
                                             value={availableAmount}
                                             display="exact"
-                                            className="inline font-medium"
                                         />
                                         ），带入后请调减本次开票数量或单价。
                                     </AlertDescription>

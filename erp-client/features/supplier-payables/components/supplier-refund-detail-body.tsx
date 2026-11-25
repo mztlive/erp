@@ -60,7 +60,7 @@ export function SupplierRefundDetailBody({
                 )}
             </PreviewSection>
             <PreviewSection title="原因说明">
-                <p className="leading-6">{row.reasonText || "未填写原因"}</p>
+                <p>{row.reasonText || "未填写原因"}</p>
                 <PreviewNote>
                     {row.settlementMethod === "SUPPLIER_CREDIT"
                         ? "登记时间："

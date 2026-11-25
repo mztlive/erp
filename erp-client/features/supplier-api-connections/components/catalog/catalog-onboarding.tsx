@@ -55,7 +55,7 @@ export function CatalogOnboarding({
                             <p className="text-body-compact font-medium">
                                 {item.title}
                             </p>
-                            <p className="text-xs leading-relaxed text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                                 {item.description}
                             </p>
                         </div>

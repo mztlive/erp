@@ -145,7 +145,7 @@ export function BatchCategoryMappings({
                             onChange={(event) =>
                                 list.refresh(event.target.value)
                             }
-                            className="h-8 min-w-32 max-w-64 flex-1"
+                            className="min-w-32 max-w-64 flex-1"
                         />
                         <div
                             className="ml-auto flex items-center gap-0.5"
@@ -424,7 +424,7 @@ export function BatchCategoryMappings({
                                                 />
                                             </TableCell>
                                             <TableCell className="h-12 whitespace-normal py-1.5">
-                                                <div className="wrap-anywhere leading-5">
+                                                <div className="wrap-anywhere">
                                                     {row.sourceName}
                                                 </div>
                                                 {(nameCounts.get(

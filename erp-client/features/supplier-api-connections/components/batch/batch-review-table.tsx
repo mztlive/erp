@@ -466,10 +466,7 @@ export function BatchReviewTable({
                     numeric: true,
                 },
                 cell: ({ row }) => (
-                    <MoneyValue
-                        className="font-normal"
-                        value={row.original.source.purchase_price}
-                    />
+                    <MoneyValue value={row.original.source.purchase_price} />
                 ),
             },
             {
@@ -483,7 +480,6 @@ export function BatchReviewTable({
                 cell: ({ row }) => (
                     <div>
                         <MoneyValue
-                            className="font-semibold"
                             value={row.original.sales_prices.dropship.value}
                         />
                         {row.original.sales_prices.dropship.origin ===
@@ -511,7 +507,6 @@ export function BatchReviewTable({
                 cell: ({ row }) => (
                     <div className="space-y-1">
                         <MoneyValue
-                            className="font-semibold"
                             value={row.original.sales_prices.bulk.value}
                         />
                         {row.original.sales_prices.minimum_quantity.value !==
@@ -759,7 +754,7 @@ export function BatchReviewTable({
                                                     )
                                                 }
                                                 placeholder="商品名、规格或来源 SKU 编码"
-                                                className="h-8 pl-8"
+                                                className="pl-8"
                                             />
                                         </div>
                                     </div>

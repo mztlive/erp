@@ -200,9 +200,9 @@ export function ReceiptAllocationTable({
                                                     <div className="flex items-center justify-end gap-2">
                                                         <MoneyInput
                                                             id={amountId}
-                                                            className="num h-control min-w-0 bg-background text-right font-semibold"
+                                                            align="end"
+                                                            className="min-w-0 bg-background font-semibold"
                                                             placeholder="填写金额"
-                                                            inputMode="decimal"
                                                             aria-label={`${line.label} 本次核销金额`}
                                                             aria-invalid={
                                                                 rowIssues.length >

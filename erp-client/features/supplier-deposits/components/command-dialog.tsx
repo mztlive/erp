@@ -535,7 +535,6 @@ export function DepositCommandDialog({
                                 <MoneyValue
                                     value={request.amount}
                                     display="exact"
-                                    className="font-semibold text-foreground"
                                 />
                                 {requestReadout ? (
                                     <span>（{requestReadout}）</span>
@@ -562,7 +561,6 @@ export function DepositCommandDialog({
                         <MoneyValue
                             value={account.account.book_balance}
                             display="exact"
-                            className="font-semibold text-foreground"
                         />
                         {describeMoney(account.account.book_balance)
                             ?.readout ? (
@@ -651,7 +649,6 @@ export function DepositCommandDialog({
                                                 <MoneyValue
                                                     value={request.amount}
                                                     display="exact"
-                                                    className="font-semibold"
                                                 />
                                                 {requestReadout ? (
                                                     <div className="text-xs text-muted-foreground">
@@ -694,7 +691,6 @@ export function DepositCommandDialog({
                                                         <MoneyValue
                                                             value={rawVal}
                                                             display="exact"
-                                                            className="font-semibold"
                                                         />
                                                         {readout ? (
                                                             <div className="text-xs text-muted-foreground">
@@ -951,15 +947,21 @@ export function DepositCommandDialog({
                                     </AlertTitle>
                                     <AlertDescription className="flex flex-wrap items-baseline gap-2">
                                         <span>供应商余额 − 本地账面余额 =</span>
-                                        <MoneyValue
-                                            value={liveReconcileDiff}
-                                            display="exact"
+                                        <span
                                             className={
                                                 liveReconcileDiffSign !== 0
-                                                    ? "font-semibold text-destructive"
-                                                    : "font-semibold"
+                                                    ? "text-destructive"
+                                                    : undefined
                                             }
-                                        />
+                                        >
+                                            <MoneyValue
+                                                value={liveReconcileDiff}
+                                                display="exact"
+                                                inheritColor={
+                                                    liveReconcileDiffSign !== 0
+                                                }
+                                            />
+                                        </span>
                                         {describeMoney(liveReconcileDiff)
                                             ?.readout ? (
                                             <span className="text-xs text-muted-foreground">

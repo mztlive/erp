@@ -390,7 +390,7 @@ export function PortalNewProductEditor({
             className={
                 inDetailWorkspace
                     ? "flex flex-col gap-6"
-                    : "space-y-6 rounded-xl border bg-card p-5"
+                    : "space-y-6 rounded-lg border bg-card p-5"
             }
             data-slot={inDetailWorkspace ? "detail-form-grid" : undefined}
             onSubmit={(event) => {

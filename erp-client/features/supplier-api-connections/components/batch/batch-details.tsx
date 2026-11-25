@@ -1,6 +1,7 @@
 "use client"
 
 import type * as React from "react"
+import { DetailFormGrid } from "@/components/business"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -59,9 +60,9 @@ export function BatchDetailsPanel({
                 >
                     供给条件
                 </h2>
-                <div
-                    data-slot="detail-form-grid"
-                    className="grid min-w-0 gap-5 md:grid-cols-2 xl:grid-cols-1"
+                <DetailFormGrid
+                    layout="stack"
+                    className="grid gap-5 md:grid-cols-2 xl:grid-cols-1"
                 >
                     <div className="space-y-4">
                         <form.AppField name="inputTaxPercentage">
@@ -192,7 +193,7 @@ export function BatchDetailsPanel({
                             />
                         )}
                     </form.AppField>
-                </div>
+                </DetailFormGrid>
             </section>
         </div>
     )

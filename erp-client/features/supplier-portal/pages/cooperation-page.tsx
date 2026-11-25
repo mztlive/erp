@@ -63,7 +63,7 @@ export function PortalCooperationPage() {
             />
             {query.data && (
                 <>
-                    <div className="grid gap-3 rounded-xl border p-5 text-body-compact md:grid-cols-2">
+                    <div className="grid gap-3 rounded-lg border p-5 text-body-compact md:grid-cols-2">
                         <p>供应商：{query.data.supplier_name}</p>
                         <p>
                             当前付款条件：
@@ -200,7 +200,7 @@ export function PortalCooperationEditor({
             className={
                 draft
                     ? "flex flex-col gap-4"
-                    : "space-y-4 rounded-xl border p-5"
+                    : "space-y-4 rounded-lg border p-5"
             }
             data-slot={draft ? "detail-form-grid" : undefined}
             onSubmit={(event) => {

@@ -114,10 +114,11 @@ export function BatchReviewTable({
                             <Input
                                 ref={searchInputRef}
                                 id={`${idPrefix}-search`}
+                                size="sm"
                                 type="text"
                                 aria-label="搜索导入行"
                                 placeholder="搜索来源行、数据类型或问题"
-                                className="h-control-sm w-full min-w-0 pr-7 pl-8 text-xs"
+                                className="w-full min-w-0 pr-7 pl-8"
                                 value={search}
                                 onChange={(event) =>
                                     onSearch(event.target.value)

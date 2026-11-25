@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react"
 import { z } from "zod"
+import { DetailFormGrid } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { commandFailureDisposition } from "@/lib/api/command-recovery"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -72,101 +73,104 @@ export function PortalStopForm({ draft }: { draft: PortalApplication }) {
     const locked = !editable || mutation.isPending || intent.current !== null
     return (
         <form
-            className="flex flex-col gap-4"
-            data-slot="detail-form-grid"
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()
             }}
         >
-            <h2 className="text-section-title font-semibold tracking-tight">
-                停止供应申请原因
-            </h2>
-            <p className="text-xs text-muted-foreground">
-                保存草稿后，再提交采购确认。采购确认之前当前供给关系保持原状态；已生效的历史采购单继续按原条件处理。
-            </p>
-            <PortalError error={error} />
-            <PortalCommandConflict
-                error={error}
-                id={`${prefix}-recheck-conflict`}
-                currentSummary={
-                    offering.data
-                        ? `当前供给：${offering.data.name ?? offering.data.sku_name ?? "商品规格"}；${relationLabels[offering.data.status] ?? "待核对"}。请核对停止供应原因。`
-                        : undefined
-                }
-                disabled={mutation.isPending}
-                onRecheck={async () => {
-                    const [current, target] = await Promise.all([
-                        application.refetch(),
-                        offering.refetch(),
-                    ])
-                    if (!current.data || current.isError)
-                        throw (
-                            current.error ??
-                            new Error("申请暂不可用，请重新读取")
-                        )
-                    if (
-                        !["draft", "returned", "withdrawn"].includes(
-                            current.data.status,
-                        )
-                    )
-                        throw new Error(
-                            "申请当前状态不能修改，请返回申请页核对",
-                        )
-                    if (!target.data || target.isError)
-                        throw (
-                            target.error ??
-                            new Error("供给资料暂不可用，请重新读取")
-                        )
-                    setDraftVersion(current.data.version)
-                    setSnapshot({
-                        ...snapshot,
-                        expected_offering_version: target.data.version,
-                        expected_revision_no: target.data.current_revision_no,
-                    })
-                }}
-                onConfirmed={() => {
-                    intent.current = null
-                    setError(null)
-                }}
-            />
-            {intent.current && (
-                <p role="status" className="text-xs text-muted-foreground">
-                    上次保存结果尚未确认，原因已锁定。请重试原保存，确认后再修改。
-                </p>
-            )}
-            {saved && (
-                <p role="status" className="text-body-compact text-success">
-                    停止供应草稿已保存，待提交采购确认。
-                </p>
-            )}
-            <form.AppField name="reason">
-                {(field) => (
-                    <field.TextareaField
-                        id={`${prefix}-reason`}
-                        label="停止供应原因"
-                        required
-                        rows={3}
-                        disabled={locked}
-                    />
-                )}
-            </form.AppField>
-            <form.AppForm>
-                <form.SubmitButton
-                    id={`${prefix}-save`}
-                    label={
-                        intent.current ? "重试保存原内容" : "保存停止供应草稿"
-                    }
-                    disabled={!editable || mutation.isPending}
-                />
-            </form.AppForm>
-            {!editable && (
+            <DetailFormGrid layout="stack" className="flex flex-col gap-4">
+                <h2 className="text-section-title font-semibold tracking-tight">
+                    停止供应申请原因
+                </h2>
                 <p className="text-xs text-muted-foreground">
-                    {profile?.role === "read_only"
-                        ? "当前账号仅可查看，业务经办人可以编辑停止供应申请。"
-                        : "本申请当前状态不能修改原因。"}
+                    保存草稿后，再提交采购确认。采购确认之前当前供给关系保持原状态；已生效的历史采购单继续按原条件处理。
                 </p>
-            )}
+                <PortalError error={error} />
+                <PortalCommandConflict
+                    error={error}
+                    id={`${prefix}-recheck-conflict`}
+                    currentSummary={
+                        offering.data
+                            ? `当前供给：${offering.data.name ?? offering.data.sku_name ?? "商品规格"}；${relationLabels[offering.data.status] ?? "待核对"}。请核对停止供应原因。`
+                            : undefined
+                    }
+                    disabled={mutation.isPending}
+                    onRecheck={async () => {
+                        const [current, target] = await Promise.all([
+                            application.refetch(),
+                            offering.refetch(),
+                        ])
+                        if (!current.data || current.isError)
+                            throw (
+                                current.error ??
+                                new Error("申请暂不可用，请重新读取")
+                            )
+                        if (
+                            !["draft", "returned", "withdrawn"].includes(
+                                current.data.status,
+                            )
+                        )
+                            throw new Error(
+                                "申请当前状态不能修改，请返回申请页核对",
+                            )
+                        if (!target.data || target.isError)
+                            throw (
+                                target.error ??
+                                new Error("供给资料暂不可用，请重新读取")
+                            )
+                        setDraftVersion(current.data.version)
+                        setSnapshot({
+                            ...snapshot,
+                            expected_offering_version: target.data.version,
+                            expected_revision_no:
+                                target.data.current_revision_no,
+                        })
+                    }}
+                    onConfirmed={() => {
+                        intent.current = null
+                        setError(null)
+                    }}
+                />
+                {intent.current && (
+                    <p role="status" className="text-xs text-muted-foreground">
+                        上次保存结果尚未确认，原因已锁定。请重试原保存，确认后再修改。
+                    </p>
+                )}
+                {saved && (
+                    <p role="status" className="text-body-compact text-success">
+                        停止供应草稿已保存，待提交采购确认。
+                    </p>
+                )}
+                <form.AppField name="reason">
+                    {(field) => (
+                        <field.TextareaField
+                            id={`${prefix}-reason`}
+                            label="停止供应原因"
+                            required
+                            rows={3}
+                            disabled={locked}
+                        />
+                    )}
+                </form.AppField>
+                <form.AppForm>
+                    <form.SubmitButton
+                        id={`${prefix}-save`}
+                        label={
+                            intent.current
+                                ? "重试保存原内容"
+                                : "保存停止供应草稿"
+                        }
+                        disabled={!editable || mutation.isPending}
+                    />
+                </form.AppForm>
+                {!editable && (
+                    <p className="text-xs text-muted-foreground">
+                        {profile?.role === "read_only"
+                            ? "当前账号仅可查看，业务经办人可以编辑停止供应申请。"
+                            : "本申请当前状态不能修改原因。"}
+                    </p>
+                )}
+            </DetailFormGrid>
         </form>
     )
 }

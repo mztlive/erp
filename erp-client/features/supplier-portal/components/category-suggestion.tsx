@@ -1,9 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { usePortalCategorySuggestion } from "../hooks/queries"
 import type { PortalDictionary } from "../types"
@@ -143,9 +143,12 @@ function CategorySuggestionLookup({
                 )}
             {suggestion && (
                 <div className="space-y-3">
-                    <Badge variant={requiresRecheck ? "warning" : "info"}>
-                        {requiresRecheck ? "需重新核对" : "待人工确认采用"}
-                    </Badge>
+                    <StatusBadge
+                        tone={requiresRecheck ? "warning" : "info"}
+                        label={
+                            requiresRecheck ? "需重新核对" : "待人工确认采用"
+                        }
+                    />
                     <dl className="grid gap-x-4 gap-y-2 text-body-compact sm:grid-cols-[auto_1fr]">
                         <dt className="text-muted-foreground">原始分类路径</dt>
                         <dd className="min-w-0 break-words">

@@ -32,7 +32,7 @@ export function BatchCommonSettings({ editor }: { editor: BatchEditor }) {
               ]
     return (
         <section
-            className="space-y-3 rounded-xl border bg-muted/20 p-4"
+            className="space-y-3 rounded-lg border bg-muted/20 p-4"
             aria-label="公共设置"
         >
             <div className="flex flex-wrap items-baseline gap-2">

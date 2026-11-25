@@ -5,18 +5,12 @@ import { ShieldAlertIcon } from "lucide-react"
 
 import {
     BusinessEmptyState,
-    MetricItem,
-    MetricStrip,
-    PageScaffold,
-} from "@/components/business"
-import {
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
     ListDataTable,
-    ListWorkSurface,
-    ListWorkspaceHeader,
-    ListWorkspaceViews,
+    ListWorkspacePage,
     listWorkspaceEmptyStateClassName,
-    listWorkspaceStyles,
-} from "@/components/business/list-workspace"
+} from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { BatchListToolbar } from "@/features/import-opening/components/batch-list-toolbar"
@@ -95,28 +89,24 @@ export function BatchListView({
     const isProduction = urlState.environment === "PRODUCTION"
 
     return (
-        <PageScaffold density="compact" className={listWorkspaceStyles.page}>
-            <ListWorkspaceHeader
-                title="导入与期初"
-                views={
-                    <ListWorkspaceViews
-                        ariaLabel="导入环境"
-                        variant="inline"
-                        items={ENVIRONMENT_VIEWS.map((item) => ({
-                            id: item.id,
-                            label: item.label,
-                            active: item.value === urlState.environment,
-                            onClick: () =>
-                                patchUrl({
-                                    environment: item.value,
-                                    page: 1,
-                                    batchId: undefined,
-                                }),
-                        }))}
-                    />
-                }
-            >
-                {!listLoadFailed && data?.queriedAt ? (
+        <ListWorkspacePage
+            title="导入与期初"
+            views={{
+                ariaLabel: "导入环境",
+                items: ENVIRONMENT_VIEWS.map((item) => ({
+                    id: item.id,
+                    label: item.label,
+                    active: item.value === urlState.environment,
+                    onClick: () =>
+                        patchUrl({
+                            environment: item.value,
+                            page: 1,
+                            batchId: undefined,
+                        }),
+                })),
+            }}
+            headerActions={
+                !listLoadFailed && data?.queriedAt ? (
                     <time
                         className="num text-xs text-muted-foreground"
                         dateTime={data.queriedAt}
@@ -128,47 +118,60 @@ export function BatchListView({
                             "passthrough",
                         )}
                     </time>
-                ) : null}
-            </ListWorkspaceHeader>
-
-            <MetricStrip className="mb-4" columns={4} aria-label="导入批次指标">
-                <MetricItem
-                    label="待校验"
-                    value={data?.metrics.pendingValidate ?? "—"}
-                />
-                <MetricItem
-                    label="待业务确认"
-                    value={data?.metrics.pendingConfirm ?? "—"}
-                />
-                <MetricItem
-                    label="执行中"
-                    value={data?.metrics.applying ?? "—"}
-                />
-                <MetricItem
-                    label="失败/部分失败"
-                    value={data?.metrics.failedOrPartial ?? "—"}
-                />
-            </MetricStrip>
-
-            <Alert>
-                <ShieldAlertIcon aria-hidden="true" />
-                <AlertTitle>导入文件规范</AlertTitle>
-                <AlertDescription>
-                    请上传按标准模板整理的期初数据文件，系统将在预检通过并经各部门核对后正式导入。
-                    {isProduction ? "生产环境 · 操作需显著确认。" : null}
-                </AlertDescription>
-            </Alert>
-
-            <ListWorkSurface
-                ariaLabel="导入批次列表"
-                toolbar={
+                ) : undefined
+            }
+            alerts={
+                <>
+                    <section
+                        data-slot="list-workspace-metrics"
+                        aria-label="导入批次指标"
+                        className="-mx-(--scaffold-px) border-b border-border/60 bg-card px-(--scaffold-px)"
+                    >
+                        <DetailWorkspaceMetrics
+                            columns={4}
+                            variant="bar"
+                            ariaLabel="导入批次指标"
+                        >
+                            <DetailWorkspaceMetricItem
+                                label="待校验"
+                                value={data?.metrics.pendingValidate ?? "—"}
+                            />
+                            <DetailWorkspaceMetricItem
+                                label="待业务确认"
+                                value={data?.metrics.pendingConfirm ?? "—"}
+                            />
+                            <DetailWorkspaceMetricItem
+                                label="执行中"
+                                value={data?.metrics.applying ?? "—"}
+                            />
+                            <DetailWorkspaceMetricItem
+                                label="失败/部分失败"
+                                value={data?.metrics.failedOrPartial ?? "—"}
+                            />
+                        </DetailWorkspaceMetrics>
+                    </section>
+                    <Alert>
+                        <ShieldAlertIcon aria-hidden="true" />
+                        <AlertTitle>导入文件规范</AlertTitle>
+                        <AlertDescription>
+                            请上传按标准模板整理的期初数据文件，系统将在预检通过并经各部门核对后正式导入。
+                            {isProduction
+                                ? "生产环境 · 操作需显著确认。"
+                                : null}
+                        </AlertDescription>
+                    </Alert>
+                </>
+            }
+            surface={{
+                ariaLabel: "导入批次列表",
+                toolbar: (
                     <BatchListToolbar
                         filters={filters}
                         loading={listQuery.isFetching}
                         failed={listLoadFailed}
                     />
-                }
-                table={
+                ),
+                table: (
                     <ListDataTable
                         id={TABLE_ID}
                         entityName="导入批次"
@@ -237,8 +240,8 @@ export function BatchListView({
                             ) : undefined
                         }
                     />
-                }
-            />
-        </PageScaffold>
+                ),
+            }}
+        />
     )
 }

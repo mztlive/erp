@@ -65,11 +65,7 @@ export function createReceivableColumns(
                 numeric: true,
             },
             cell: ({ row }) => (
-                <MoneyValue
-                    display="exact"
-                    value={row.original.openTotal}
-                    className="font-semibold"
-                />
+                <MoneyValue display="exact" value={row.original.openTotal} />
             ),
         },
         {

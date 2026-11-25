@@ -625,7 +625,6 @@ function invoiceRequestColumns(
                 <MoneyValue
                     value={row.original.data?.amount || "0.00"}
                     display="exact"
-                    className="font-semibold"
                 />
             ),
         },

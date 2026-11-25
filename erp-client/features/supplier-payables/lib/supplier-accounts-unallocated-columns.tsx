@@ -64,7 +64,6 @@ export function buildUnallocatedColumns(input: {
                         value={row.original.unallocatedAmount}
                         taxBasis="gross"
                         display="exact"
-                        className="font-semibold"
                     />
                     <div className="text-xs text-muted-foreground">
                         记录{" "}

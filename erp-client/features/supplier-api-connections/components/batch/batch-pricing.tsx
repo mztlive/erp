@@ -10,6 +10,7 @@ import {
     TriangleAlertIcon,
     TruckIcon,
 } from "lucide-react"
+import { DetailFormGrid } from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Button } from "@/components/ui/button"
@@ -121,137 +122,184 @@ export function BatchPricingPanel({
         <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(320px,380px)_minmax(0,1fr)]">
             <fieldset
                 disabled={disabled}
-                data-slot="detail-form-grid"
-                className="min-w-0 space-y-5 disabled:opacity-70 xl:border-r xl:border-border/60 xl:pr-5"
+                className="min-w-0 disabled:opacity-70 xl:border-r xl:border-border/60 xl:pr-5"
                 aria-labelledby="supplier-catalog-batch-pricing-title"
             >
-                <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                        <CalculatorIcon
-                            className="size-4 text-muted-foreground"
-                            aria-hidden
-                        />
-                        <h2
-                            id="supplier-catalog-batch-pricing-title"
-                            className="text-section-title font-semibold tracking-tight"
-                        >
-                            定价规则
-                        </h2>
-                        <span className="ml-auto text-xs text-muted-foreground">
-                            含税
-                        </span>
-                    </div>
-                </div>
-                <div className="space-y-3">
-                    <h3
-                        id="supplier-catalog-batch-mode-label"
-                        className="font-medium"
-                    >
-                        定价模式
-                    </h3>
-                    <RadioGroup
-                        id="supplier-catalog-batch-mode"
-                        aria-labelledby="supplier-catalog-batch-mode-label"
-                        value={values.mode}
-                        disabled={disabled}
-                        onValueChange={(value) => {
-                            const mode = MODES.find(
-                                (option) => option.value === value,
-                            )
-                            if (mode) requestMode(mode.value)
-                        }}
-                        className="gap-2.5"
-                    >
-                        {MODES.map((mode) => (
-                            <label
-                                key={mode.value}
-                                htmlFor={`supplier-catalog-batch-mode-${mode.value.toLowerCase()}`}
-                                className="flex cursor-pointer items-center gap-2.5 text-xs"
+                <DetailFormGrid layout="stack" className="space-y-5">
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                            <CalculatorIcon
+                                className="size-4 text-muted-foreground"
+                                aria-hidden
+                            />
+                            <h2
+                                id="supplier-catalog-batch-pricing-title"
+                                className="text-section-title font-semibold tracking-tight"
                             >
-                                <RadioGroupItem
-                                    id={`supplier-catalog-batch-mode-${mode.value.toLowerCase()}`}
-                                    value={mode.value}
-                                />
-                                {mode.label}
-                            </label>
-                        ))}
-                    </RadioGroup>
-                </div>
-                {(
-                    [
-                        "dropship",
-                        ...(values.mode === "SEPARATE" ? ["bulk"] : []),
-                    ] as Array<"dropship" | "bulk">
-                ).map((name) => {
-                    const method =
-                        name === "dropship"
-                            ? values.dropshipMethod
-                            : values.bulkMethod
-                    const title =
-                        values.mode === "SAME"
-                            ? "代发价与集采价"
-                            : name === "dropship"
-                              ? "代发售价"
-                              : "集采售价"
-                    const PriceIcon =
-                        values.mode === "SAME"
-                            ? EqualIcon
-                            : name === "dropship"
-                              ? TruckIcon
-                              : PackageIcon
-                    return (
-                        <div key={name} className="space-y-3 border-t pt-4">
-                            <h3 className="flex items-center gap-2 font-semibold">
-                                <PriceIcon
-                                    className="size-4 text-muted-foreground"
-                                    aria-hidden
-                                />
-                                {title}
-                            </h3>
-                            <div className="grid min-w-0 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] items-start gap-3">
-                                <form.AppField
-                                    name={
-                                        name === "dropship"
-                                            ? "dropshipMethod"
-                                            : "bulkMethod"
-                                    }
+                                定价规则
+                            </h2>
+                            <span className="ml-auto text-xs text-muted-foreground">
+                                含税
+                            </span>
+                        </div>
+                    </div>
+                    <div className="space-y-3">
+                        <h3
+                            id="supplier-catalog-batch-mode-label"
+                            className="font-medium"
+                        >
+                            定价模式
+                        </h3>
+                        <RadioGroup
+                            id="supplier-catalog-batch-mode"
+                            aria-labelledby="supplier-catalog-batch-mode-label"
+                            value={values.mode}
+                            disabled={disabled}
+                            onValueChange={(value) => {
+                                const mode = MODES.find(
+                                    (option) => option.value === value,
+                                )
+                                if (mode) requestMode(mode.value)
+                            }}
+                            className="gap-2.5"
+                        >
+                            {MODES.map((mode) => (
+                                <label
+                                    key={mode.value}
+                                    htmlFor={`supplier-catalog-batch-mode-${mode.value.toLowerCase()}`}
+                                    className="flex cursor-pointer items-center gap-2.5 text-xs"
                                 >
-                                    {(field) => (
-                                        <field.SelectField
-                                            id={`supplier-catalog-batch-${name}-method`}
-                                            label="计算方式"
-                                            options={METHOD_OPTIONS}
-                                            allowClear={false}
-                                            disabled={disabled}
-                                            className={
-                                                method === "UNSET"
-                                                    ? "col-span-2"
-                                                    : "min-w-0"
-                                            }
-                                        />
-                                    )}
-                                </form.AppField>
-                                {method !== "UNSET" ? (
+                                    <RadioGroupItem
+                                        id={`supplier-catalog-batch-mode-${mode.value.toLowerCase()}`}
+                                        value={mode.value}
+                                    />
+                                    {mode.label}
+                                </label>
+                            ))}
+                        </RadioGroup>
+                    </div>
+                    {(
+                        [
+                            "dropship",
+                            ...(values.mode === "SEPARATE" ? ["bulk"] : []),
+                        ] as Array<"dropship" | "bulk">
+                    ).map((name) => {
+                        const method =
+                            name === "dropship"
+                                ? values.dropshipMethod
+                                : values.bulkMethod
+                        const title =
+                            values.mode === "SAME"
+                                ? "代发价与集采价"
+                                : name === "dropship"
+                                  ? "代发售价"
+                                  : "集采售价"
+                        const PriceIcon =
+                            values.mode === "SAME"
+                                ? EqualIcon
+                                : name === "dropship"
+                                  ? TruckIcon
+                                  : PackageIcon
+                        return (
+                            <div key={name} className="space-y-3 border-t pt-4">
+                                <h3 className="flex items-center gap-2 font-semibold">
+                                    <PriceIcon
+                                        className="size-4 text-muted-foreground"
+                                        aria-hidden
+                                    />
+                                    {title}
+                                </h3>
+                                <div className="grid min-w-0 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] items-start gap-3">
                                     <form.AppField
                                         name={
                                             name === "dropship"
-                                                ? "dropshipValue"
-                                                : "bulkValue"
+                                                ? "dropshipMethod"
+                                                : "bulkMethod"
                                         }
                                     >
                                         {(field) => (
-                                            <Field className="min-w-0">
-                                                <FieldLabel
-                                                    htmlFor={`supplier-catalog-batch-${name}-value`}
-                                                >
-                                                    {method === "PERCENTAGE"
-                                                        ? "加价比例（%）"
-                                                        : method === "ADD"
-                                                          ? "加价金额（元）"
-                                                          : "售价（元）"}
+                                            <field.SelectField
+                                                id={`supplier-catalog-batch-${name}-method`}
+                                                label="计算方式"
+                                                options={METHOD_OPTIONS}
+                                                allowClear={false}
+                                                disabled={disabled}
+                                                className={
+                                                    method === "UNSET"
+                                                        ? "col-span-2"
+                                                        : "min-w-0"
+                                                }
+                                            />
+                                        )}
+                                    </form.AppField>
+                                    {method !== "UNSET" ? (
+                                        <form.AppField
+                                            name={
+                                                name === "dropship"
+                                                    ? "dropshipValue"
+                                                    : "bulkValue"
+                                            }
+                                        >
+                                            {(field) => (
+                                                <Field className="min-w-0">
+                                                    <FieldLabel
+                                                        htmlFor={`supplier-catalog-batch-${name}-value`}
+                                                    >
+                                                        {method === "PERCENTAGE"
+                                                            ? "加价比例（%）"
+                                                            : method === "ADD"
+                                                              ? "加价金额（元）"
+                                                              : "售价（元）"}
+                                                    </FieldLabel>
+                                                    <Input
+                                                        id={`supplier-catalog-batch-${name}-value`}
+                                                        className="num"
+                                                        inputMode="decimal"
+                                                        value={
+                                                            field.state.value
+                                                        }
+                                                        onChange={(event) =>
+                                                            field.handleChange(
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                        onBlur={
+                                                            field.handleBlur
+                                                        }
+                                                        aria-invalid={
+                                                            field.state.meta
+                                                                .errors.length >
+                                                            0
+                                                        }
+                                                        placeholder={
+                                                            method ===
+                                                            "PERCENTAGE"
+                                                                ? "如 15"
+                                                                : "输入金额"
+                                                        }
+                                                    />
+                                                    <FieldError
+                                                        errors={
+                                                            field.state.meta
+                                                                .errors
+                                                        }
+                                                    />
+                                                </Field>
+                                            )}
+                                        </form.AppField>
+                                    ) : null}
+                                </div>
+                                {values.mode !== "DROPSHIP_ONLY" &&
+                                (values.mode === "SAME" || name === "bulk") ? (
+                                    <form.AppField name="minimumQuantity">
+                                        {(field) => (
+                                            <Field>
+                                                <FieldLabel htmlFor="supplier-catalog-batch-minimum-quantity">
+                                                    集采起订量（基础单位）
                                                 </FieldLabel>
                                                 <Input
-                                                    id={`supplier-catalog-batch-${name}-value`}
+                                                    id="supplier-catalog-batch-minimum-quantity"
                                                     className="num"
                                                     inputMode="decimal"
                                                     value={field.state.value}
@@ -265,11 +313,7 @@ export function BatchPricingPanel({
                                                         field.state.meta.errors
                                                             .length > 0
                                                     }
-                                                    placeholder={
-                                                        method === "PERCENTAGE"
-                                                            ? "如 15"
-                                                            : "输入金额"
-                                                    }
+                                                    placeholder="输入数量"
                                                 />
                                                 <FieldError
                                                     errors={
@@ -281,147 +325,118 @@ export function BatchPricingPanel({
                                     </form.AppField>
                                 ) : null}
                             </div>
-                            {values.mode !== "DROPSHIP_ONLY" &&
-                            (values.mode === "SAME" || name === "bulk") ? (
-                                <form.AppField name="minimumQuantity">
+                        )
+                    })}
+                    {values.mode === "DROPSHIP_ONLY" && hasBulkValues ? (
+                        <p className="text-xs text-muted-foreground">
+                            {values.dropshipBulkAction === "KEEP"
+                                ? "保留已有集采价与起订量。"
+                                : "保存时清空可替换的集采价与起订量。"}
+                        </p>
+                    ) : null}
+                    <section
+                        className="space-y-3 border-t pt-4"
+                        aria-labelledby="supplier-catalog-batch-more-settings"
+                    >
+                        <h3
+                            id="supplier-catalog-batch-more-settings"
+                            className="flex items-center gap-2 font-semibold"
+                        >
+                            <SlidersHorizontalIcon
+                                className="size-4 text-muted-foreground"
+                                aria-hidden
+                            />
+                            已有售价处理
+                        </h3>
+                        <div className="space-y-3">
+                            <form.AppField name="overwrite">
+                                {(field) => (
+                                    <RadioGroup
+                                        id="supplier-catalog-batch-overwrite"
+                                        aria-label="已有售价处理方式"
+                                        value={
+                                            field.state.value
+                                                ? "overwrite"
+                                                : "fill"
+                                        }
+                                        disabled={disabled}
+                                        onValueChange={(value) => {
+                                            const overwrite =
+                                                value === "overwrite"
+                                            field.handleChange(overwrite)
+                                            if (!overwrite)
+                                                form.setFieldValue(
+                                                    "preserveManual",
+                                                    true,
+                                                )
+                                        }}
+                                    >
+                                        <label
+                                            htmlFor="supplier-catalog-batch-overwrite-fill"
+                                            className="flex items-center gap-2 text-xs"
+                                        >
+                                            <RadioGroupItem
+                                                id="supplier-catalog-batch-overwrite-fill"
+                                                value="fill"
+                                            />
+                                            仅补空价
+                                        </label>
+                                        <label
+                                            htmlFor="supplier-catalog-batch-overwrite-replace"
+                                            className="flex items-center gap-2 text-xs"
+                                        >
+                                            <RadioGroupItem
+                                                id="supplier-catalog-batch-overwrite-replace"
+                                                value="overwrite"
+                                            />
+                                            更新本批未入库项
+                                        </label>
+                                    </RadioGroup>
+                                )}
+                            </form.AppField>
+                            {values.overwrite ? (
+                                <form.AppField name="preserveManual">
                                     {(field) => (
-                                        <Field>
-                                            <FieldLabel htmlFor="supplier-catalog-batch-minimum-quantity">
-                                                集采起订量（基础单位）
-                                            </FieldLabel>
-                                            <Input
-                                                id="supplier-catalog-batch-minimum-quantity"
-                                                className="num"
-                                                inputMode="decimal"
-                                                value={field.state.value}
-                                                onChange={(event) =>
+                                        <label
+                                            htmlFor="supplier-catalog-batch-preserve-manual"
+                                            className="flex items-start gap-2 text-xs"
+                                        >
+                                            <Checkbox
+                                                id="supplier-catalog-batch-preserve-manual"
+                                                checked={field.state.value}
+                                                onCheckedChange={(checked) =>
                                                     field.handleChange(
-                                                        event.target.value,
+                                                        checked === true,
                                                     )
                                                 }
-                                                onBlur={field.handleBlur}
-                                                aria-invalid={
-                                                    field.state.meta.errors
-                                                        .length > 0
-                                                }
-                                                placeholder="输入数量"
                                             />
-                                            <FieldError
-                                                errors={field.state.meta.errors}
-                                            />
-                                        </Field>
+                                            保留手动修改与清空
+                                        </label>
                                     )}
                                 </form.AppField>
                             ) : null}
                         </div>
-                    )
-                })}
-                {values.mode === "DROPSHIP_ONLY" && hasBulkValues ? (
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                        {values.dropshipBulkAction === "KEEP"
-                            ? "保留已有集采价与起订量。"
-                            : "保存时清空可替换的集采价与起订量。"}
-                    </p>
-                ) : null}
-                <section
-                    className="space-y-3 border-t pt-4"
-                    aria-labelledby="supplier-catalog-batch-more-settings"
-                >
-                    <h3
-                        id="supplier-catalog-batch-more-settings"
-                        className="flex items-center gap-2 font-semibold"
-                    >
-                        <SlidersHorizontalIcon
-                            className="size-4 text-muted-foreground"
+                    </section>
+                    {values.overwrite && !values.preserveManual ? (
+                        <Alert variant="warning">
+                            <TriangleAlertIcon aria-hidden="true" />
+                            <AlertDescription>
+                                保存后将覆盖{" "}
+                                <span className="num font-medium">
+                                    {manualCount}
+                                </span>{" "}
+                                个手动调整项。
+                            </AlertDescription>
+                        </Alert>
+                    ) : null}
+                    <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                        <ShieldCheckIcon
+                            className="mt-0.5 size-4 shrink-0"
                             aria-hidden
                         />
-                        已有售价处理
-                    </h3>
-                    <div className="space-y-3">
-                        <form.AppField name="overwrite">
-                            {(field) => (
-                                <RadioGroup
-                                    id="supplier-catalog-batch-overwrite"
-                                    aria-label="已有售价处理方式"
-                                    value={
-                                        field.state.value ? "overwrite" : "fill"
-                                    }
-                                    disabled={disabled}
-                                    onValueChange={(value) => {
-                                        const overwrite = value === "overwrite"
-                                        field.handleChange(overwrite)
-                                        if (!overwrite)
-                                            form.setFieldValue(
-                                                "preserveManual",
-                                                true,
-                                            )
-                                    }}
-                                >
-                                    <label
-                                        htmlFor="supplier-catalog-batch-overwrite-fill"
-                                        className="flex items-center gap-2 text-xs"
-                                    >
-                                        <RadioGroupItem
-                                            id="supplier-catalog-batch-overwrite-fill"
-                                            value="fill"
-                                        />
-                                        仅补空价
-                                    </label>
-                                    <label
-                                        htmlFor="supplier-catalog-batch-overwrite-replace"
-                                        className="flex items-center gap-2 text-xs"
-                                    >
-                                        <RadioGroupItem
-                                            id="supplier-catalog-batch-overwrite-replace"
-                                            value="overwrite"
-                                        />
-                                        更新本批未入库项
-                                    </label>
-                                </RadioGroup>
-                            )}
-                        </form.AppField>
-                        {values.overwrite ? (
-                            <form.AppField name="preserveManual">
-                                {(field) => (
-                                    <label
-                                        htmlFor="supplier-catalog-batch-preserve-manual"
-                                        className="flex items-start gap-2 text-xs"
-                                    >
-                                        <Checkbox
-                                            id="supplier-catalog-batch-preserve-manual"
-                                            checked={field.state.value}
-                                            onCheckedChange={(checked) =>
-                                                field.handleChange(
-                                                    checked === true,
-                                                )
-                                            }
-                                        />
-                                        保留手动修改与清空
-                                    </label>
-                                )}
-                            </form.AppField>
-                        ) : null}
-                    </div>
-                </section>
-                {values.overwrite && !values.preserveManual ? (
-                    <Alert variant="warning">
-                        <TriangleAlertIcon aria-hidden="true" />
-                        <AlertDescription>
-                            保存后将覆盖{" "}
-                            <span className="num font-medium">
-                                {manualCount}
-                            </span>{" "}
-                            个手动调整项。
-                        </AlertDescription>
-                    </Alert>
-                ) : null}
-                <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
-                    <ShieldCheckIcon
-                        className="mt-0.5 size-4 shrink-0"
-                        aria-hidden
-                    />
-                    已有 SKU 原价不变
-                </p>
+                        已有 SKU 原价不变
+                    </p>
+                </DetailFormGrid>
             </fieldset>
             <BatchPriceTable view={view} values={values} />
             <Dialog

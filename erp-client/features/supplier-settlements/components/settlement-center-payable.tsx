@@ -1,10 +1,9 @@
 "use client"
 
-import { DetailWorkspaceSection } from "@/components/business/detail-workspace"
 import Link from "next/link"
 import { ExternalLinkIcon } from "lucide-react"
 
-import { MoneyValue, taxAmountToneClass } from "@/components/business"
+import { DetailWorkspaceSection, MoneyValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import type { SettlementDetailView } from "@/features/supplier-settlements/types"
 import { openWorkspaceLabel } from "@/lib/ui-text"
@@ -33,7 +32,6 @@ function SettlementCenterPayable({
                         <MoneyValue
                             value={grossAmount ?? payable.grossAmount}
                             display="exact"
-                            className={taxAmountToneClass("含税金额")}
                         />{" "}
                         {payable.dueDate && (
                             <>

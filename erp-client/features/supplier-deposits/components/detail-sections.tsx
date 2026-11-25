@@ -8,9 +8,11 @@ import { ArrowUpRightIcon, DownloadIcon, SearchIcon, XIcon } from "lucide-react"
 import {
     BusinessEmptyState,
     BusinessStatusBadge,
+    DetailInlineTable,
     DetailWorkspaceSection,
     DetailWorkspaceSubTabs,
     MoneyValue,
+    OptionCombobox,
     TableEmptyCell,
     TableIdentityCell,
     TableRowActions,
@@ -20,13 +22,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
 import type { StatusTone } from "@/components/ui/status-badge"
 import {
     Table,
@@ -200,13 +195,14 @@ function LocalTableToolbar({
                     />
                     <Input
                         id={`${idPrefix}-search`}
+                        size="sm"
                         value={keyword}
                         onChange={(event) =>
                             onKeywordChange(event.target.value)
                         }
                         placeholder={searchPlaceholder}
                         aria-label={searchPlaceholder}
-                        className="h-control-sm pr-7 pl-8"
+                        className="pr-7 pl-8"
                     />
                     {keyword ? (
                         <Button
@@ -223,32 +219,18 @@ function LocalTableToolbar({
                     ) : null}
                 </div>
                 {filterOptions && onFilterChange && filterValue != null ? (
-                    <Select
+                    <OptionCombobox
+                        id={`${idPrefix}-filter`}
+                        size="sm"
+                        options={filterOptions}
                         value={filterValue}
+                        allowClear={false}
+                        aria-label={filterAriaLabel ?? "筛选状态"}
+                        className="min-w-36"
                         onValueChange={(value) => {
                             if (value) onFilterChange(value)
                         }}
-                    >
-                        <SelectTrigger
-                            id={`${idPrefix}-filter`}
-                            size="sm"
-                            aria-label={filterAriaLabel ?? "筛选状态"}
-                            className="min-w-36"
-                        >
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {filterOptions.map((option) => (
-                                <SelectItem
-                                    key={option.value}
-                                    value={option.value}
-                                    idPrefix={`${idPrefix}-filter`}
-                                >
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    />
                 ) : null}
                 {hasFilter ? (
                     <Button
@@ -389,15 +371,9 @@ function TableShell({
         )
     }
     return (
-        <div
-            data-slot="detail-inline-table"
-            className={cn(
-                detailWorkspaceStyles.inlineTableWrapper,
-                "overflow-x-auto",
-            )}
-        >
+        <DetailInlineTable className="overflow-x-auto">
             <Table>{children}</Table>
-        </div>
+        </DetailInlineTable>
     )
 }
 
@@ -630,7 +606,6 @@ export function DepositRechargesSection({
                                     <MoneyValue
                                         value={request.amount}
                                         display="exact"
-                                        className="font-medium"
                                     />
                                 </TableCell>
                                 <TableCell>
@@ -1003,7 +978,7 @@ export function DepositReservationsAndUsagesSection({
                                                                     .approved_goods_amount
                                                             }
                                                             display="exact"
-                                                            className="font-normal text-muted-foreground"
+                                                            inheritColor
                                                         />
                                                     </span>
                                                     {hasFreight ? (
@@ -1022,7 +997,7 @@ export function DepositReservationsAndUsagesSection({
                                                                             .approved_freight
                                                                     }
                                                                     display="exact"
-                                                                    className="font-normal text-muted-foreground"
+                                                                    inheritColor
                                                                 />
                                                             </span>
                                                         </>
@@ -1053,15 +1028,19 @@ export function DepositReservationsAndUsagesSection({
                                             />
                                         </TableCell>
                                         <TableCell data-align="end">
-                                            <MoneyValue
-                                                value={remainder}
-                                                display="exact"
+                                            <span
                                                 className={
                                                     hasRemainder
-                                                        ? "font-semibold"
+                                                        ? undefined
                                                         : "text-muted-foreground"
                                                 }
-                                            />
+                                            >
+                                                <MoneyValue
+                                                    value={remainder}
+                                                    display="exact"
+                                                    inheritColor={!hasRemainder}
+                                                />
+                                            </span>
                                         </TableCell>
                                         <TableCell>
                                             <BusinessStatusBadge
@@ -1267,7 +1246,6 @@ export function DepositReservationsAndUsagesSection({
                                             <MoneyValue
                                                 value={item.usage.amount}
                                                 display="exact"
-                                                className="font-medium"
                                             />
                                         </TableCell>
                                         <TableCell data-align="end">
@@ -1672,7 +1650,6 @@ export function DepositLedgerAndBatchesSection({
                                         <MoneyValue
                                             value={batch.amount}
                                             display="exact"
-                                            className="font-medium"
                                         />
                                     </TableCell>
                                     <TableCell data-align="end">
@@ -1941,15 +1918,19 @@ export function DepositReconciliationsSection({
                                     />
                                 </TableCell>
                                 <TableCell data-align="end">
-                                    <MoneyValue
-                                        value={diff}
-                                        display="exact"
+                                    <span
                                         className={
                                             diffSign !== 0
-                                                ? "font-semibold text-destructive"
+                                                ? "text-destructive"
                                                 : "text-muted-foreground"
                                         }
-                                    />
+                                    >
+                                        <MoneyValue
+                                            value={diff}
+                                            display="exact"
+                                            inheritColor
+                                        />
+                                    </span>
                                 </TableCell>
                                 <TableCell className="max-w-52 whitespace-normal">
                                     {record.unresolved_transaction_ids.length >
@@ -2155,7 +2136,6 @@ export function DepositAuthorizationsSection({
                                                 authorization.cumulative_limit
                                             }
                                             display="exact"
-                                            className="font-medium"
                                         />
                                         <Progress
                                             value={percent}

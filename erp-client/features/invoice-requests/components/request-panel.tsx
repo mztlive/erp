@@ -11,7 +11,12 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { MetricItem, MetricStrip, MoneyValue } from "@/components/business"
+import {
+    DetailInlineTable,
+    DetailWorkspaceMetricItem,
+    DetailWorkspaceMetrics,
+    MoneyValue,
+} from "@/components/business"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDate, unixSecondsToIsoOrEmpty } from "@/lib/datetime"
@@ -204,7 +209,11 @@ export function InvoiceRequestPanel({
                         ) : null}
                     </div>
                     {amounts.data ? (
-                        <MetricStrip columns={3} aria-label="开票申请金额摘要">
+                        <DetailWorkspaceMetrics
+                            columns={3}
+                            variant="inline"
+                            ariaLabel="开票申请金额摘要"
+                        >
                             {[
                                 ["可申请金额", amounts.data.available_amount],
                                 ["审批中金额", amounts.data.pending_amount],
@@ -213,13 +222,13 @@ export function InvoiceRequestPanel({
                                     amounts.data.approved_remaining_amount,
                                 ],
                             ].map(([label, amount]) => (
-                                <MetricItem
+                                <DetailWorkspaceMetricItem
                                     key={label}
                                     label={label}
                                     value={<MoneyValue value={amount!} />}
                                 />
                             ))}
-                        </MetricStrip>
+                        </DetailWorkspaceMetrics>
                     ) : null}
                     {list.isPending ? (
                         <p>正在读取申请记录…</p>
@@ -234,7 +243,7 @@ export function InvoiceRequestPanel({
                             </Button>
                         </div>
                     ) : list.data?.items.length ? (
-                        <div className="overflow-x-auto">
+                        <DetailInlineTable className="overflow-x-auto">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
@@ -313,7 +322,7 @@ export function InvoiceRequestPanel({
                                     ))}
                                 </TableBody>
                             </Table>
-                        </div>
+                        </DetailInlineTable>
                     ) : (
                         <p className="py-6 text-center text-xs text-muted-foreground">
                             暂无开票申请。有开票需求时，可在此发起申请。

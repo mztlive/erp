@@ -510,8 +510,8 @@ export function CustomerAccountDetailPreview({
         >
             {isPending ? (
                 <div className="space-y-4">
-                    <div className="h-24 animate-pulse rounded-xl bg-muted" />
-                    <div className="h-40 animate-pulse rounded-xl bg-muted" />
+                    <div className="h-24 animate-pulse rounded-lg bg-muted" />
+                    <div className="h-40 animate-pulse rounded-lg bg-muted" />
                 </div>
             ) : isError ? (
                 <div className="space-y-3">

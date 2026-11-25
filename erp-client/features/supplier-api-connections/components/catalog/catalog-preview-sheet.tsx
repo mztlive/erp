@@ -5,8 +5,11 @@ import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { useState } from "react"
 import Link from "next/link"
 import { ArrowUpRightIcon, ImageOffIcon } from "lucide-react"
-import { MoneyValue, QuickPreviewSheet } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import {
+    BusinessStatusBadge,
+    MoneyValue,
+    QuickPreviewSheet,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
@@ -131,17 +134,19 @@ export function CatalogPreviewSheet({
                             />
                         </div>
                     )}
-                    <Badge
-                        variant={
+                    <BusinessStatusBadge
+                        context="preview"
+                        tone={
                             item.availability === "AVAILABLE"
                                 ? "success"
                                 : item.availability === "UNKNOWN"
                                   ? "warning"
-                                  : "secondary"
+                                  : "neutral"
                         }
-                    >
-                        {availabilityLabels[item.availability] ?? "待核验"}
-                    </Badge>
+                        label={
+                            availabilityLabels[item.availability] ?? "待核验"
+                        }
+                    />
                 </div>
             }
             footer={
@@ -313,8 +318,8 @@ export function CatalogPreviewSheet({
                             id="supplier-catalog-preview-description"
                             className={
                                 expanded
-                                    ? "whitespace-pre-wrap break-words text-body-compact leading-6 text-muted-foreground"
-                                    : "line-clamp-3 whitespace-pre-wrap break-words text-body-compact leading-6 text-muted-foreground"
+                                    ? "whitespace-pre-wrap break-words text-body-compact text-muted-foreground"
+                                    : "line-clamp-3 whitespace-pre-wrap break-words text-body-compact text-muted-foreground"
                             }
                         >
                             {item.description}

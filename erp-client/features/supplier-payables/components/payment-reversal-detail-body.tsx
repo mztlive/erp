@@ -45,7 +45,7 @@ export function PaymentReversalDetailBody({
         <div className="space-y-6 text-body-compact">
             <PreviewAmount label="冲正金额" value={row.amount} />
             <PreviewSection title="原因说明">
-                <p className="leading-6">{row.reasonText || "未填写原因"}</p>
+                <p>{row.reasonText || "未填写原因"}</p>
                 <PreviewNote>
                     冲正时间：
                     {formatDateTime(row.occurredAt, "full", "passthrough")}

@@ -261,7 +261,7 @@ export function CustomerRefundDetailBody({
         <div className={className}>
             <PreviewAmount label="退款金额" value={row.amount} />
             <PreviewSection title="原因说明">
-                <p className="leading-6">{row.reasonText || "未填写原因"}</p>
+                <p>{row.reasonText || "未填写原因"}</p>
                 <PreviewNote>
                     退款时间：
                     {formatDateTime(row.occurredAt, "full", "passthrough")}
@@ -327,7 +327,7 @@ export function ReceiptReversalDetailBody({
         <div className={className}>
             <PreviewAmount label="冲正金额" value={row.amount} />
             <PreviewSection title="原因说明">
-                <p className="leading-6">{row.reasonText || "未填写原因"}</p>
+                <p>{row.reasonText || "未填写原因"}</p>
                 <PreviewNote>
                     冲正时间：
                     {formatDateTime(row.occurredAt, "full", "passthrough")}

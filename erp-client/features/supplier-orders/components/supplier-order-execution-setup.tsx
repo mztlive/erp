@@ -160,7 +160,7 @@ export function SupplierOrderExecutionSetupPanel({
                 <h2 className="text-body-compact font-semibold text-foreground">
                     供应商接口履约
                 </h2>
-                <p className="text-xs leading-5 text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     {executionNotice}
                 </p>
             </section>
@@ -300,7 +300,7 @@ export function SupplierOrderExecutionSetupPanel({
                     <AlertDescription>{setup.blocker}</AlertDescription>
                 </Alert>
             ) : (
-                <p className="text-xs leading-5 text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                     {executionNotice ||
                         "系统按已批准的采购和配送条件执行，实际结果以订单和物流状态为准。"}
                 </p>

@@ -69,7 +69,7 @@ export function InvoiceRequestFormFooter({
                             <MoneyValue
                                 value={availableAmount}
                                 display="exact"
-                                className="text-value-compact font-semibold tracking-tight"
+                                size="compact"
                             />
                         ) : (
                             <span className="num text-value-compact font-semibold text-muted-foreground">
@@ -95,7 +95,7 @@ export function InvoiceRequestFormFooter({
                                     <MoneyValue
                                         value={linesTotal}
                                         display="exact"
-                                        className="text-value-compact font-semibold tracking-tight"
+                                        size="compact"
                                     />
                                 )
                             ) : (
@@ -122,7 +122,7 @@ export function InvoiceRequestFormFooter({
                                 <MoneyValue
                                     value={remaining}
                                     display="exact"
-                                    className="text-value-compact font-semibold tracking-tight"
+                                    size="compact"
                                 />
                             ) : (
                                 <span className="num text-value-compact font-semibold text-muted-foreground">

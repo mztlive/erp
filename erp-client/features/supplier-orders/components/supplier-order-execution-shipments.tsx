@@ -2,9 +2,9 @@
 
 import {
     BusinessStatusBadge,
+    DetailInlineTable,
     DetailWorkspaceSection,
     QuantityValue,
-    detailWorkspaceStyles,
 } from "@/components/business"
 import {
     Table,
@@ -14,7 +14,6 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { cn } from "@/lib/utils"
 import type { SupplierExecutionShipment } from "../api/execution-setup"
 
 /** 来源发货数量与运单独立展示，运单不承担数量分摊。 */
@@ -32,17 +31,13 @@ export function SupplierOrderExecutionShipments({
             width="full"
             subtitle="物流查询与 ERP 交付分别记录，已发货数量以已应用的交付记录为准"
         >
-            <div
-                data-slot="detail-inline-table"
-                className={cn(
-                    detailWorkspaceStyles.inlineTableWrapper,
-                    !compact && "overflow-x-auto",
-                )}
+            <DetailInlineTable
+                className={!compact ? "overflow-x-auto" : undefined}
             >
                 <Table
                     className={
                         compact
-                            ? "table-fixed text-xs wrap-anywhere [&_td]:px-1.5 [&_td]:whitespace-normal [&_th]:h-auto [&_th]:px-1.5 [&_th]:py-2 [&_th]:whitespace-normal"
+                            ? "table-fixed wrap-anywhere [&_td]:px-1.5 [&_td]:whitespace-normal [&_th]:h-auto [&_th]:px-1.5 [&_th]:py-2 [&_th]:whitespace-normal"
                             : undefined
                     }
                 >
@@ -111,7 +106,7 @@ export function SupplierOrderExecutionShipments({
                         ))}
                     </TableBody>
                 </Table>
-            </div>
+            </DetailInlineTable>
         </DetailWorkspaceSection>
     )
 }

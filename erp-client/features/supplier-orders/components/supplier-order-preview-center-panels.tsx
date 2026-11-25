@@ -292,7 +292,7 @@ export function WorkItemCard({
                     ? ` · 当前处理人 ${workItem.ownerUser.displayName}`
                     : ""}
             </p>
-            <p className="text-xs leading-5 text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 查询原下单结果和再次提交不会完成任务；只有确认处理结果后才会完成待办。
             </p>
         </section>

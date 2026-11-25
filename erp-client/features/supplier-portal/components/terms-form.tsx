@@ -161,7 +161,7 @@ export function PortalTermsForm({
         <form
             className={
                 sku
-                    ? "space-y-5 rounded-xl border bg-card p-5"
+                    ? "space-y-5 rounded-lg border bg-card p-5"
                     : "flex flex-col gap-5"
             }
             data-slot={sku ? undefined : "detail-form-grid"}

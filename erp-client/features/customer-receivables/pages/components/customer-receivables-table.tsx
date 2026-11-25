@@ -322,7 +322,6 @@ export function CustomerReceivablesTable({
                         <MoneyValue
                             display="exact"
                             value={original.unallocatedAmount}
-                            className="font-semibold"
                         />
                         <span className="text-xs text-muted-foreground">
                             原单{" "}
@@ -533,7 +532,6 @@ export function CustomerReceivablesTable({
                                                         .unallocatedReceiptTotal
                                                 }
                                                 display="compact"
-                                                className="font-medium text-foreground"
                                             />
                                         </span>
                                         <span>
@@ -544,7 +542,6 @@ export function CustomerReceivablesTable({
                                                         .unallocatedInvoiceTotal
                                                 }
                                                 display="compact"
-                                                className="font-medium text-foreground"
                                             />
                                         </span>
                                     </div>

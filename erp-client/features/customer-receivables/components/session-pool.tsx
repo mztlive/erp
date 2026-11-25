@@ -3,8 +3,8 @@
 import { PlusIcon } from "lucide-react"
 
 import { MoneyValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import type {
     AllocationDraftLine,
     AllocationSessionView,
@@ -24,7 +24,7 @@ export function SessionPool({
     onAdd: (target: AllocationTarget) => void
 }) {
     return (
-        <section className="erp-raised-surface space-y-3 rounded-2xl border bg-card p-4">
+        <section className="erp-raised-surface space-y-3 rounded-lg border bg-card p-4">
             <h3 className="font-semibold">
                 待核销应收账款
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
@@ -44,7 +44,7 @@ export function SessionPool({
                         return (
                             <li
                                 key={t.targetId}
-                                className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2"
+                                className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2"
                             >
                                 <div className="min-w-0">
                                     <div className="truncate text-body-compact font-medium">
@@ -62,7 +62,10 @@ export function SessionPool({
                                     </div>
                                 </div>
                                 {selected ? (
-                                    <Badge variant="success">已加入</Badge>
+                                    <StatusBadge
+                                        tone="success"
+                                        label="已加入"
+                                    />
                                 ) : (
                                     <Button
                                         id={`customer-receivables-session-pool-${toAutomationIdSegment(t.targetId)}-add`}

@@ -5,10 +5,10 @@ import Link from "next/link"
 import { SearchIcon, XIcon } from "lucide-react"
 
 import {
+    DetailInlineTable,
     DetailWorkspaceSection,
-    detailWorkspaceStyles,
-} from "@/components/business/detail-workspace"
-import { MoneyValue } from "@/components/business"
+    MoneyValue,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -103,11 +103,12 @@ function SettlementCenterItems({
                             />
                             <Input
                                 id="supplier-settlements-items-search"
+                                size="sm"
                                 value={keyword}
                                 onChange={(e) => setKeyword(e.target.value)}
                                 placeholder="搜索单号或商品名称"
                                 aria-label="搜索结算明细单号或商品名称"
-                                className="h-control-sm pr-7 pl-8"
+                                className="pr-7 pl-8"
                             />
                             {hasSearch ? (
                                 <Button
@@ -135,10 +136,7 @@ function SettlementCenterItems({
                 ) : undefined
             }
         >
-            <div
-                data-slot="detail-inline-table"
-                className={detailWorkspaceStyles.dataTableWrapper}
-            >
+            <DetailInlineTable frame="scroll">
                 <Table className="min-w-[48rem]" data-density="compact">
                     <TableHeader>
                         <TableRow>
@@ -328,7 +326,7 @@ function SettlementCenterItems({
                         </TableFooter>
                     ) : null}
                 </Table>
-            </div>
+            </DetailInlineTable>
         </DetailWorkspaceSection>
     )
 }

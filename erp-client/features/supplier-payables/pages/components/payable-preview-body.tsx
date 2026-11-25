@@ -218,9 +218,9 @@ function ProgressTrackRow({
             <ProgressLabel>{label}</ProgressLabel>
             <span className="ml-auto flex items-baseline gap-1 text-xs text-muted-foreground">
                 <span>{allocatedCaption}</span>
-                <MoneyValue value={allocated} className="text-xs" />
+                <MoneyValue value={allocated} />
                 <span>/ {totalCaption}</span>
-                <MoneyValue value={total} className="text-xs" />
+                <MoneyValue value={total} />
             </span>
         </Progress>
     )

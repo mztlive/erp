@@ -129,7 +129,13 @@ function QuotaLedgerRow({
     return (
         <div className="flex items-baseline justify-between gap-3 py-1.5 text-body-compact">
             <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="text-right">
+            <dd
+                className={
+                    emphasis === "strong"
+                        ? "text-right font-semibold"
+                        : "text-right"
+                }
+            >
                 {value === null ? (
                     <span className="num text-muted-foreground">—</span>
                 ) : destructive ? (
@@ -140,15 +146,7 @@ function QuotaLedgerRow({
                         })}
                     </span>
                 ) : (
-                    <MoneyValue
-                        value={value}
-                        display="exact"
-                        className={
-                            emphasis === "strong"
-                                ? "font-semibold"
-                                : "font-normal"
-                        }
-                    />
+                    <MoneyValue value={value} display="exact" />
                 )}
             </dd>
         </div>
@@ -242,7 +240,7 @@ export function InvoiceRequestFormSidebar({
                             className="mt-0.5 size-4 shrink-0 text-muted-foreground/70"
                             aria-hidden="true"
                         />
-                        <p className="leading-relaxed">
+                        <p>
                             {!hasOrder
                                 ? "选择已生效的销售单后，此处自动核对本单可申请额度与开票档案。"
                                 : !hasAccount
@@ -291,7 +289,6 @@ export function InvoiceRequestFormSidebar({
                                             <MoneyValue
                                                 value={linesTotal}
                                                 display="exact"
-                                                className="font-semibold"
                                             />
                                             {totalReadout ? (
                                                 <span className="text-xs text-muted-foreground">
@@ -339,7 +336,7 @@ export function InvoiceRequestFormSidebar({
                             className="mt-0.5 size-4 shrink-0 text-muted-foreground/70"
                             aria-hidden="true"
                         />
-                        <p className="leading-relaxed">
+                        <p>
                             选定销售单及结算主体后，自动带入购方与销方开票抬头及纳税人识别号。
                         </p>
                     </div>
@@ -456,7 +453,6 @@ export function InvoiceRequestDialogContext({
                         <MoneyValue
                             value={amounts.available_amount}
                             display="exact"
-                            className="font-semibold"
                         />
                     </div>
                     <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted-foreground">

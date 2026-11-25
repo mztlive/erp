@@ -63,11 +63,7 @@ function ScopeShareCell({
 }) {
     return (
         <div className="flex flex-col items-end gap-1">
-            <MoneyValue
-                value={value}
-                display="exact"
-                className="font-semibold"
-            />
+            <MoneyValue value={value} display="exact" />
             {limitedId ? <LimitedBadge id={limitedId} /> : null}
         </div>
     )

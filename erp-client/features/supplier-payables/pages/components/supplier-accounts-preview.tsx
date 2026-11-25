@@ -199,7 +199,7 @@ export function SupplierAccountsPreview({
                 }
             >
                 {reversalQuery.isPending ? (
-                    <div className="h-40 animate-pulse rounded-xl bg-muted" />
+                    <div className="h-40 animate-pulse rounded-lg bg-muted" />
                 ) : reversalQuery.data ? (
                     <PaymentReversalDetailBody
                         approvalActionsInFooter
@@ -316,7 +316,7 @@ export function SupplierAccountsPreview({
                 }
             >
                 {refundQuery.isPending ? (
-                    <div className="h-40 animate-pulse rounded-xl bg-muted" />
+                    <div className="h-40 animate-pulse rounded-lg bg-muted" />
                 ) : refundQuery.data ? (
                     <SupplierRefundDetailBody
                         approvalActionsInFooter

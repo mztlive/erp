@@ -11,8 +11,11 @@ import {
 import { useQueryClient } from "@tanstack/react-query"
 import { useStore } from "@tanstack/react-form"
 import { TriangleAlertIcon } from "lucide-react"
-import { FormalActionConfirmDialog } from "@/components/business"
-import { DetailWorkspaceSection } from "@/components/business/detail-workspace"
+import {
+    DetailFormGrid,
+    DetailWorkspaceSection,
+    FormalActionConfirmDialog,
+} from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { toast } from "@/components/ui/toast"
 import type { WorkItemDto } from "@/features/work-items/types"
@@ -946,298 +949,324 @@ export function PortalReviewForm({
                     {canProcess ||
                     (!workspace && application.status === "pending") ? (
                         <form
-                            data-slot="detail-form-grid"
-                            className="space-y-6"
                             onSubmit={(event) => {
                                 event.preventDefault()
                                 requestDecision("approve")
                             }}
                         >
-                            <div
-                                className={
-                                    workspace
-                                        ? "min-w-0"
-                                        : "grid min-w-0 items-start gap-6 @[960px]/workspace:grid-cols-[224px_minmax(0,1fr)] @[1120px]/workspace:grid-cols-[240px_minmax(0,1fr)]"
-                                }
+                            <DetailFormGrid
+                                layout="stack"
+                                className="space-y-6"
                             >
-                                {!workspace ? (
-                                    <ReviewProgressRail
-                                        sections={sections}
-                                        activeSectionId={activeSectionId}
-                                        canProcess={canProcess}
-                                        allExpanded={allExpanded}
-                                        onSelectSection={
-                                            expandAndScrollToSection
-                                        }
-                                        onToggleAll={toggleAllSections}
-                                        onJumpFirstIssue={() => {
-                                            const firstIssue = allIssues[0]
-                                            if (firstIssue) {
-                                                focusInvalidField(
-                                                    firstIssue.fieldId,
-                                                )
-                                            }
-                                        }}
-                                    />
-                                ) : null}
-
-                                <div className="min-w-0">
-                                    {basicSection ? (
-                                        <CollapsibleReviewSection
-                                            section={basicSection}
-                                            open={expandedSections.basic}
-                                            active={activeSectionId === "basic"}
+                                <div
+                                    className={
+                                        workspace
+                                            ? "min-w-0"
+                                            : "grid min-w-0 items-start gap-6 @[960px]/workspace:grid-cols-[224px_minmax(0,1fr)] @[1120px]/workspace:grid-cols-[240px_minmax(0,1fr)]"
+                                    }
+                                >
+                                    {!workspace ? (
+                                        <ReviewProgressRail
+                                            sections={sections}
+                                            activeSectionId={activeSectionId}
                                             canProcess={canProcess}
-                                            onOpenChange={(open) =>
-                                                setExpandedSections((prev) => ({
-                                                    ...prev,
-                                                    basic: open,
-                                                }))
+                                            allExpanded={allExpanded}
+                                            onSelectSection={
+                                                expandAndScrollToSection
                                             }
-                                            onFocusIssue={focusInvalidField}
-                                        >
-                                            <BasicDuplicateSection
-                                                form={form}
-                                                application={application}
-                                                task={task}
-                                                rawProduct={rawProduct}
-                                                compact={Boolean(workspace)}
-                                                search={search}
-                                                onSearchChange={setSearch}
-                                                onSearchSubmit={() =>
-                                                    setQ(search.trim())
-                                                }
-                                                duplicates={
-                                                    duplicates.data
-                                                        ?.duplicates ?? []
-                                                }
-                                                duplicatesFetching={
-                                                    duplicates.isFetching
-                                                }
-                                                onRefreshDuplicates={async () => {
-                                                    await duplicates.refetch({
-                                                        throwOnError: true,
-                                                    })
-                                                }}
-                                                existingCandidates={
-                                                    existingCandidates
-                                                }
-                                                disabled={disabled}
-                                                highlightedFieldId={
-                                                    highlightedFieldId
-                                                }
-                                                onClearHighlight={
-                                                    clearHighlight
-                                                }
-                                                onJumpToSection={
-                                                    expandAndScrollToSection
-                                                }
-                                            />
-                                        </CollapsibleReviewSection>
-                                    ) : null}
-
-                                    {rawProduct && brandCategorySection ? (
-                                        <CollapsibleReviewSection
-                                            section={brandCategorySection}
-                                            open={
-                                                expandedSections[
-                                                    "brand-category"
-                                                ]
-                                            }
-                                            active={
-                                                activeSectionId ===
-                                                "brand-category"
-                                            }
-                                            canProcess={canProcess}
-                                            onOpenChange={(open) =>
-                                                setExpandedSections((prev) => ({
-                                                    ...prev,
-                                                    "brand-category": open,
-                                                }))
-                                            }
-                                            onFocusIssue={focusInvalidField}
-                                        >
-                                            <BrandCategorySection
-                                                form={form}
-                                                rawProduct={rawProduct}
-                                                brands={brands.data ?? []}
-                                                categories={
-                                                    categories.data ?? []
-                                                }
-                                                categorySuggestion={
-                                                    duplicates.data
-                                                        ?.category_mapping_suggestion ??
-                                                    null
-                                                }
-                                                canCreateBrand={access.can(
-                                                    "product_brand:create",
-                                                )}
-                                                canCreateCategory={access.can(
-                                                    "product_category:create",
-                                                )}
-                                                disabled={disabled}
-                                                highlightedFieldId={
-                                                    highlightedFieldId
-                                                }
-                                                onClearHighlight={
-                                                    clearHighlight
-                                                }
-                                                onRefreshBrands={async () => {
-                                                    await brands.refetch({
-                                                        throwOnError: true,
-                                                    })
-                                                }}
-                                                onRefreshCategories={async () => {
-                                                    await categories.refetch({
-                                                        throwOnError: true,
-                                                    })
-                                                }}
-                                                onReloadDictionaries={async () => {
-                                                    const results =
-                                                        await Promise.all([
-                                                            brands.refetch(),
-                                                            categories.refetch(),
-                                                            units.refetch(),
-                                                        ])
-                                                    const failed = results.find(
-                                                        (result) =>
-                                                            result.error,
+                                            onToggleAll={toggleAllSections}
+                                            onJumpFirstIssue={() => {
+                                                const firstIssue = allIssues[0]
+                                                if (firstIssue) {
+                                                    focusInvalidField(
+                                                        firstIssue.fieldId,
                                                     )
-                                                    if (failed?.error)
-                                                        setError(failed.error)
-                                                }}
-                                                onCreateDictionary={
-                                                    setCreateDictionary
                                                 }
-                                            />
-                                        </CollapsibleReviewSection>
+                                            }}
+                                        />
                                     ) : null}
 
-                                    {rawProduct && skuMappingSection ? (
-                                        <CollapsibleReviewSection
-                                            section={skuMappingSection}
-                                            open={
-                                                expandedSections["sku-mapping"]
-                                            }
-                                            active={
-                                                activeSectionId ===
-                                                "sku-mapping"
-                                            }
-                                            canProcess={canProcess}
-                                            onOpenChange={(open) =>
-                                                setExpandedSections((prev) => ({
-                                                    ...prev,
-                                                    "sku-mapping": open,
-                                                }))
-                                            }
-                                            onFocusIssue={focusInvalidField}
-                                        >
-                                            <SkuMappingSection
-                                                form={form}
-                                                application={application}
-                                                rawProduct={rawProduct}
-                                                brands={brands.data ?? []}
-                                                categories={
-                                                    categories.data ?? []
-                                                }
-                                                units={units.data ?? []}
-                                                duplicates={
-                                                    duplicates.data
-                                                        ?.duplicates ?? []
-                                                }
-                                                existingCandidates={
-                                                    existingCandidates
-                                                }
-                                                actorId={
-                                                    access.profile.data
-                                                        ?.userid ?? ""
-                                                }
-                                                canListApplications={access.can(
-                                                    "supplier_portal_request:list",
-                                                )}
-                                                canReadDetails={access.can(
-                                                    "supplier_portal_request:detail",
-                                                )}
-                                                canCreateUnit={access.can(
-                                                    "unit_of_measure:create",
-                                                )}
-                                                disabled={disabled}
-                                                highlightedFieldId={
-                                                    highlightedFieldId
-                                                }
-                                                onClearHighlight={
-                                                    clearHighlight
-                                                }
-                                                onRefreshUnits={async () => {
-                                                    await units.refetch({
-                                                        throwOnError: true,
-                                                    })
-                                                }}
-                                                onRefreshDuplicates={async () => {
-                                                    await duplicates.refetch({
-                                                        throwOnError: true,
-                                                    })
-                                                }}
-                                                onCreateDictionary={
-                                                    setCreateDictionary
-                                                }
-                                                onJumpToSection={
-                                                    expandAndScrollToSection
-                                                }
-                                            />
-                                        </CollapsibleReviewSection>
-                                    ) : null}
-
-                                    {decisionSection ? (
-                                        <CollapsibleReviewSection
-                                            section={decisionSection}
-                                            open={expandedSections.decision}
-                                            active={
-                                                activeSectionId === "decision"
-                                            }
-                                            canProcess={canProcess}
-                                            onOpenChange={(open) =>
-                                                setExpandedSections((prev) => ({
-                                                    ...prev,
-                                                    decision: open,
-                                                }))
-                                            }
-                                            onFocusIssue={focusInvalidField}
-                                        >
-                                            <DecisionSubmitSection
-                                                form={form}
-                                                application={application}
-                                                rawProduct={rawProduct}
-                                                initialAvailability={
-                                                    initialAvailability
-                                                }
-                                                nowMs={nowMs}
-                                                reportedConfirmed={
-                                                    reportedConfirmed
-                                                }
-                                                onReportedConfirmedChange={
-                                                    setReportedConfirmed
+                                    <div className="min-w-0">
+                                        {basicSection ? (
+                                            <CollapsibleReviewSection
+                                                section={basicSection}
+                                                open={expandedSections.basic}
+                                                active={
+                                                    activeSectionId === "basic"
                                                 }
                                                 canProcess={canProcess}
-                                                canListProcurementPeople={
-                                                    canListProcurementPeople
+                                                onOpenChange={(open) =>
+                                                    setExpandedSections(
+                                                        (prev) => ({
+                                                            ...prev,
+                                                            basic: open,
+                                                        }),
+                                                    )
                                                 }
-                                                actorUserId={
-                                                    access.profile.data
-                                                        ?.userid ?? ""
+                                                onFocusIssue={focusInvalidField}
+                                            >
+                                                <BasicDuplicateSection
+                                                    form={form}
+                                                    application={application}
+                                                    task={task}
+                                                    rawProduct={rawProduct}
+                                                    compact={Boolean(workspace)}
+                                                    search={search}
+                                                    onSearchChange={setSearch}
+                                                    onSearchSubmit={() =>
+                                                        setQ(search.trim())
+                                                    }
+                                                    duplicates={
+                                                        duplicates.data
+                                                            ?.duplicates ?? []
+                                                    }
+                                                    duplicatesFetching={
+                                                        duplicates.isFetching
+                                                    }
+                                                    onRefreshDuplicates={async () => {
+                                                        await duplicates.refetch(
+                                                            {
+                                                                throwOnError: true,
+                                                            },
+                                                        )
+                                                    }}
+                                                    existingCandidates={
+                                                        existingCandidates
+                                                    }
+                                                    disabled={disabled}
+                                                    highlightedFieldId={
+                                                        highlightedFieldId
+                                                    }
+                                                    onClearHighlight={
+                                                        clearHighlight
+                                                    }
+                                                    onJumpToSection={
+                                                        expandAndScrollToSection
+                                                    }
+                                                />
+                                            </CollapsibleReviewSection>
+                                        ) : null}
+
+                                        {rawProduct && brandCategorySection ? (
+                                            <CollapsibleReviewSection
+                                                section={brandCategorySection}
+                                                open={
+                                                    expandedSections[
+                                                        "brand-category"
+                                                    ]
                                                 }
-                                                disabled={disabled}
-                                                highlightedFieldId={
-                                                    highlightedFieldId
+                                                active={
+                                                    activeSectionId ===
+                                                    "brand-category"
                                                 }
-                                                onClearHighlight={
-                                                    clearHighlight
+                                                canProcess={canProcess}
+                                                onOpenChange={(open) =>
+                                                    setExpandedSections(
+                                                        (prev) => ({
+                                                            ...prev,
+                                                            "brand-category":
+                                                                open,
+                                                        }),
+                                                    )
                                                 }
-                                            />
-                                        </CollapsibleReviewSection>
-                                    ) : null}
+                                                onFocusIssue={focusInvalidField}
+                                            >
+                                                <BrandCategorySection
+                                                    form={form}
+                                                    rawProduct={rawProduct}
+                                                    brands={brands.data ?? []}
+                                                    categories={
+                                                        categories.data ?? []
+                                                    }
+                                                    categorySuggestion={
+                                                        duplicates.data
+                                                            ?.category_mapping_suggestion ??
+                                                        null
+                                                    }
+                                                    canCreateBrand={access.can(
+                                                        "product_brand:create",
+                                                    )}
+                                                    canCreateCategory={access.can(
+                                                        "product_category:create",
+                                                    )}
+                                                    disabled={disabled}
+                                                    highlightedFieldId={
+                                                        highlightedFieldId
+                                                    }
+                                                    onClearHighlight={
+                                                        clearHighlight
+                                                    }
+                                                    onRefreshBrands={async () => {
+                                                        await brands.refetch({
+                                                            throwOnError: true,
+                                                        })
+                                                    }}
+                                                    onRefreshCategories={async () => {
+                                                        await categories.refetch(
+                                                            {
+                                                                throwOnError: true,
+                                                            },
+                                                        )
+                                                    }}
+                                                    onReloadDictionaries={async () => {
+                                                        const results =
+                                                            await Promise.all([
+                                                                brands.refetch(),
+                                                                categories.refetch(),
+                                                                units.refetch(),
+                                                            ])
+                                                        const failed =
+                                                            results.find(
+                                                                (result) =>
+                                                                    result.error,
+                                                            )
+                                                        if (failed?.error)
+                                                            setError(
+                                                                failed.error,
+                                                            )
+                                                    }}
+                                                    onCreateDictionary={
+                                                        setCreateDictionary
+                                                    }
+                                                />
+                                            </CollapsibleReviewSection>
+                                        ) : null}
+
+                                        {rawProduct && skuMappingSection ? (
+                                            <CollapsibleReviewSection
+                                                section={skuMappingSection}
+                                                open={
+                                                    expandedSections[
+                                                        "sku-mapping"
+                                                    ]
+                                                }
+                                                active={
+                                                    activeSectionId ===
+                                                    "sku-mapping"
+                                                }
+                                                canProcess={canProcess}
+                                                onOpenChange={(open) =>
+                                                    setExpandedSections(
+                                                        (prev) => ({
+                                                            ...prev,
+                                                            "sku-mapping": open,
+                                                        }),
+                                                    )
+                                                }
+                                                onFocusIssue={focusInvalidField}
+                                            >
+                                                <SkuMappingSection
+                                                    form={form}
+                                                    application={application}
+                                                    rawProduct={rawProduct}
+                                                    brands={brands.data ?? []}
+                                                    categories={
+                                                        categories.data ?? []
+                                                    }
+                                                    units={units.data ?? []}
+                                                    duplicates={
+                                                        duplicates.data
+                                                            ?.duplicates ?? []
+                                                    }
+                                                    existingCandidates={
+                                                        existingCandidates
+                                                    }
+                                                    actorId={
+                                                        access.profile.data
+                                                            ?.userid ?? ""
+                                                    }
+                                                    canListApplications={access.can(
+                                                        "supplier_portal_request:list",
+                                                    )}
+                                                    canReadDetails={access.can(
+                                                        "supplier_portal_request:detail",
+                                                    )}
+                                                    canCreateUnit={access.can(
+                                                        "unit_of_measure:create",
+                                                    )}
+                                                    disabled={disabled}
+                                                    highlightedFieldId={
+                                                        highlightedFieldId
+                                                    }
+                                                    onClearHighlight={
+                                                        clearHighlight
+                                                    }
+                                                    onRefreshUnits={async () => {
+                                                        await units.refetch({
+                                                            throwOnError: true,
+                                                        })
+                                                    }}
+                                                    onRefreshDuplicates={async () => {
+                                                        await duplicates.refetch(
+                                                            {
+                                                                throwOnError: true,
+                                                            },
+                                                        )
+                                                    }}
+                                                    onCreateDictionary={
+                                                        setCreateDictionary
+                                                    }
+                                                    onJumpToSection={
+                                                        expandAndScrollToSection
+                                                    }
+                                                />
+                                            </CollapsibleReviewSection>
+                                        ) : null}
+
+                                        {decisionSection ? (
+                                            <CollapsibleReviewSection
+                                                section={decisionSection}
+                                                open={expandedSections.decision}
+                                                active={
+                                                    activeSectionId ===
+                                                    "decision"
+                                                }
+                                                canProcess={canProcess}
+                                                onOpenChange={(open) =>
+                                                    setExpandedSections(
+                                                        (prev) => ({
+                                                            ...prev,
+                                                            decision: open,
+                                                        }),
+                                                    )
+                                                }
+                                                onFocusIssue={focusInvalidField}
+                                            >
+                                                <DecisionSubmitSection
+                                                    form={form}
+                                                    application={application}
+                                                    rawProduct={rawProduct}
+                                                    initialAvailability={
+                                                        initialAvailability
+                                                    }
+                                                    nowMs={nowMs}
+                                                    reportedConfirmed={
+                                                        reportedConfirmed
+                                                    }
+                                                    onReportedConfirmedChange={
+                                                        setReportedConfirmed
+                                                    }
+                                                    canProcess={canProcess}
+                                                    canListProcurementPeople={
+                                                        canListProcurementPeople
+                                                    }
+                                                    actorUserId={
+                                                        access.profile.data
+                                                            ?.userid ?? ""
+                                                    }
+                                                    disabled={disabled}
+                                                    highlightedFieldId={
+                                                        highlightedFieldId
+                                                    }
+                                                    onClearHighlight={
+                                                        clearHighlight
+                                                    }
+                                                />
+                                            </CollapsibleReviewSection>
+                                        ) : null}
+                                    </div>
                                 </div>
-                            </div>
+                            </DetailFormGrid>
                         </form>
                     ) : null}
 

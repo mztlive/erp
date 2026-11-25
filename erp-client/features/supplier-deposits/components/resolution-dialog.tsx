@@ -252,11 +252,7 @@ export function DepositResolutionDialog({
                     </p>
                     <p className="flex flex-wrap items-baseline gap-1.5">
                         <span>当前剩余占用：</span>
-                        <MoneyValue
-                            value={remainder}
-                            display="exact"
-                            className="font-semibold"
-                        />
+                        <MoneyValue value={remainder} display="exact" />
                         {remainderReadout ? (
                             <span className="text-xs text-muted-foreground">
                                 （{remainderReadout}）
@@ -329,7 +325,6 @@ export function DepositResolutionDialog({
                                             <MoneyValue
                                                 value={remainder}
                                                 display="exact"
-                                                className="font-semibold"
                                             />
                                             {remainderReadout ? (
                                                 <span className="text-xs text-muted-foreground">

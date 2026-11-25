@@ -1,10 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { TriangleAlertIcon } from "lucide-react"
 
 import { BusinessStatusBadge, QuickPreviewSheet } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { PermissionGuard } from "@/features/auth/components/permission-guard"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -67,13 +67,7 @@ export function SupplierOrdersListPreviewSheet({
                         </Badge>
                         {preview.order.fulfillmentStatus ===
                         "RESULT_UNKNOWN" ? (
-                            <Badge variant="outline" className="gap-1">
-                                <TriangleAlertIcon
-                                    className="size-3"
-                                    aria-hidden="true"
-                                />
-                                须先查询
-                            </Badge>
+                            <StatusBadge tone="warning" label="须先查询" />
                         ) : null}
                     </div>
                 ) : null

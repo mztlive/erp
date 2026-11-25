@@ -1,8 +1,8 @@
 import {
+    DetailInlineTable,
     DetailWorkspaceFact,
     DetailWorkspaceFacts,
     MoneyValue,
-    detailWorkspaceStyles,
 } from "@/components/business"
 import {
     Table,
@@ -14,7 +14,6 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { formatFixedDisplay } from "@/lib/fixed-decimal"
-import { cn } from "@/lib/utils"
 import type { InvoiceRequestData, InvoiceRequestLine } from "../api"
 import {
     canonicalInvoiceDecimal,
@@ -105,13 +104,7 @@ export function InvoiceRequestLinesTable({
                 </div>
             ) : null}
             {lines.length ? (
-                <div
-                    data-slot="detail-inline-table"
-                    className={cn(
-                        detailWorkspaceStyles.inlineTableWrapper,
-                        "overflow-x-auto",
-                    )}
-                >
+                <DetailInlineTable className="overflow-x-auto">
                     <Table aria-label="开票明细" className="min-w-96">
                         <TableHeader>
                             <TableRow>
@@ -179,7 +172,7 @@ export function InvoiceRequestLinesTable({
                             </TableFooter>
                         ) : null}
                     </Table>
-                </div>
+                </DetailInlineTable>
             ) : (
                 <p className="text-xs text-muted-foreground">未记录开票明细</p>
             )}

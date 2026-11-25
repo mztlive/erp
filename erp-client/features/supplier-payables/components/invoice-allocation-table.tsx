@@ -159,7 +159,7 @@ export function InvoiceAllocationTable({
                                 onChange={(e) => setSearch(e.target.value)}
                                 placeholder="筛选单据编号"
                                 aria-label="筛选可核销单据编号"
-                                className="h-8 pl-8 text-body-compact"
+                                className="pl-8"
                             />
                         </div>
                     ) : null}
@@ -379,16 +379,20 @@ export function InvoiceAllocationTable({
                                 {splitTax ? (
                                     <TableCell className="text-right">
                                         <div className="flex flex-col items-end">
-                                            <MoneyValue
-                                                value={fromCents(
-                                                    allocatedTaxCents,
-                                                )}
+                                            <span
                                                 className={
                                                     taxMismatch
-                                                        ? "font-semibold text-destructive"
-                                                        : "font-semibold"
+                                                        ? "text-destructive"
+                                                        : undefined
                                                 }
-                                            />
+                                            >
+                                                <MoneyValue
+                                                    value={fromCents(
+                                                        allocatedTaxCents,
+                                                    )}
+                                                    inheritColor={taxMismatch}
+                                                />
+                                            </span>
                                             {faceTaxCents > BigInt(0) ? (
                                                 <span
                                                     className={cn(
@@ -403,7 +407,7 @@ export function InvoiceAllocationTable({
                                                         value={fromCents(
                                                             faceTaxCents,
                                                         )}
-                                                        className="text-xs"
+                                                        inheritColor
                                                     />
                                                 </span>
                                             ) : null}

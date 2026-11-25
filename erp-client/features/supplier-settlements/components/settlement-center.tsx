@@ -392,7 +392,7 @@ function SettlementCenter({
                 badge:
                     id === "differences" &&
                     detail.differenceSummary.blocking > 0 ? (
-                        <span className="num ml-1.5 rounded-sm bg-destructive-soft px-1.5 text-tiny leading-4 font-semibold text-destructive-soft-foreground">
+                        <span className="num ml-1.5 rounded-sm bg-destructive-soft px-1.5 text-tiny font-semibold text-destructive-soft-foreground">
                             {detail.differenceSummary.blocking}
                         </span>
                     ) : undefined,

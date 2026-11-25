@@ -14,6 +14,8 @@ import {
 } from "lucide-react"
 
 import {
+    DetailFormGrid,
+    DetailInlineTable,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
     DetailWorkspaceDirtyBadge,
@@ -74,7 +76,6 @@ import { getErrorCode, getErrorMessage } from "@/lib/api/errors"
 import { formatCurrencyFixed } from "@/lib/fixed-decimal"
 import { classifyFormalCommandError } from "@/lib/formal-command"
 import { describeMoney } from "@/lib/money-display"
-import { cn } from "@/lib/utils"
 
 import {
     requestStatusLabels,
@@ -781,10 +782,7 @@ export function InvoiceRequestForm({
     )
 
     const sourceFields = (
-        <div
-            data-slot="detail-form-grid"
-            className="grid gap-x-5 gap-y-4 sm:grid-cols-12"
-        >
+        <DetailFormGrid>
             {showOrderSelector ? (
                 <div className="sm:col-span-6">
                     <form.AppField name="salesOrderId">
@@ -875,28 +873,26 @@ export function InvoiceRequestForm({
                     </Alert>
                 </div>
             ) : null}
-        </div>
+        </DetailFormGrid>
     )
 
     const reasonFields = (
-        <fieldset
-            disabled={locked}
-            data-slot="detail-form-grid"
-            className="space-y-4"
-        >
-            <form.AppField name="reason">
-                {(field) => (
-                    <field.TextareaField
-                        id="invoice-request-reason"
-                        label="申请事由"
-                        placeholder="请输入本次开票背景、合同节点或财务开票注意事项"
-                        rows={3}
-                        maxLength={1000}
-                        required
-                    />
-                )}
-            </form.AppField>
-            {rework.field}
+        <fieldset disabled={locked}>
+            <DetailFormGrid layout="stack" className="space-y-4">
+                <form.AppField name="reason">
+                    {(field) => (
+                        <field.TextareaField
+                            id="invoice-request-reason"
+                            label="申请事由"
+                            placeholder="请输入本次开票背景、合同节点或财务开票注意事项"
+                            rows={3}
+                            maxLength={1000}
+                            required
+                        />
+                    )}
+                </form.AppField>
+                {rework.field}
+            </DetailFormGrid>
         </fieldset>
     )
 
@@ -1222,7 +1218,6 @@ export function InvoiceRequestForm({
                                 <MoneyValue
                                     value={linesTotal}
                                     display="exact"
-                                    className="font-semibold"
                                 />
                             )
                         ) : (
@@ -1487,7 +1482,6 @@ const InvoiceLinesSection = withForm({
                                         <MoneyValue
                                             value={legacyAmountHint}
                                             display="exact"
-                                            className="inline font-medium"
                                         />
                                         ，请补充开票明细的数量与含税单价；本次申请金额将按明细合计自动更新。
                                     </AlertDescription>
@@ -1500,13 +1494,7 @@ const InvoiceLinesSection = withForm({
                                 </FieldDescription>
                             ) : null}
 
-                            <div
-                                data-slot="detail-inline-table"
-                                className={cn(
-                                    detailWorkspaceStyles.inlineTableWrapper,
-                                    "overflow-x-auto",
-                                )}
-                            >
+                            <DetailInlineTable className="overflow-x-auto">
                                 <Table className="min-w-[600px]">
                                     <TableHeader>
                                         <TableRow>
@@ -1774,7 +1762,7 @@ const InvoiceLinesSection = withForm({
                                         </TableRow>
                                     </TableFooter>
                                 </Table>
-                            </div>
+                            </DetailInlineTable>
                         </fieldset>
                     )
 

@@ -115,7 +115,7 @@ export function CustomerReceiptSubmitConfirmDialog({
                         phase="confirm"
                         approval={approval}
                     />
-                    <div className="flex items-start gap-2 border-t border-border pt-4 text-xs leading-relaxed text-muted-foreground">
+                    <div className="flex items-start gap-2 border-t border-border pt-4 text-xs text-muted-foreground">
                         <InfoIcon
                             aria-hidden="true"
                             className="mt-0.5 size-3.5 shrink-0"

@@ -82,7 +82,7 @@ function RuleColumn({
                         <dt className="w-16 shrink-0 pt-0.5">
                             <TermBadge mode={mode} term={term} />
                         </dt>
-                        <dd className="min-w-0 leading-6 break-words">
+                        <dd className="min-w-0 break-words">
                             {names.join("、")}
                         </dd>
                     </div>

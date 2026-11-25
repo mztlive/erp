@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { RequiredMark } from "@/components/ui/required-mark"
 import { apiGet } from "@/lib/api"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { supplierTaxPercentages } from "@/lib/supplier-tax-rates"
@@ -55,18 +56,20 @@ export const SupplierTaxRateField = ({
     }, [prefill, query.data, supplierId, value, percentages, onChange])
     return (
         <div className="flex min-w-0 flex-col gap-2">
-            <Label htmlFor={id} className="leading-snug">
-                进项税率（%）<span className="text-destructive">*</span>
+            <Label htmlFor={id}>
+                进项税率（%）
+                <RequiredMark />
             </Label>
             <Input
                 id={id}
+                size="lg"
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
                 onBlur={onBlur}
                 list={`${id}-options`}
                 inputMode="decimal"
                 required
-                className="h-9"
+                className="num"
                 aria-invalid={Boolean(errors?.length)}
                 aria-describedby={`${id}-description${errors?.length ? ` ${id}-error` : ""}`}
                 placeholder="选择或填写该商品税率"

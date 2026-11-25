@@ -19,10 +19,7 @@ import {
     factFormSchema,
     factFromValues,
 } from "@/features/customer-receivables/lib/fact-form"
-import {
-    invoiceFileReference,
-    invoiceFilesError,
-} from "@/features/customer-receivables/lib/invoice-files"
+import { invoiceFileReference, invoiceFilesError } from "@/lib/invoice-files"
 import {
     amountOrZero,
     compareAmounts,

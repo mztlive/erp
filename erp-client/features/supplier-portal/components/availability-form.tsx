@@ -1,5 +1,5 @@
 "use client"
-import { DetailWorkspaceSection } from "@/components/business/detail-workspace"
+import { DetailFormGrid, DetailWorkspaceSection } from "@/components/business"
 import { useRef, useState } from "react"
 import { z } from "zod"
 import { useAppForm } from "@/components/form"
@@ -79,113 +79,122 @@ export function PortalAvailabilityForm({
     return (
         <DetailWorkspaceSection title="更新可供情况" width="form">
             <form
-                className="flex flex-col gap-4"
-                data-slot="detail-form-grid"
                 onSubmit={(event) => {
                     event.preventDefault()
                     void form.handleSubmit()
                 }}
             >
-                <p className="text-xs text-muted-foreground">
-                    更新商品当前是否有货及可供数量；若商品处于暂停或停止供货状态，仅更新库存不会自动恢复供货。
-                </p>
-                <PortalError error={error} />
-                {saved && (
-                    <p role="status" className="text-body-compact text-success">
-                        可供情况已保存。重新核对最新资料后可继续报送。
+                <DetailFormGrid layout="stack" className="flex flex-col gap-4">
+                    <p className="text-xs text-muted-foreground">
+                        更新商品当前是否有货及可供数量；若商品处于暂停或停止供货状态，仅更新库存不会自动恢复供货。
                     </p>
-                )}
-                <div className="grid gap-4 md:grid-cols-2">
-                    <form.AppField name="status">
-                        {(field) => (
-                            <field.SelectField
-                                id="supplier-portal-availability-status"
-                                label="可供状态"
-                                required
-                                options={[
-                                    { value: "AVAILABLE", label: "有货" },
-                                    {
-                                        value: "OUT_OF_STOCK",
-                                        label: "临时缺货",
-                                    },
-                                ]}
-                                allowClear={false}
-                                disabled={disabled || !!frozen.current}
-                            />
-                        )}
-                    </form.AppField>
-                    <form.AppField name="quantity">
+                    <PortalError error={error} />
+                    {saved && (
+                        <p
+                            role="status"
+                            className="text-body-compact text-success"
+                        >
+                            可供情况已保存。重新核对最新资料后可继续报送。
+                        </p>
+                    )}
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <form.AppField name="status">
+                            {(field) => (
+                                <field.SelectField
+                                    id="supplier-portal-availability-status"
+                                    label="可供状态"
+                                    required
+                                    options={[
+                                        { value: "AVAILABLE", label: "有货" },
+                                        {
+                                            value: "OUT_OF_STOCK",
+                                            label: "临时缺货",
+                                        },
+                                    ]}
+                                    allowClear={false}
+                                    disabled={disabled || !!frozen.current}
+                                />
+                            )}
+                        </form.AppField>
+                        <form.AppField name="quantity">
+                            {(field) => (
+                                <field.TextField
+                                    id="supplier-portal-availability-quantity"
+                                    label="可供数量"
+                                    description="空白表示未提供；0表示明确无货"
+                                    disabled={disabled || !!frozen.current}
+                                />
+                            )}
+                        </form.AppField>
+                    </div>
+                    <form.AppField name="reason">
                         {(field) => (
                             <field.TextField
-                                id="supplier-portal-availability-quantity"
-                                label="可供数量"
-                                description="空白表示未提供；0表示明确无货"
+                                id="supplier-portal-availability-reason"
+                                label="报送说明"
+                                required
                                 disabled={disabled || !!frozen.current}
                             />
                         )}
                     </form.AppField>
-                </div>
-                <form.AppField name="reason">
-                    {(field) => (
-                        <field.TextField
-                            id="supplier-portal-availability-reason"
-                            label="报送说明"
-                            required
-                            disabled={disabled || !!frozen.current}
-                        />
-                    )}
-                </form.AppField>
-                <div className="flex flex-wrap gap-2">
-                    <form.AppForm>
-                        <form.SubmitButton
-                            id="supplier-portal-availability-save"
-                            label={
-                                frozen.current ? "重新确认提交" : "保存可供情况"
-                            }
-                            disabled={disabled}
-                        />
-                    </form.AppForm>
-                    <Button
-                        id="supplier-portal-availability-reload"
-                        type="button"
-                        variant="outline"
-                        disabled={mutation.isPending || reloading}
-                        onClick={() => {
-                            setReloading(true)
-                            void onReload()
-                                .then((fresh) => {
-                                    if (!fresh) return
-                                    setLatestVersion(fresh.availability_version)
-                                    if (saved) {
-                                        setExpected(fresh.availability_version)
-                                        setSaved(false)
-                                    }
-                                })
-                                .finally(() => setReloading(false))
-                        }}
-                    >
-                        重新核对最新资料
-                    </Button>
-                    {commandFailureDisposition(error) === "conflict" && (
+                    <div className="flex flex-wrap gap-2">
+                        <form.AppForm>
+                            <form.SubmitButton
+                                id="supplier-portal-availability-save"
+                                label={
+                                    frozen.current
+                                        ? "重新确认提交"
+                                        : "保存可供情况"
+                                }
+                                disabled={disabled}
+                            />
+                        </form.AppForm>
                         <Button
-                            id="supplier-portal-availability-apply-version"
+                            id="supplier-portal-availability-reload"
                             type="button"
                             variant="outline"
-                            disabled={
-                                mutation.isPending || latestVersion == null
-                            }
+                            disabled={mutation.isPending || reloading}
                             onClick={() => {
-                                setExpected(latestVersion!)
-                                setLatestVersion(null)
-                                frozen.current = null
-                                key.current = null
-                                setError(null)
+                                setReloading(true)
+                                void onReload()
+                                    .then((fresh) => {
+                                        if (!fresh) return
+                                        setLatestVersion(
+                                            fresh.availability_version,
+                                        )
+                                        if (saved) {
+                                            setExpected(
+                                                fresh.availability_version,
+                                            )
+                                            setSaved(false)
+                                        }
+                                    })
+                                    .finally(() => setReloading(false))
                             }}
                         >
-                            已核对，保留输入重新报送
+                            重新核对最新资料
                         </Button>
-                    )}
-                </div>
+                        {commandFailureDisposition(error) === "conflict" && (
+                            <Button
+                                id="supplier-portal-availability-apply-version"
+                                type="button"
+                                variant="outline"
+                                disabled={
+                                    mutation.isPending || latestVersion == null
+                                }
+                                onClick={() => {
+                                    setExpected(latestVersion!)
+                                    setLatestVersion(null)
+                                    frozen.current = null
+                                    key.current = null
+                                    setError(null)
+                                }}
+                            >
+                                已核对，保留输入重新报送
+                            </Button>
+                        )}
+                    </div>
+                </DetailFormGrid>
             </form>
         </DetailWorkspaceSection>
     )

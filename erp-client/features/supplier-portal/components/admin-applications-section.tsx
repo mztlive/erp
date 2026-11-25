@@ -4,10 +4,11 @@ import Link from "next/link"
 import type { ColumnDef } from "@tanstack/react-table"
 import { ArrowUpRightIcon } from "lucide-react"
 import { useRouter } from "@/lib/navigation"
-import { OptionCombobox } from "@/components/business/option-combobox"
 import {
     DataTable,
+    DetailInlineTable,
     DetailWorkspaceSection,
+    OptionCombobox,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -178,10 +179,7 @@ export function SupplierApplicationsSection({
                 />
             }
         >
-            <div
-                data-slot="detail-inline-table"
-                className={detailWorkspaceStyles.dataTableWrapper}
-            >
+            <DetailInlineTable frame="scroll">
                 <DataTable
                     id="supplier-portal-admin-applications-table"
                     data={query.data?.items ?? []}
@@ -207,7 +205,7 @@ export function SupplierApplicationsSection({
                         pagination.pageIndex > 0
                     }
                 />
-            </div>
+            </DetailInlineTable>
         </DetailWorkspaceSection>
     )
 }

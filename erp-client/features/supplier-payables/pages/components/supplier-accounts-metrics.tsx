@@ -63,16 +63,17 @@ export function SupplierAccountsMetrics({
                 <DetailWorkspaceMetricItem
                     label="已逾期应付"
                     value={
-                        <span id="supplier-payables-metrics-overdue">
+                        <span
+                            id="supplier-payables-metrics-overdue"
+                            className={
+                                overduePositive ? "text-destructive" : undefined
+                            }
+                        >
                             <MoneyValue
                                 display="compact"
                                 showHint={false}
                                 value={metrics.overduePayableTotal}
-                                className={
-                                    overduePositive
-                                        ? "text-destructive"
-                                        : undefined
-                                }
+                                inheritColor={overduePositive}
                             />
                         </span>
                     }
@@ -111,7 +112,7 @@ export function SupplierAccountsMetrics({
                                 display="compact"
                                 showHint={false}
                                 value={metrics.unallocatedInvoiceTotal}
-                                className="text-xs text-muted-foreground"
+                                inheritColor
                             />
                         </span>
                     }

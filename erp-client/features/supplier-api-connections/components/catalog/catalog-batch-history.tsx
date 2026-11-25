@@ -3,9 +3,9 @@
 import { useState } from "react"
 import Link from "next/link"
 import { ClipboardListIcon } from "lucide-react"
-import { listWorkspaceStyles } from "@/components/business/list-workspace"
-import { Badge } from "@/components/ui/badge"
+import { listWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import {
     Dialog,
     DialogBody,
@@ -20,16 +20,19 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { BatchHistoryEntry, BatchHistoryStatus } from "../../api/batch"
 import { useAdoptionBatchesQuery } from "../../hooks/batch"
 
-const statuses = {
-    PREPARING: { label: "准备中", variant: "info", priority: 0 },
-    PREPARATION_FAILED: { label: "准备失败", variant: "warning", priority: 1 },
-    CANCELLED: { label: "已取消", variant: "secondary", priority: 5 },
-    PROCESSING: { label: "执行中", variant: "info", priority: 0 },
-    PENDING: { label: "待处理", variant: "warning", priority: 1 },
-    DRAFT: { label: "草稿", variant: "secondary", priority: 2 },
-    SUBMITTED: { label: "已提交", variant: "secondary", priority: 3 },
-    COMPLETED: { label: "已完成", variant: "success", priority: 4 },
-} as const
+const statuses: Record<
+    BatchHistoryStatus | "SUBMITTED",
+    { label: string; tone: StatusTone; priority: number }
+> = {
+    PREPARING: { label: "准备中", tone: "info", priority: 0 },
+    PREPARATION_FAILED: { label: "准备失败", tone: "warning", priority: 1 },
+    CANCELLED: { label: "已取消", tone: "void", priority: 5 },
+    PROCESSING: { label: "执行中", tone: "info", priority: 0 },
+    PENDING: { label: "待处理", tone: "warning", priority: 1 },
+    DRAFT: { label: "草稿", tone: "neutral", priority: 2 },
+    SUBMITTED: { label: "已提交", tone: "neutral", priority: 3 },
+    COMPLETED: { label: "已完成", tone: "success", priority: 4 },
+}
 
 function historyStatus(
     batch: BatchHistoryEntry,
@@ -138,18 +141,29 @@ export function CatalogBatchHistory({
                                             <p className="num font-medium break-all">
                                                 {batch.batch_no}
                                             </p>
-                                            <Badge variant={status.variant}>
-                                                {batch.work?.status ===
-                                                "RUNNING"
-                                                    ? batch.work.phase ===
-                                                      "SAVING"
-                                                        ? "保存中"
-                                                        : "核对中"
-                                                    : batch.work?.status ===
-                                                        "FAILED"
-                                                      ? "处理已中断"
-                                                      : status.label}
-                                            </Badge>
+                                            <StatusBadge
+                                                tone={
+                                                    batch.work?.status ===
+                                                    "FAILED"
+                                                        ? "destructive"
+                                                        : batch.work?.status ===
+                                                            "RUNNING"
+                                                          ? "info"
+                                                          : status.tone
+                                                }
+                                                label={
+                                                    batch.work?.status ===
+                                                    "RUNNING"
+                                                        ? batch.work.phase ===
+                                                          "SAVING"
+                                                            ? "保存中"
+                                                            : "核对中"
+                                                        : batch.work?.status ===
+                                                            "FAILED"
+                                                          ? "处理已中断"
+                                                          : status.label
+                                                }
+                                            />
                                         </div>
                                         <p className="text-xs text-muted-foreground">
                                             {batch.selected_count} 个 SKU

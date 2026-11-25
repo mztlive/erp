@@ -203,9 +203,10 @@ export function SupplierInvestigationLines({
                     {showSearch ? (
                         <Input
                             id={`${idPrefix}-lines-filter`}
+                            size="sm"
                             aria-label="按商品名称或供应商 SKU 筛选"
                             placeholder="搜索商品名称或供应商 SKU"
-                            className="h-control-sm min-w-0 flex-[1_1_12rem]"
+                            className="min-w-0 flex-[1_1_12rem]"
                             value={filter}
                             onChange={(event) => {
                                 setFilter(event.target.value)
@@ -230,7 +231,7 @@ export function SupplierInvestigationLines({
                     ) : null}
                 </div>
             ) : null}
-            <Table className="table-fixed border-separate border-spacing-0 text-left text-xs wrap-anywhere [&_td]:h-auto [&_td]:align-top [&_td]:whitespace-normal [&_th]:h-auto [&_th]:whitespace-normal">
+            <Table className="table-fixed border-separate border-spacing-0 text-left wrap-anywhere [&_td]:h-auto [&_td]:align-top [&_td]:whitespace-normal [&_th]:h-auto [&_th]:whitespace-normal">
                 <TableHeader className="bg-transparent [&_tr]:border-0 [&_th]:bg-surface-sunken [&_th]:text-muted-foreground [&_th:hover]:bg-surface-sunken">
                     <TableRow>
                         <TableHead

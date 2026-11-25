@@ -143,13 +143,7 @@ const accountColumns: ColumnDef<AccountRow>[] = [
                 account.unavailable_amount,
                 SCALE,
             )
-            return (
-                <MoneyValue
-                    value={available}
-                    display="exact"
-                    className="font-semibold"
-                />
-            )
+            return <MoneyValue value={available} display="exact" />
         },
     },
     {

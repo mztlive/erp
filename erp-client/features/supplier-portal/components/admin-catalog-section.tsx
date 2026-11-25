@@ -7,6 +7,7 @@ import { toFieldErrors, useAppForm } from "@/components/form"
 import {
     BusinessEmptyState,
     DataTable,
+    DetailInlineTable,
     DetailWorkspaceSection,
     detailWorkspaceStyles,
 } from "@/components/business"
@@ -309,10 +310,7 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                     className="py-12"
                 />
             ) : (
-                <div
-                    data-slot="detail-inline-table"
-                    className={detailWorkspaceStyles.dataTableWrapper}
-                >
+                <DetailInlineTable frame="scroll">
                     <DataTable
                         id="supplier-portal-admin-grants-table"
                         data={query.data?.items ?? []}
@@ -337,7 +335,7 @@ export function SupplierCatalogSection({ supplierId }: { supplierId: string }) {
                             pagination.pageIndex > 0
                         }
                     />
-                </div>
+                </DetailInlineTable>
             )}
             {canAdd && (
                 <Dialog

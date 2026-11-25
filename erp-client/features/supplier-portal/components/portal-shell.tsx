@@ -151,7 +151,7 @@ function PortalSidebarAccount({
                                     "供"}
                             </AvatarFallback>
                         </Avatar>
-                        <span className="grid min-w-0 flex-1 text-left text-body-compact leading-tight">
+                        <span className="grid min-w-0 flex-1 text-left text-body-compact">
                             <span className="truncate font-medium">
                                 {displayName}
                             </span>

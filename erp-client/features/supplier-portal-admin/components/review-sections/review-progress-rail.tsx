@@ -192,7 +192,7 @@ export function ReviewProgressRail({
                                         <span className="min-w-0 flex-1 space-y-1">
                                             <span
                                                 className={cn(
-                                                    "block truncate text-body-compact leading-snug",
+                                                    "block truncate text-body-compact",
                                                     isActive
                                                         ? "font-medium text-foreground"
                                                         : "font-normal",

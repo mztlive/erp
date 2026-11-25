@@ -5,11 +5,7 @@ import { hasPermission } from "@/lib/permissions"
 
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-    BusinessFailureState,
-    MetricStrip,
-    PageScaffold,
-} from "@/components/business"
+import { BusinessFailureState, PageScaffold } from "@/components/business"
 import {
     ListWorkspaceHeader,
     listWorkspaceStyles as styles,
@@ -139,15 +135,21 @@ export function ActualProfitLossPage() {
                     {page.viewQuery.isPending && !page.data ? (
                         <>
                             <Skeleton className="h-20 w-full" />
-                            <MetricStrip
-                                columns={5}
+                            <div
+                                role="region"
                                 aria-label="经营指标加载中"
                                 aria-busy="true"
+                                className="@container/decision-kpi min-w-0"
                             >
-                                {Array.from({ length: 5 }).map((_, i) => (
-                                    <Skeleton key={i} className="h-12 w-full" />
-                                ))}
-                            </MetricStrip>
+                                <div className="grid grid-cols-1 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/decision-kpi:grid-cols-2 @[960px]/decision-kpi:grid-cols-5">
+                                    {Array.from({ length: 5 }).map((_, i) => (
+                                        <Skeleton
+                                            key={i}
+                                            className="h-12 w-full"
+                                        />
+                                    ))}
+                                </div>
+                            </div>
                             <Skeleton className="h-64 w-full" />
                         </>
                     ) : null}

@@ -124,7 +124,6 @@ export function createScopedReceivableColumns(): ColumnDef<ScopedReceivableAccou
                     <MoneyValue
                         value={row.original.visible_settled_share}
                         display="exact"
-                        className="font-semibold"
                     />
                     {row.original.permission_limited ? (
                         <LimitedBadge
@@ -212,7 +211,6 @@ export function createScopedReceiptColumns(): ColumnDef<ScopedCustomerReceiptWir
                     <MoneyValue
                         value={row.original.visible_allocated_share}
                         display="exact"
-                        className="font-semibold"
                     />
                     {row.original.permission_limited ? (
                         <LimitedBadge
@@ -297,7 +295,6 @@ export function createScopedInvoiceColumns(): ColumnDef<ScopedInvoiceWire>[] {
                     <MoneyValue
                         value={row.original.visible_allocated_share}
                         display="exact"
-                        className="font-semibold"
                     />
                     {row.original.permission_limited ? (
                         <LimitedBadge

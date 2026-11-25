@@ -160,11 +160,7 @@ function scopeColumns(
                 numeric: true,
             },
             cell: ({ row }) => (
-                <MoneyValue
-                    value={row.original.amount}
-                    display="exact"
-                    className="font-semibold"
-                />
+                <MoneyValue value={row.original.amount} display="exact" />
             ),
         },
         {

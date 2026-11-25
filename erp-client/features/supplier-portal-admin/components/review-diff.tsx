@@ -655,10 +655,11 @@ function SubmittedSkuTable({
                             <Input
                                 ref={searchRef}
                                 id={`${prefix}-filter`}
+                                size="sm"
                                 type="text"
                                 aria-label="筛选规格"
                                 placeholder="筛选规格、单位或订货编码"
-                                className="h-control-sm w-full pr-7 pl-8 text-xs"
+                                className="w-full pr-7 pl-8"
                                 value={filter}
                                 onChange={(event) => {
                                     setFilter(event.target.value)

@@ -1,7 +1,7 @@
 "use client"
 
 import type { useAllocationSession } from "@/features/customer-receivables/hooks/use-allocation-session"
-import { InvoiceFilesField } from "@/features/customer-receivables/components/invoice-files-field"
+import { InvoiceFilesField } from "@/components/business/invoice-files-field"
 import { toFieldErrors } from "@/components/form"
 
 type AllocationForm = ReturnType<typeof useAllocationSession>["form"]

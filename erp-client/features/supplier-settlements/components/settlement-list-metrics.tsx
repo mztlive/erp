@@ -2,8 +2,8 @@
 
 import {
     DataFreshness,
-    MetricItem,
-    MetricStrip,
+    DecisionKpiBar,
+    DecisionKpiCell,
     MoneyValue,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
@@ -23,28 +23,27 @@ export function SettlementMetricsStrip({
 }) {
     return (
         <div className="flex flex-col gap-2 border-b border-border/60 pb-3">
-            <MetricStrip
-                variant="plain"
-                className="grid-cols-2 gap-y-2"
+            <DecisionKpiBar
                 columns={4}
-                aria-label="结算指标"
+                ariaLabel="结算指标"
+                gridClassName="grid-cols-2 gap-y-2"
             >
-                <MetricItem
+                <DecisionKpiCell
                     id="supplier-settlements-metrics-pending"
                     label="待处理"
                     value={pendingReconcile}
                 />
-                <MetricItem
+                <DecisionKpiCell
                     id="supplier-settlements-metrics-has-difference"
                     label="有差异"
                     value={hasDifference}
                 />
-                <MetricItem
+                <DecisionKpiCell
                     id="supplier-settlements-metrics-pending-review"
                     label="待复核"
                     value={pendingReview}
                 />
-                <MetricItem
+                <DecisionKpiCell
                     id="supplier-settlements-metrics-confirmed"
                     label="已确认金额"
                     value={
@@ -55,7 +54,7 @@ export function SettlementMetricsStrip({
                         />
                     }
                 />
-            </MetricStrip>
+            </DecisionKpiBar>
             {sourceAsOf ? (
                 <DataFreshness
                     updatedAt={formatDateTime(sourceAsOf, "default")}

@@ -105,9 +105,9 @@ function TabCount({
         <span
             className={
                 tone === "destructive"
-                    ? "num ml-1.5 rounded-sm bg-destructive-soft px-1.5 text-tiny leading-4 font-semibold text-destructive-soft-foreground"
+                    ? "num ml-1.5 rounded-sm bg-destructive-soft px-1.5 text-tiny font-semibold text-destructive-soft-foreground"
                     : tone === "warning"
-                      ? "num ml-1.5 rounded-sm bg-warning-soft px-1.5 text-tiny leading-4 font-semibold text-warning-soft-foreground"
+                      ? "num ml-1.5 rounded-sm bg-warning-soft px-1.5 text-tiny font-semibold text-warning-soft-foreground"
                       : "num ml-1.5 text-xs text-muted-foreground/80"
             }
         >
@@ -706,15 +706,19 @@ function AccountSummaryMetrics({ data }: { data: AccountDetail }) {
             <DetailWorkspaceMetricItem
                 label="其他不可用额度"
                 value={
-                    <MoneyValue
-                        value={data.account.unavailable_amount}
-                        display="exact"
+                    <span
                         className={
                             hasUnavailable
                                 ? "text-warning-soft-foreground"
                                 : "text-muted-foreground"
                         }
-                    />
+                    >
+                        <MoneyValue
+                            value={data.account.unavailable_amount}
+                            display="exact"
+                            inheritColor
+                        />
+                    </span>
                 }
                 detail="不含已占用；可用余额已扣除该额度"
             />

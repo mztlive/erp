@@ -59,32 +59,31 @@ export function InvoiceSessionFooter({
                         <span className="text-xs text-muted-foreground">
                             {isExistingInvoice ? "可核销" : "发票金额"}
                         </span>
-                        <MoneyValue
-                            value={factAmount || "0"}
-                            className="text-value-compact font-semibold tracking-tight"
-                        />
+                        <MoneyValue value={factAmount || "0"} size="compact" />
                     </div>
                     <div className="flex items-baseline gap-2 border-l border-border/70 pl-6">
                         <span className="text-xs text-muted-foreground">
                             本次核销
                         </span>
-                        <MoneyValue
-                            value={allocatedHint}
-                            className="text-value-compact font-semibold tracking-tight"
-                        />
+                        <MoneyValue value={allocatedHint} size="compact" />
                     </div>
                     <div className="flex items-baseline gap-2 border-l border-border/70 pl-6">
                         <span className="text-xs text-muted-foreground">
                             {overAllocated ? "超出金额" : "未核销"}
                         </span>
-                        <MoneyValue
+                        <span
                             className={
-                                overAllocated
-                                    ? "text-value-compact font-semibold text-destructive tracking-tight"
-                                    : "text-value-compact font-semibold tracking-tight"
+                                overAllocated ? "text-destructive" : undefined
                             }
-                            value={overAllocated ? overAmount : unallocatedHint}
-                        />
+                        >
+                            <MoneyValue
+                                size="compact"
+                                inheritColor={overAllocated}
+                                value={
+                                    overAllocated ? overAmount : unallocatedHint
+                                }
+                            />
+                        </span>
                     </div>
                     <span
                         role={isErrorHint ? "status" : undefined}

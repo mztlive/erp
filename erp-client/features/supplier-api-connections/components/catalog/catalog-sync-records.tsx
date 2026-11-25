@@ -1,7 +1,7 @@
 "use client"
 
 import { ChevronDownIcon } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { formatDateTime } from "@/lib/datetime"
 import {
@@ -12,7 +12,7 @@ import {
 } from "../../api/catalog"
 
 function JobStatus({ job }: { job: CatalogJob }) {
-    const variant = job.stalled
+    const tone: StatusTone = job.stalled
         ? "warning"
         : job.status === "failed"
           ? "destructive"
@@ -22,9 +22,10 @@ function JobStatus({ job }: { job: CatalogJob }) {
               ? "info"
               : "neutral"
     return (
-        <Badge variant={variant}>
-            {job.stalled ? "同步已中断" : CATALOG_JOB_LABEL[job.status]}
-        </Badge>
+        <StatusBadge
+            tone={tone}
+            label={job.stalled ? "同步已中断" : CATALOG_JOB_LABEL[job.status]}
+        />
     )
 }
 
@@ -50,7 +51,7 @@ function JobDetails({ job }: { job: CatalogJob }) {
             {job.error_summary ? (
                 <div className="space-y-1.5 rounded-lg bg-muted/50 p-3">
                     <p className="font-medium">失败原因</p>
-                    <p className="break-words text-muted-foreground leading-relaxed">
+                    <p className="break-words text-muted-foreground">
                         {job.error_summary}
                     </p>
                 </div>
@@ -73,7 +74,7 @@ function JobDetails({ job }: { job: CatalogJob }) {
                                 <span className="num shrink-0 text-xs text-muted-foreground">
                                     {index + 1}.
                                 </span>
-                                <p className="min-w-0 break-words text-xs leading-relaxed text-muted-foreground">
+                                <p className="min-w-0 break-words text-xs text-muted-foreground">
                                     {message}
                                 </p>
                             </li>
@@ -92,7 +93,7 @@ export function CatalogSyncRecords({ data }: { data: CatalogResult }) {
             {latest ? (
                 <section
                     aria-label="最近一次同步"
-                    className="space-y-4 rounded-xl border p-4"
+                    className="space-y-4 rounded-lg border p-4"
                 >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="space-y-1">
@@ -150,7 +151,7 @@ export function CatalogSyncRecords({ data }: { data: CatalogResult }) {
                     尚无同步记录
                 </p>
             )}
-            <p className="text-xs leading-relaxed text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
                 {data.incremental_supported
                     ? "支持增量更新"
                     : "采用全量读取校对"}

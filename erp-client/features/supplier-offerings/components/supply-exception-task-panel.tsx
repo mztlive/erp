@@ -2,37 +2,26 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import Link from "next/link"
-import {
-    ChevronRightIcon,
-    CircleHelpIcon,
-    TriangleAlertIcon,
-} from "lucide-react"
 import { z } from "zod"
 
 import {
     BusinessFailureState,
+    DecisionKpiBar,
+    DecisionKpiCell,
     FormalActionConfirmDialog,
     MoneyValue,
     QuantityValue,
+    ReasonTextareaField,
+    TaskRiskSummaryBar,
     WorkspaceFactGrid,
     WorkspaceFactItem,
-} from "@/components/business"
-import { ReasonTextareaField } from "@/components/business/reason-textarea-field"
-import {
     WorkspaceTaskFooter,
     useWorkspaceInspectorMode,
-} from "@/components/business/workspace-task-pane"
-import { useAppForm } from "@/components/form"
-import { toFieldErrors } from "@/components/form/utils"
+} from "@/components/business"
+import { toFieldErrors, useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useCompleteSupplierSupplyExceptionTaskMutation } from "@/features/supplier-offerings/hooks/queries"
 import {
@@ -402,44 +391,37 @@ function SupplyExceptionVerification({
                     </div>
                 ) : task && mayReadTask && !error ? (
                     <>
-                        <div
-                            role="alert"
-                            className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-2 rounded-r-md border-l-2 border-l-destructive bg-destructive-soft/65 px-3 py-2.5 text-destructive-soft-foreground"
-                        >
-                            <div className="flex min-w-0 flex-[1_1_16rem] items-start gap-2">
-                                <TriangleAlertIcon
-                                    aria-hidden="true"
-                                    className="mt-0.5 size-3.5 shrink-0"
-                                />
-                                <div className="min-w-0 flex-1 space-y-0.5 text-body-compact wrap-anywhere">
-                                    <p className="font-semibold">
+                        <TaskRiskSummaryBar
+                            severity="destructive"
+                            leadLabel={null}
+                            summary={
+                                <span className="inline-flex flex-col gap-0.5 text-body-compact">
+                                    <span className="font-semibold">
                                         {task.reasonLabel}
-                                    </p>
-                                    <p>{task.impactSummary}</p>
-                                    <p className="text-xs opacity-90">
+                                    </span>
+                                    <span>{task.impactSummary}</span>
+                                    <span className="text-xs opacity-90">
                                         {closeCondition}
-                                    </p>
-                                </div>
-                            </div>
-                            {onOpenDiagnostics || canSubmit ? (
-                                <Button
-                                    id={`${idPrefix}-jump-diagnostics`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="xs"
-                                    className="font-medium text-destructive-soft-foreground shadow-none hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                    onClick={onOpenDiagnostics ?? focusEvidence}
-                                >
-                                    {onOpenDiagnostics
-                                        ? "查看影响诊断"
-                                        : "登记核对凭据"}
-                                    <ChevronRightIcon
-                                        data-icon="inline-end"
-                                        aria-hidden="true"
-                                    />
-                                </Button>
-                            ) : null}
-                        </div>
+                                    </span>
+                                </span>
+                            }
+                            actions={
+                                onOpenDiagnostics || canSubmit
+                                    ? [
+                                          {
+                                              id: "jump-diagnostics",
+                                              buttonId: `${idPrefix}-jump-diagnostics`,
+                                              label: onOpenDiagnostics
+                                                  ? "查看影响诊断"
+                                                  : "登记核对凭据",
+                                              onClick:
+                                                  onOpenDiagnostics ??
+                                                  focusEvidence,
+                                          },
+                                      ]
+                                    : undefined
+                            }
+                        />
                         <SupplyExceptionKpis
                             idPrefix={idPrefix}
                             task={task}
@@ -802,71 +784,51 @@ function SupplyExceptionKpis({
     const metricCount = 2 + (availability ? 1 : 0) + (detectedAt ? 1 : 0)
 
     return (
-        <TooltipProvider>
-            <dl
-                className={cn(
-                    "grid grid-cols-1 gap-x-4 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/supply-exception:grid-cols-2",
-                    metricCount === 4 &&
-                        "@[840px]/supply-exception:grid-cols-4",
-                    metricCount === 3 &&
-                        "@[840px]/supply-exception:grid-cols-3",
-                )}
-            >
-                <div className="min-w-0">
-                    <dt className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                        涉及供给
-                        <Tooltip>
-                            <TooltipTrigger
-                                id={`${idPrefix}-scope-help`}
-                                render={
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon-xs"
-                                        aria-label="涉及供给的统计口径"
-                                    />
-                                }
-                            >
-                                <CircleHelpIcon aria-hidden="true" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                按本条待办关联的供应商供给计数。受影响的发布范围见影响诊断。
-                            </TooltipContent>
-                        </Tooltip>
-                    </dt>
-                    <dd className="num text-value-section font-semibold tracking-tight">
+        <DecisionKpiBar
+            columns={metricCount === 4 ? 4 : metricCount === 3 ? 3 : 2}
+            ariaLabel="供货异常关键指标"
+            gridClassName="gap-x-4 gap-y-3"
+        >
+            <DecisionKpiCell
+                label="涉及供给"
+                emphasis="primary"
+                formulaTooltipId={`${idPrefix}-scope-help`}
+                formulaTooltipLabel="涉及供给的统计口径"
+                formulaTooltip="按本条待办关联的供应商供给计数。受影响的发布范围见影响诊断。"
+                value={
+                    <>
                         1{" "}
                         <span className="text-xs font-normal text-muted-foreground">
                             项
                         </span>
-                    </dd>
-                </div>
-                <div className="min-w-0 space-y-1">
-                    <dt className="text-xs text-muted-foreground">
-                        {offering ? "当前供给状态" : "停供事件"}
-                    </dt>
-                    <dd>
-                        <StatusBadge
-                            appearance="text"
-                            tone={
-                                offering
-                                    ? offeringTone[offering.status]
-                                    : "destructive"
-                            }
-                            label={
-                                offering
-                                    ? OFFERING_STATUS_LABELS[offering.status]
-                                    : "供应已停止"
-                            }
-                        />
-                    </dd>
-                </div>
-                {availability ? (
-                    <div className="min-w-0 space-y-1">
-                        <dt className="text-xs text-muted-foreground">
-                            当前可供状态
-                        </dt>
-                        <dd className="flex flex-wrap items-baseline gap-x-2">
+                    </>
+                }
+            />
+            <DecisionKpiCell
+                label={offering ? "当前供给状态" : "停供事件"}
+                emphasis="terms"
+                value={
+                    <StatusBadge
+                        appearance="text"
+                        tone={
+                            offering
+                                ? offeringTone[offering.status]
+                                : "destructive"
+                        }
+                        label={
+                            offering
+                                ? OFFERING_STATUS_LABELS[offering.status]
+                                : "供应已停止"
+                        }
+                    />
+                }
+            />
+            {availability ? (
+                <DecisionKpiCell
+                    label="当前可供状态"
+                    emphasis="terms"
+                    value={
+                        <span className="flex flex-wrap items-baseline gap-x-2">
                             <StatusBadge
                                 appearance="text"
                                 tone={availabilityTone[availability]}
@@ -879,23 +841,22 @@ function SupplyExceptionKpis({
                                     unit={null}
                                 />
                             ) : null}
-                        </dd>
-                    </div>
-                ) : null}
-                {detectedAt ? (
-                    <div className="min-w-0 space-y-1">
-                        <dt className="text-xs text-muted-foreground">
-                            异常登记时间
-                        </dt>
-                        <dd className="text-body-compact font-medium">
-                            <time className="num" dateTime={detectedAt}>
-                                {formatDateTime(detectedAt)}
-                            </time>
-                        </dd>
-                    </div>
-                ) : null}
-            </dl>
-        </TooltipProvider>
+                        </span>
+                    }
+                />
+            ) : null}
+            {detectedAt ? (
+                <DecisionKpiCell
+                    label="异常登记时间"
+                    emphasis="terms"
+                    value={
+                        <time className="num" dateTime={detectedAt}>
+                            {formatDateTime(detectedAt)}
+                        </time>
+                    }
+                />
+            ) : null}
+        </DecisionKpiBar>
     )
 }
 

@@ -81,7 +81,7 @@ function CatalogMediaWarning({ item }: { item: CatalogItem }) {
             </HoverCardTrigger>
             <HoverCardContent
                 align="start"
-                className="max-h-64 max-w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-xl text-xs leading-relaxed break-words"
+                className="max-h-64 max-w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-lg text-xs break-words"
             >
                 <p>{message}</p>
             </HoverCardContent>

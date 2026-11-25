@@ -57,19 +57,13 @@ export function ReceiptSessionFooter({
                         <span className="text-xs text-muted-foreground">
                             {amountLabel}
                         </span>
-                        <MoneyValue
-                            value={amount || "0"}
-                            className="text-value-compact font-semibold tracking-tight"
-                        />
+                        <MoneyValue value={amount || "0"} size="compact" />
                     </div>
                     <div className="flex items-baseline gap-2 border-l border-border/70 pl-6">
                         <span className="text-xs text-muted-foreground">
                             {allocatedLabel}
                         </span>
-                        <MoneyValue
-                            value={allocated}
-                            className="text-value-compact font-semibold tracking-tight"
-                        />
+                        <MoneyValue value={allocated} size="compact" />
                     </div>
                     <div className="flex items-baseline gap-2 border-l border-border/70 pl-6">
                         <span className="text-xs text-muted-foreground">
@@ -77,18 +71,21 @@ export function ReceiptSessionFooter({
                                 ? overAllocatedLabel
                                 : unallocatedLabel}
                         </span>
-                        <MoneyValue
+                        <span
                             className={
-                                overAllocated
-                                    ? "text-value-compact font-semibold text-destructive tracking-tight"
-                                    : "text-value-compact font-semibold tracking-tight"
+                                overAllocated ? "text-destructive" : undefined
                             }
-                            value={
-                                overAllocated
-                                    ? subtractAmounts(allocated, amount)
-                                    : unallocated
-                            }
-                        />
+                        >
+                            <MoneyValue
+                                size="compact"
+                                inheritColor={overAllocated}
+                                value={
+                                    overAllocated
+                                        ? subtractAmounts(allocated, amount)
+                                        : unallocated
+                                }
+                            />
+                        </span>
                     </div>
                     {hintText ? (
                         <span

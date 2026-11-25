@@ -371,10 +371,11 @@ export function SettlementReviewTable({
                         <Input
                             ref={searchRef}
                             id={`${idPrefix}-search`}
+                            size="sm"
                             value={keyword}
                             aria-label="搜索结算明细或差异"
                             placeholder="商品、单号或差异"
-                            className="h-control-sm pr-7 pl-7 text-xs"
+                            className="pr-7 pl-7"
                             onChange={(event) => {
                                 setKeyword(event.target.value)
                                 setPage(1)

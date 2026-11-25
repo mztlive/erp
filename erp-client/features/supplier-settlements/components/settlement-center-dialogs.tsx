@@ -55,11 +55,7 @@ function MoneyWithReadout({
     return (
         <span className="inline-flex flex-wrap items-baseline gap-1.5">
             <span>{label}：</span>
-            <MoneyValue
-                value={value}
-                display="exact"
-                className="font-semibold"
-            />
+            <MoneyValue value={value} display="exact" />
             {readout ? (
                 <span className="text-xs text-muted-foreground">
                     （{readout}）
@@ -124,11 +120,15 @@ function SettlementResolveDialog({
                                     <span>{activeDiff.typeLabel}</span>
                                     {activeDiff.amountGross ? (
                                         <>
-                                            <MoneyValue
-                                                value={activeDiff.amountGross}
-                                                display="exact"
-                                                className="text-warning-soft-foreground"
-                                            />
+                                            <span className="text-warning-soft-foreground">
+                                                <MoneyValue
+                                                    value={
+                                                        activeDiff.amountGross
+                                                    }
+                                                    display="exact"
+                                                    inheritColor
+                                                />
+                                            </span>
                                             {diffReadout ? (
                                                 <span className="font-normal text-muted-foreground">
                                                     （{diffReadout}）

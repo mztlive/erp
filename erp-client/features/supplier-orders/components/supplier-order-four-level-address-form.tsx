@@ -267,10 +267,7 @@ export function SupplierOrderFourLevelAddressForm({
                                 }
                                 disabled={pending}
                             />
-                            <Label
-                                htmlFor={`${prefix}-confirmed`}
-                                className="leading-6"
-                            >
+                            <Label htmlFor={`${prefix}-confirmed`}>
                                 已核对完整收货地址，对应区域为：
                                 {selectedSummary}
                             </Label>

@@ -51,11 +51,7 @@ export function buildPayableColumns(input: {
                 numeric: true,
             },
             cell: ({ row }) => (
-                <MoneyValue
-                    value={row.original.openTotal}
-                    display="exact"
-                    className="font-semibold"
-                />
+                <MoneyValue value={row.original.openTotal} display="exact" />
             ),
         },
         {

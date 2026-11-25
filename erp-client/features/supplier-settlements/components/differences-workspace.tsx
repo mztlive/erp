@@ -67,11 +67,11 @@ export function DifferencesWorkspace({
                                 {d.blocking ? " · 阻断" : ""}
                             </span>
                             {d.amountGross ? (
-                                <span className="mt-0.5">
+                                <span className="mt-0.5 text-xs text-warning-soft-foreground">
                                     <MoneyValue
                                         value={d.amountGross}
                                         display="exact"
-                                        className="num text-xs font-semibold text-warning-soft-foreground"
+                                        inheritColor
                                     />
                                 </span>
                             ) : null}
@@ -111,11 +111,13 @@ export function DifferencesWorkspace({
                         subtitle={activeDiff.amountDirectionLabel}
                     >
                         {activeDiff.amountGross ? (
-                            <MoneyValue
-                                className="text-warning-soft-foreground"
-                                value={activeDiff.amountGross}
-                                display="exact"
-                            />
+                            <span className="text-warning-soft-foreground">
+                                <MoneyValue
+                                    value={activeDiff.amountGross}
+                                    display="exact"
+                                    inheritColor
+                                />
+                            </span>
                         ) : null}
 
                         <div className="grid gap-2 text-body-compact sm:grid-cols-2">

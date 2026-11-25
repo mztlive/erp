@@ -1,7 +1,7 @@
 "use client"
 
 import { QuantityValue } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import type { SourcePurchaseTerms as PurchaseTerms } from "@/lib/api/source-purchase-terms"
 import { formatDateTime } from "@/lib/datetime"
 
@@ -68,12 +68,11 @@ export function SourcePurchaseTerms({
                 <div className="space-y-2">
                     <div className="flex flex-wrap gap-1.5">
                         {terms.restrictions.map((restriction, index) => (
-                            <Badge
+                            <StatusBadge
                                 key={`${restriction.kind}-${index}`}
-                                variant="warning"
-                            >
-                                {RESTRICTION_LABEL[restriction.kind]}
-                            </Badge>
+                                tone="warning"
+                                label={RESTRICTION_LABEL[restriction.kind]}
+                            />
                         ))}
                     </div>
                     <p className="text-xs text-muted-foreground">

@@ -3,7 +3,7 @@
 import { z } from "zod"
 
 import type { AllocationSessionView } from "@/features/customer-receivables/types"
-import { invoiceFilesError } from "@/features/customer-receivables/lib/invoice-files"
+import { invoiceFilesError } from "@/lib/invoice-files"
 
 export const factFormSchema = z.object({
     receivedAt: z.string(),

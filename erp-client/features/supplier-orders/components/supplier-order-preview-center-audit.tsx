@@ -4,8 +4,8 @@ import * as React from "react"
 
 import {
     BusinessStatusBadge,
+    DetailInlineTable,
     DetailWorkspaceSection,
-    detailWorkspaceStyles,
 } from "@/components/business"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { RequiredMark } from "@/components/ui/required-mark"
@@ -60,10 +60,7 @@ export function AuditSection({
     return (
         <>
             <DetailWorkspaceSection title="动作与审计" width="full">
-                <div
-                    data-slot="detail-inline-table"
-                    className={detailWorkspaceStyles.dataTableWrapper}
-                >
+                <DetailInlineTable frame="scroll">
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -114,7 +111,7 @@ export function AuditSection({
                             ) : null}
                         </TableBody>
                     </Table>
-                </div>
+                </DetailInlineTable>
             </DetailWorkspaceSection>
 
             {canAddNote ? (
