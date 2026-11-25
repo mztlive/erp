@@ -118,6 +118,7 @@ function DataTable<TData>({
     striped = false,
     loading = false,
     errorState,
+    error,
     errorTitle,
     errorSummary,
     onRetry,
@@ -128,7 +129,7 @@ function DataTable<TData>({
     refreshingLabel = "正在刷新，当前内容会保留",
     emptyState,
     renderToolbar,
-    showToolbarSummary = true,
+    showToolbarSummary = false,
     showColumnVisibility = true,
     showPagination = true,
     pageSizeOptions = [20, 50, 100],
@@ -371,6 +372,7 @@ function DataTable<TData>({
     const rows = table.getRowModel().rows
     const showErrorState =
         errorState !== undefined ||
+        error != null ||
         errorTitle !== undefined ||
         errorSummary !== undefined ||
         onRetry !== undefined
@@ -479,6 +481,7 @@ function DataTable<TData>({
                         loading={loading}
                         showErrorState={showErrorState}
                         errorState={errorState}
+                        error={error}
                         errorTitle={errorTitle}
                         errorSummary={errorSummary}
                         onRetry={onRetry}

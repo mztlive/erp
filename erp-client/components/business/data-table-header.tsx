@@ -31,6 +31,7 @@ const SEMANTIC_MIN_WIDTH_PX: Record<DataTableColumnWidth, number> = {
     quantity: 112,
     rate: 96,
     tracks: 256,
+    actions: 112,
 }
 
 function measureHeaderCellMetrics(headerCell: HTMLTableCellElement | null) {

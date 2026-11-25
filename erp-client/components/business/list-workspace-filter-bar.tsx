@@ -115,12 +115,12 @@ export function ListFilterRangeField({
 }) {
     return (
         <div className={cn("min-w-0", fieldClassName)}>
-            <ListWorkspaceFilterField label={label}>
+            <ListWorkspaceFilterField htmlFor={minId} label={label}>
                 <div className="flex min-w-0 items-center gap-1">
                     <Input
                         id={minId}
                         ref={inputRef}
-                        className={inputClassName}
+                        className={cn("num", inputClassName)}
                         value={min}
                         onChange={(event) => onMinChange(event.target.value)}
                         inputMode={inputMode}
@@ -135,7 +135,7 @@ export function ListFilterRangeField({
                     </span>
                     <Input
                         id={maxId}
-                        className={inputClassName}
+                        className={cn("num", inputClassName)}
                         value={max}
                         onChange={(event) => onMaxChange(event.target.value)}
                         inputMode={inputMode}
@@ -286,6 +286,7 @@ export function ListWorkspaceFilterBar({
     moreButtonId,
     resetMoreButtonId,
     clearButtonId,
+    idConvention = "legacy",
 }: {
     density?: "default" | "compact"
     idPrefix: string
@@ -329,6 +330,12 @@ export function ListWorkspaceFilterBar({
     moreButtonId?: string
     resetMoreButtonId?: string
     clearButtonId?: string
+    /**
+     * 自动化 DOM ID 过渡策略：
+     * - `"legacy"`（默认）：`moreButtonId` 缺省保留 `${idPrefix}-more`（保护 `e2e/tests/s2-org-data-scope-browser.spec.ts` `#workspace-query-more` 断言）；
+     * - `"standard"`：按 list-table-design-system.md §7.2 派生 `${idPrefix}-filter-trigger`。
+     */
+    idConvention?: "legacy" | "standard"
 }) {
     const effectivePending = reactive ? false : hasPendingChanges
     const resolvedMoreHint =
@@ -337,7 +344,11 @@ export function ListWorkspaceFilterBar({
             ? "选择条件后即时生效，无需点击查询。"
             : "可组合多个条件，点击「查询」后统一生效。")
     const panelId = morePanelId ?? `${idPrefix}-more-panel`
-    const triggerId = moreButtonId ?? `${idPrefix}-more`
+    const triggerId =
+        moreButtonId ??
+        (idConvention === "standard"
+            ? `${idPrefix}-filter-trigger`
+            : `${idPrefix}-more`)
     const showMore = morePanel != null && onToggleMore != null
     const visibleChips = React.useMemo(
         () =>
@@ -404,11 +415,11 @@ export function ListWorkspaceFilterBar({
             ))}
             {onClearAll ? (
                 <Button
-                    id={clearButtonId ?? `${idPrefix}-clear`}
+                    id={clearButtonId ?? `${idPrefix}-clear-filters`}
                     type="button"
                     variant="ghost"
                     size="xs"
-                    className="h-6 px-1.5 text-xs font-normal text-muted-foreground hover:bg-transparent hover:text-primary"
+                    className="h-control-xs px-1.5 text-xs font-normal text-muted-foreground hover:bg-transparent hover:text-primary"
                     onClick={onClearAll}
                 >
                     {isTrayPresentation ? listFilterText.clear : "清除全部"}

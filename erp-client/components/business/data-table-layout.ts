@@ -10,6 +10,8 @@ export type DataTableColumnWidth =
     | "quantity"
     | "rate"
     | "tracks"
+    /** 行尾操作列（128px / 最小 112px），消除页面在 tableClassName 手写 actions 列宽。 */
+    | "actions"
 
 export type DataTableLayout = "inset" | "flush"
 
@@ -22,6 +24,7 @@ const dataTableColumnWidthClasses: Record<DataTableColumnWidth, string> = {
     quantity: "w-table-column-quantity min-w-table-column-quantity-min",
     rate: "w-table-column-rate min-w-table-column-rate-min",
     tracks: "w-table-column-tracks min-w-table-column-tracks-min",
+    actions: "w-32 min-w-28",
 }
 
 export function alignmentClass(alignment: DataTableAlignment = "start") {

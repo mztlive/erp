@@ -1,8 +1,10 @@
 "use client"
 
 import * as React from "react"
+import type { LucideIcon } from "lucide-react"
 
 import { BusinessStatusBadge } from "@/components/business/values"
+import { Button } from "@/components/ui/button"
 import type { StatusTone } from "@/components/ui/status-badge"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
@@ -87,14 +89,25 @@ export function TableIdentityCell({
     numericSecondary?: boolean
     className?: string
 }) {
+    const resolvedPrimaryTitle =
+        primaryTitle ??
+        (typeof primary === "string" || typeof primary === "number"
+            ? String(primary)
+            : undefined)
+    const resolvedSecondaryTitle =
+        secondaryTitle ??
+        (typeof secondary === "string" || typeof secondary === "number"
+            ? String(secondary)
+            : undefined)
+
     return (
         <div
             data-slot="table-identity-cell"
             className={cn("min-w-0", className)}
         >
             <div
-                className="truncate leading-5 font-medium text-foreground"
-                title={primaryTitle}
+                className="truncate font-medium text-foreground"
+                title={resolvedPrimaryTitle}
             >
                 {primary}
             </div>
@@ -104,7 +117,7 @@ export function TableIdentityCell({
                         "truncate text-xs leading-4 text-muted-foreground/80",
                         numericSecondary && "num",
                     )}
-                    title={secondaryTitle}
+                    title={resolvedSecondaryTitle}
                 >
                     {secondary}
                 </div>
@@ -114,7 +127,7 @@ export function TableIdentityCell({
 }
 
 /**
- * 标准表格文本单元格：继承表格 13px（`text-body-compact`），空值自动降级为淡灰 `—`。
+ * 标准表格文本单元格：继承表格 13px（`text-body-compact`）与 `text-foreground/90`，空值自动降级为淡灰 `—`。
  */
 export function TableTextCell({
     value,
@@ -142,6 +155,7 @@ export function TableTextCell({
         <span
             data-slot="table-text-cell"
             className={cn(
+                "text-foreground/90",
                 numeric && "num",
                 clamp === 1 && "block truncate",
                 clamp === 2 && "line-clamp-2 max-w-56",
@@ -155,17 +169,78 @@ export function TableTextCell({
 }
 
 /**
+ * 可点击语义状态单元格（对齐 list-table-design-system.md §5.4 #6）：
+ * 自动拦截事件冒泡（`stopPropagation`），防止触发整行点击/预览；
+ * 支持直接传 `label`/`tone`/`appearance` 渲染 `BusinessStatusBadge`，或传自定义 `children`。
+ */
+export function TableStatusActionCell({
+    label,
+    tone,
+    icon,
+    appearance = "badge",
+    description,
+    children,
+    className,
+    onClick,
+    type = "button",
+    variant = "ghost",
+    size = "xs",
+    ...props
+}: Omit<React.ComponentProps<typeof Button>, "children"> & {
+    label?: string
+    tone?: StatusTone
+    icon?: LucideIcon
+    appearance?: "badge" | "text" | "quiet"
+    description?: React.ReactNode
+    children?: React.ReactNode
+}) {
+    return (
+        <Button
+            data-slot="table-status-action-cell"
+            type={type}
+            variant={variant}
+            size={size}
+            className={cn(
+                "h-auto max-w-full px-0 py-0.5 font-normal",
+                className,
+            )}
+            onClick={(event) => {
+                event.stopPropagation()
+                onClick?.(event)
+            }}
+            {...props}
+        >
+            {children ??
+                (label != null ? (
+                    <BusinessStatusBadge
+                        context="list"
+                        tone={tone}
+                        icon={icon}
+                        appearance={appearance}
+                        description={description}
+                        label={label}
+                    />
+                ) : null)}
+        </Button>
+    )
+}
+
+/**
  * 行内即时开关单元格：
- * - 有写权限时渲染 `Switch size="sm"`；
- * - 无写权限时自动降级为只读 `BusinessStatusBadge context="list"`。
+ * - 有写权限时渲染 `Switch size="sm"`，并支持在开关旁挂轻量 `text-tiny` 琥珀中间态微标（如「部分」）；
+ * - 无写权限时自动降级为只读 `BusinessStatusBadge context="list"`，支持 `appearance="quiet"` 与 `className`。
  */
 export function TableSwitchCell({
     id,
     canEdit,
     checked,
     disabled = false,
+    disabledReason,
     statusLabel,
     statusTone,
+    appearance = "badge",
+    intermediateLabel,
+    intermediateTitle,
     accessibleName,
     title,
     onCheckedChange,
@@ -175,8 +250,16 @@ export function TableSwitchCell({
     canEdit: boolean
     checked: boolean
     disabled?: boolean
+    /** 禁用时包一层容器承载原生 tooltip，保证悬停可见原因。 */
+    disabledReason?: string
     statusLabel: string
     statusTone?: StatusTone
+    /** 无写权降级为只读徽章时的呈现风格（支持 `"quiet"` 降噪）。 */
+    appearance?: "badge" | "text" | "quiet"
+    /** 中间态（如「部分上架」）在开关旁展示的 `text-tiny` 琥珀微标内容。 */
+    intermediateLabel?: React.ReactNode
+    /** 中间态琥珀微标的悬停说明。 */
+    intermediateTitle?: string
     accessibleName: string
     title?: string
     onCheckedChange: (checked: boolean) => void
@@ -186,14 +269,20 @@ export function TableSwitchCell({
         return (
             <BusinessStatusBadge
                 context="list"
+                appearance={appearance}
                 tone={statusTone ?? (checked ? "success" : "neutral")}
                 label={statusLabel}
+                className={className}
             />
         )
     }
 
-    const resolvedTitle = title ?? statusLabel
-    return (
+    const hasIntermediate =
+        intermediateLabel != null &&
+        intermediateLabel !== "" &&
+        intermediateLabel !== false
+    const resolvedTitle = title ?? disabledReason ?? statusLabel
+    const switchNode = (
         <Switch
             nativeButton
             render={
@@ -207,10 +296,39 @@ export function TableSwitchCell({
             size="sm"
             checked={checked}
             disabled={disabled}
+            onClick={(event) => event.stopPropagation()}
             onCheckedChange={onCheckedChange}
             aria-label={accessibleName}
             title={resolvedTitle}
-            className={className}
+            className={hasIntermediate ? undefined : className}
         />
+    )
+    const switchWithHint =
+        disabled && disabledReason ? (
+            <span className="inline-flex" title={disabledReason}>
+                {switchNode}
+            </span>
+        ) : (
+            switchNode
+        )
+
+    if (!hasIntermediate) {
+        return switchWithHint
+    }
+
+    return (
+        <div
+            data-slot="table-switch-cell"
+            className={cn("inline-flex items-center gap-1.5", className)}
+        >
+            {switchWithHint}
+            <span
+                data-slot="table-switch-intermediate"
+                title={intermediateTitle}
+                className="inline-flex items-center rounded-sm bg-warning-soft px-1.5 py-0.5 text-tiny leading-4 font-medium text-warning-soft-foreground"
+            >
+                {intermediateLabel}
+            </span>
+        </div>
     )
 }

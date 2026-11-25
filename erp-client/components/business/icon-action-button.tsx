@@ -1,6 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
+import Link from "next/link"
 
 import { Button, buttonVariants } from "@/components/ui/button"
 import {
@@ -9,7 +10,7 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-/** 标题栏图标动作：可跳转或触发回调，图标本身不承载文字。 */
+/** 标题栏图标动作：可跳转或触发回调，以稳定原生 `id` 为主；`href + disabled` 自动降级为禁用按钮。 */
 export function IconActionButton({
     id,
     label,
@@ -19,9 +20,9 @@ export function IconActionButton({
     onClick,
     children,
 }: {
-    id?: string
+    id: string
     label: string
-    testId: string
+    testId?: string
     href?: string
     disabled?: boolean
     onClick?: () => void
@@ -30,14 +31,14 @@ export function IconActionButton({
     return (
         <Tooltip>
             <TooltipTrigger
-                id={id}
                 render={
-                    href ? (
-                        <a
+                    href && !disabled ? (
+                        <Link
                             id={id}
                             href={href}
                             aria-label={label}
                             data-testid={testId}
+                            onClick={onClick}
                             className={buttonVariants({
                                 variant: "ghost",
                                 size: "icon-sm",

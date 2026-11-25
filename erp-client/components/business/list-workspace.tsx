@@ -10,7 +10,10 @@ import {
 } from "@/components/business/list-data-table"
 import {
     ListSelectionBar,
+    ListSelectionBarActionButton,
     useFrozenSelectionSnapshot,
+    type ListSelectionBarAction,
+    type ListSelectionBarActionButtonProps,
     type ListSelectionBarDisplay,
     type ListSelectionBarProps,
 } from "@/components/business/list-selection-bar"
@@ -232,7 +235,10 @@ export {
     type ListDataTableEmptyCopy,
     type ListDataTableProps,
     ListSelectionBar,
+    ListSelectionBarActionButton,
     useFrozenSelectionSnapshot,
+    type ListSelectionBarAction,
+    type ListSelectionBarActionButtonProps,
     type ListSelectionBarDisplay,
     type ListSelectionBarProps,
 }
@@ -246,9 +252,9 @@ export type ListWorkSurfaceProps = {
     tableClassName?: string
     toolbarClassName?: string
     selectionBar?: React.ReactNode
-    /** 按需显隐 selectionBar 时传入，默认以表格底部居中悬浮胶囊呈现（零表体跳动）。 */
+    /** 控制悬浮胶囊显隐；省略时只要传入 selectionBar 即默认展开（传 false 可平滑收起）。 */
     selectionBarOpen?: boolean
-    /** 批量选择条呈现位置：传入 selectionBarOpen 时默认 dock（底部悬浮胶囊），否则保留 toolbar（表上方内嵌条）。 */
+    /** 批量选择条呈现位置：传入 selectionBar 时默认 dock（底部悬浮胶囊），显式传 toolbar 才退回表上方内嵌条。 */
     selectionBarPlacement?: "dock" | "toolbar"
     tableActions?: React.ReactNode
 }
@@ -267,10 +273,7 @@ export function ListWorkSurface({
     tableActions,
 }: ListWorkSurfaceProps) {
     const isFloatingSelectionBar =
-        selectionBar != null &&
-        (selectionBarPlacement === "dock" ||
-            (selectionBarPlacement === undefined &&
-                selectionBarOpen !== undefined))
+        Boolean(selectionBar) && selectionBarPlacement !== "toolbar"
     const isSelectionDockOpen = Boolean(
         isFloatingSelectionBar && (selectionBarOpen ?? true),
     )
@@ -307,7 +310,7 @@ export function ListWorkSurface({
                     }
                     hideControls={Boolean(toolbar)}
                     actions={toolbar ? undefined : tableActions}
-                    wrapperClassName="bg-card px-4 pb-2.5"
+                    wrapperClassName="bg-card px-[var(--scaffold-px,1rem)] pb-2.5"
                     className={
                         !isFloatingSelectionBar && selectionBar
                             ? "rounded-lg border border-primary/20 bg-sidebar-accent/55 px-3"
@@ -541,6 +544,7 @@ export function ListWorkspacePage({
                     {resultsLabel}
                 </h2>
             ) : null}
+            {/* 撑满剩余高度由 styles.page 显式匹配 >[data-slot="list-work-surface"] 驱动，不依赖 :last-child，安全兼容后置弹窗/抽屉节点。 */}
             {surface ? (
                 <ListWorkSurface
                     {...surface}

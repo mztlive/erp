@@ -28,6 +28,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import {
     Popover,
     PopoverContent,
+    PopoverTitle,
     PopoverTrigger,
 } from "@/components/ui/popover"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -84,7 +85,7 @@ function DataTableViewOptions<TData>({
                 className="w-auto min-w-72 max-w-[calc(100vw-2rem)] max-h-[min(36rem,80vh,var(--available-height))] overflow-y-auto"
             >
                 <div className="space-y-3">
-                    <div className="text-body-compact font-medium">列设置</div>
+                    <PopoverTitle>列设置</PopoverTitle>
                     <div className="flex gap-2">
                         <Button
                             id={`${idPrefix ?? "data-table"}-columns-show-all`}
@@ -344,10 +345,10 @@ function DataTablePagination<TData>({
         <div
             data-slot="data-table-pagination"
             className={cn(
-                "flex flex-wrap items-center gap-x-4 gap-y-2 text-xs",
+                "flex flex-wrap items-center gap-x-4 gap-y-2 py-table-pagination-block text-xs",
                 needsPager && "justify-between",
-                layout === "flush" && "px-table-cell-inline py-2.5",
-                layout === "inset" && "px-(--card-spacing) py-2",
+                layout === "flush" && "px-table-cell-inline",
+                layout === "inset" && "px-(--card-spacing)",
             )}
         >
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-muted-foreground">
@@ -370,7 +371,7 @@ function DataTablePagination<TData>({
                             }))}
                             allowClear={false}
                             aria-label="每页记录数"
-                            className="w-[4.5rem]"
+                            className="w-18"
                         />
                         条 / 页
                     </label>

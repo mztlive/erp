@@ -80,6 +80,8 @@ export type DataTableProps<TData> = {
      * BusinessFailureState 传进来，避免「系统故障」被误报成「当前筛选没有结果」。
      */
     errorState?: React.ReactNode
+    /** 原始请求异常；传入时默认错误态自动透传给 BusinessFailureState 解析分类、错误码与说明。 */
+    error?: unknown
     /** 内置错误块的标题；默认「数据加载失败」。 */
     errorTitle?: React.ReactNode
     /** 内置错误块的说明；错误说下一步不说原理。 */
@@ -97,7 +99,7 @@ export type DataTableProps<TData> = {
     refreshingLabel?: React.ReactNode
     emptyState?: React.ReactNode
     renderToolbar?: (table: TanStackTable<TData>) => React.ReactNode
-    /** 工具栏是否展示总数与已选数量；页面在分页区承载统计时可关闭。 */
+    /** 工具栏是否展示总数与已选数量；默认 false（避免与分页条重复展示总数）。 */
     showToolbarSummary?: boolean
     showColumnVisibility?: boolean
     showPagination?: boolean

@@ -69,7 +69,7 @@ export function ListFilterTrigger({
             {open ? listFilterText.collapse : listFilterText.more}
             {count > 0 ? (
                 <span
-                    className="rounded-sm bg-primary/12 px-1.5 text-tiny leading-4 font-semibold tabular-nums text-primary"
+                    className="num rounded-sm bg-primary/12 px-1.5 text-tiny leading-4 font-semibold text-primary"
                     aria-label={`${count} 项已生效`}
                 >
                     {count}
@@ -138,7 +138,7 @@ export function ListFilterTray({
                 <div className="ml-auto flex shrink-0 items-center gap-1.5">
                     {onReset ? (
                         <Button
-                            id={resetId ?? `${idPrefix}-reset-more`}
+                            id={resetId ?? `${idPrefix}-reset`}
                             type="button"
                             variant="ghost"
                             className="text-muted-foreground shadow-none hover:bg-muted/80 hover:text-primary"
@@ -201,7 +201,7 @@ export function ListFilterTray({
                         "group-data-[starting-style]/tray:-translate-y-1.5 group-data-[ending-style]/tray:-translate-y-1",
                         "motion-reduce:transition-none",
                         inPortal
-                            ? "border-b border-border/75 bg-card px-4"
+                            ? "border-b border-border/75 bg-card px-[var(--scaffold-px,1rem)]"
                             : "rounded-lg border border-border/75 bg-card px-4",
                     )}
                 >

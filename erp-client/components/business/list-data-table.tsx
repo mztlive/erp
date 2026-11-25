@@ -36,7 +36,13 @@ export type ListDataTableProps<TData> = Omit<
     error?: unknown
     /** 失败态重试回调。 */
     onRetry?: () => void
-    /** 失败重试按钮原生 id；缺省按 `${idPrefix ?? id}-retry` 派生。 */
+    /**
+     * 按 list-table-design-system.md §7.2 为失败重试与空态 CTA 派生页面级 ID 前缀
+     * （`${actionIdPrefix}-retry` / `${actionIdPrefix}-empty-clear-filters` / `${actionIdPrefix}-empty-create`）；
+     * 未传时回退至 `idPrefix ?? id ?? "data-table"` 以兼容存量页面聚焦契约（如 `companies-table-empty-create`）。
+     */
+    actionIdPrefix?: string
+    /** 失败重试按钮原生 id；缺省按 `${actionIdPrefix ?? idPrefix ?? id}-retry` 派生。 */
     retryButtonId?: string
     retryLabel?: string
     /** 当前账号是否无数据查看范围（`emptyReason === "no_scope"`）。 */
@@ -65,6 +71,7 @@ export function ListDataTable<TData>({
     isError = false,
     error,
     onRetry,
+    actionIdPrefix,
     retryButtonId,
     retryLabel = "重试",
     noScope = false,
@@ -84,7 +91,8 @@ export function ListDataTable<TData>({
     showToolbarSummary = false,
     ...tableProps
 }: ListDataTableProps<TData>) {
-    const baseId = tableProps.idPrefix ?? tableProps.id ?? "data-table"
+    const baseId =
+        actionIdPrefix ?? tableProps.idPrefix ?? tableProps.id ?? "data-table"
     const resolvedRetryId = retryButtonId ?? `${baseId}-retry`
     const resolvedClearId =
         clearFiltersButtonId ?? `${baseId}-empty-clear-filters`

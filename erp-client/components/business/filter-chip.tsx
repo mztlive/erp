@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { XIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -36,7 +37,7 @@ function FilterChip({
             variant="neutral"
             data-slot="filter-chip"
             className={cn(
-                "h-6 gap-1 rounded-md border border-border/65 bg-muted/65 px-2 text-xs font-normal text-foreground/85",
+                "h-control-xs gap-1 rounded-md border border-border/65 bg-muted/65 px-2 text-xs font-normal text-foreground/85",
                 className,
             )}
             id={baseId}
@@ -48,21 +49,9 @@ function FilterChip({
                 id={baseId ? `${baseId}-clear` : undefined}
                 onClick={onClear}
                 aria-label={clearLabel ?? `清除${String(label)}筛选`}
-                className="-mr-0.5 inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground/75 transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="-mr-0.5 inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground/75 transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring"
             >
-                <svg
-                    className="size-3"
-                    aria-hidden="true"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                >
-                    <path d="M18 6 6 18" />
-                    <path d="m6 6 12 12" />
-                </svg>
+                <XIcon className="size-3" aria-hidden="true" />
             </button>
         </Badge>
     )

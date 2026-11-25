@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils"
 import { tableActionText } from "@/lib/ui-text"
 
 const inlineActionButtonClassName =
-    "h-7 gap-1 rounded-md px-2 text-body-compact font-normal text-muted-foreground transition-colors group-hover/row:text-primary group-focus-within/row:text-primary group-data-[state=selected]/row:text-primary hover:bg-sidebar-accent/70 hover:text-primary active:bg-sidebar-accent"
+    "h-control-sm gap-1 rounded-md px-2 text-body-compact font-normal text-muted-foreground transition-colors group-hover/row:text-primary group-focus-within/row:text-primary group-data-[state=selected]/row:text-primary hover:bg-sidebar-accent/70 hover:text-primary active:bg-sidebar-accent"
 
 const moreActionButtonClassName =
     "text-muted-foreground/75 group-hover/row:text-foreground/75 hover:bg-muted/80 hover:text-foreground aria-expanded:bg-sidebar-accent/70 aria-expanded:text-sidebar-accent-foreground [&_svg]:size-3.5"
@@ -147,7 +147,7 @@ function MenuAction({ action }: { action: TableRowAction }) {
             disabled={action.disabled || action.loading}
             aria-busy={action.loading || undefined}
             title={action.disabledReason}
-            className="min-h-8 gap-2 rounded-md text-body-compact [&_svg]:text-muted-foreground data-[variant=destructive]:[&_svg]:text-destructive"
+            className="min-h-control gap-2 rounded-md text-body-compact [&_svg]:text-muted-foreground data-[variant=destructive]:[&_svg]:text-destructive"
             render={
                 action.href && !action.disabled && !action.loading ? (
                     <Link href={action.href} />

@@ -1,9 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { XIcon } from "lucide-react"
+import { XIcon, type LucideIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import {
+    LoadingButton,
+    type LoadingButtonProps,
+} from "@/components/ui/loading-button"
 import { cn } from "@/lib/utils"
 
 const ACTIVE_OVERLAY_SELECTOR = [
@@ -73,6 +77,85 @@ export type ListSelectionBarDisplay = Readonly<{
     selectedCount: number
 }>
 
+export type ListSelectionBarAction = {
+    id: string
+    label: React.ReactNode
+    icon?: LucideIcon
+    /** 当前可执行项数；为 0 时自动降级为中性 `variant="secondary"` 禁用态，避免主蓝半透明显脏。 */
+    actionableCount?: number
+    /** 有可执行项时是否在按钮末尾附带 `.num` 可执行计数，默认 true。 */
+    showCount?: boolean
+    disabled?: boolean
+    loading?: boolean
+    /** 已选非空但可执行数为 0 时的禁用原因提示（写入 `title`）。 */
+    zeroActionableTitle?: string
+    title?: string
+    onClick: () => void
+    className?: string
+}
+
+export type ListSelectionBarActionButtonProps = Omit<
+    LoadingButtonProps,
+    "children"
+> & {
+    label: React.ReactNode
+    icon?: LucideIcon
+    /** 当前可执行项数；为 0 时自动降级为 `variant="secondary"` 并禁用，杜绝淡蓝半透明显脏。 */
+    actionableCount: number
+    /** 是否展示尾部 `.num` 可执行计数，默认 true。 */
+    showCount?: boolean
+    /** 可执行数为 0 时的原因说明（写入 `title`）。 */
+    zeroActionableTitle?: string
+}
+
+/**
+ * 批量操作条标准主动作按钮：
+ * - `actionableCount > 0`：实心飞书蓝 `variant="default"` + 可选尾部 `.num` 计数；
+ * - `actionableCount === 0`：自动降级为中性 `variant="secondary"` 禁用态并展示原因提示。
+ */
+export function ListSelectionBarActionButton({
+    label,
+    icon: Icon,
+    actionableCount,
+    showCount = true,
+    zeroActionableTitle,
+    variant,
+    size = "sm",
+    disabled,
+    title,
+    type = "button",
+    onClick,
+    ...props
+}: ListSelectionBarActionButtonProps) {
+    const hasActionable = actionableCount > 0
+    const resolvedVariant = variant ?? (hasActionable ? "default" : "secondary")
+    const resolvedDisabled = Boolean(disabled || !hasActionable)
+    const resolvedTitle = !hasActionable
+        ? (zeroActionableTitle ?? title)
+        : title
+
+    return (
+        <LoadingButton
+            type={type}
+            variant={resolvedVariant}
+            size={size}
+            disabled={resolvedDisabled}
+            title={resolvedTitle}
+            onClick={(event) => {
+                if (!hasActionable) return
+                onClick?.(event)
+            }}
+            {...props}
+        >
+            {Icon ? <Icon data-icon="inline-start" aria-hidden="true" /> : null}
+            {label}
+            {showCount && hasActionable ? (
+                <span className="num">{actionableCount}</span>
+            ) : null}
+        </LoadingButton>
+    )
+}
+
 export type ListSelectionBarProps = {
     idPrefix: string
     resultCount: number
@@ -86,6 +169,8 @@ export type ListSelectionBarProps = {
     summaryExtra?:
         | React.ReactNode
         | ((display: ListSelectionBarDisplay) => React.ReactNode)
+    /** 结构化批量主动作；可执行数为 0 时自动降级为 `variant="secondary"` 禁用态并在退场期间冻结计数。 */
+    primaryAction?: ListSelectionBarAction
     /** 右侧批量操作按钮（默认由调用方放置主蓝按钮）。 */
     actions?:
         | React.ReactNode
@@ -105,7 +190,7 @@ export type ListSelectionBarProps = {
 /**
  * 列表工作面统一批量勾选操作条（配合 ListWorkSurface 底部悬浮胶囊使用）：
  * - 内置退场动画期间的计数快照冻结，避免闪出 0；
- * - 统一提供实蓝计数徽标、附加分流摘要、全选本页、批量主动作插槽与清空关闭钮；
+ * - 统一提供实蓝计数徽标、附加分流摘要、全选本页、批量主动作插槽（支持零可执行自动降级 secondary）与清空关闭钮；
  * - 无浮层打开时支持按 Esc 快速清空已选。
  */
 export function ListSelectionBar({
@@ -117,6 +202,7 @@ export function ListSelectionBar({
     busy = false,
     unit = "条",
     summaryExtra,
+    primaryAction,
     actions,
     selectPageLabel = "全选本页",
     clearLabel = "清空已选",
@@ -127,10 +213,17 @@ export function ListSelectionBar({
     className,
     "data-slot": dataSlot = "list-selection-bar",
 }: ListSelectionBarProps) {
-    const display = useFrozenSelectionSnapshot(selectedCount, {
+    const rawPrimaryActionableCount =
+        primaryAction?.actionableCount ?? selectedCount
+    const frozen = useFrozenSelectionSnapshot(selectedCount, {
         resultCount,
         selectedCount,
+        primaryActionableCount: rawPrimaryActionableCount,
     })
+    const display: ListSelectionBarDisplay = {
+        resultCount: frozen.resultCount,
+        selectedCount: frozen.selectedCount,
+    }
 
     React.useEffect(() => {
         if (!enableEscapeClear || selectedCount === 0 || busy) return
@@ -196,12 +289,42 @@ export function ListSelectionBar({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-control-sm px-2 text-xs font-normal text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                    className="h-control-sm px-2 text-body-compact font-normal text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                     disabled={busy || pageRowCount === 0 || allPageSelected}
                     onClick={onSelectPage}
                 >
                     {selectPageLabel}
                 </Button>
+                {primaryAction ? (
+                    <ListSelectionBarActionButton
+                        id={primaryAction.id}
+                        label={primaryAction.label}
+                        icon={primaryAction.icon}
+                        actionableCount={frozen.primaryActionableCount}
+                        showCount={primaryAction.showCount}
+                        loading={primaryAction.loading}
+                        disabled={
+                            busy ||
+                            primaryAction.disabled ||
+                            display.selectedCount === 0
+                        }
+                        zeroActionableTitle={
+                            display.selectedCount > 0
+                                ? primaryAction.zeroActionableTitle
+                                : undefined
+                        }
+                        title={primaryAction.title}
+                        className={primaryAction.className}
+                        onClick={() => {
+                            if (
+                                selectedCount > 0 &&
+                                rawPrimaryActionableCount > 0
+                            ) {
+                                primaryAction.onClick()
+                            }
+                        }}
+                    />
+                ) : null}
                 {resolvedActions}
                 <span
                     aria-hidden="true"

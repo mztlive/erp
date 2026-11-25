@@ -149,7 +149,7 @@ export function TableToolbarAppliedChipsHost() {
         <div
             data-slot="list-work-surface-applied-chips"
             ref={scope?.setAppliedChips}
-            className="shrink-0 border-b border-border/60 bg-card px-4 pb-2.5 empty:hidden"
+            className="shrink-0 border-b border-border/60 bg-card px-[var(--scaffold-px,1rem)] pb-2.5 empty:hidden"
         />
     )
 }

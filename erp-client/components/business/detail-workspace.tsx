@@ -13,6 +13,10 @@ import { PageScaffold } from "@/components/business/page"
 import { useWorkspaceTaskNavigation } from "@/components/business/workspace-task-pane"
 import { useWorkspaceTab } from "@/components/layout/workspace-tab-context"
 import { Button, buttonVariants } from "@/components/ui/button"
+import {
+    LoadingButton,
+    type LoadingButtonProps,
+} from "@/components/ui/loading-button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -188,6 +192,9 @@ export type DetailWorkspaceChromeProps = {
     meta?: React.ReactNode
     secondaryActions?: React.ReactNode
     primaryAction?: React.ReactNode
+    /**
+     * @deprecated 吸顶头部不再承接摘要带，避免滚动时侵占正文可视高度。请迁移至 `DetailWorkspaceBody` 的 `summary` 槽（非吸顶通栏 KPI 摘要带）。
+     */
     summary?: React.ReactNode
     tabs?: React.ReactNode
     children?: React.ReactNode
@@ -423,6 +430,7 @@ export function DetailWorkspaceChrome({
                     </div>
                 ) : null}
 
+                {/* @deprecated 兼容既有调用方；新页面应改用 DetailWorkspaceBody summary 槽。 */}
                 {summary != null ? (
                     <div
                         data-slot="detail-page-header-summary"
@@ -633,15 +641,15 @@ export function DetailWorkspaceBody({
 }
 
 const metricsColumnsClass: Record<2 | 3 | 4, string> = {
-    2: "grid-cols-1 sm:grid-cols-2 sm:[&>*:not(:nth-child(2n+1))]:border-l sm:[&>*:not(:nth-child(2n+1))]:border-border/60 sm:[&>*:not(:nth-child(2n+1))]:pl-6",
-    3: "grid-cols-1 md:grid-cols-3 md:[&>*:not(:nth-child(3n+1))]:border-l md:[&>*:not(:nth-child(3n+1))]:border-border/60 md:[&>*:not(:nth-child(3n+1))]:pl-6",
-    4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 sm:max-lg:[&>*:nth-child(even)]:border-l sm:max-lg:[&>*:nth-child(even)]:border-border/60 sm:max-lg:[&>*:nth-child(even)]:pl-6 lg:[&>*:not(:nth-child(4n+1))]:border-l lg:[&>*:not(:nth-child(4n+1))]:border-border/60 lg:[&>*:not(:nth-child(4n+1))]:pl-6",
+    2: "grid-cols-1 @[480px]/detail-metrics:grid-cols-2 @[480px]/detail-metrics:[&>*:not(:nth-child(2n+1))]:border-l @[480px]/detail-metrics:[&>*:not(:nth-child(2n+1))]:border-border/60 @[480px]/detail-metrics:[&>*:not(:nth-child(2n+1))]:pl-6",
+    3: "grid-cols-1 @[640px]/detail-metrics:grid-cols-3 @[640px]/detail-metrics:[&>*:not(:nth-child(3n+1))]:border-l @[640px]/detail-metrics:[&>*:not(:nth-child(3n+1))]:border-border/60 @[640px]/detail-metrics:[&>*:not(:nth-child(3n+1))]:pl-6",
+    4: "grid-cols-1 @[480px]/detail-metrics:grid-cols-2 @[880px]/detail-metrics:grid-cols-4 @[480px]/detail-metrics:@max-[880px]/detail-metrics:[&>*:nth-child(even)]:border-l @[480px]/detail-metrics:@max-[880px]/detail-metrics:[&>*:nth-child(even)]:border-border/60 @[480px]/detail-metrics:@max-[880px]/detail-metrics:[&>*:nth-child(even)]:pl-6 @[880px]/detail-metrics:[&>*:not(:nth-child(4n+1))]:border-l @[880px]/detail-metrics:[&>*:not(:nth-child(4n+1))]:border-border/60 @[880px]/detail-metrics:[&>*:not(:nth-child(4n+1))]:pl-6",
 }
 
 const factsColumnsClass: Record<2 | 3 | 4, string> = {
-    2: "grid-cols-1 sm:grid-cols-2",
-    3: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
-    4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
+    2: "grid-cols-1 @[440px]/detail-facts:grid-cols-2",
+    3: "grid-cols-1 @[440px]/detail-facts:grid-cols-2 @[740px]/detail-facts:grid-cols-3",
+    4: "grid-cols-1 @[440px]/detail-facts:grid-cols-2 @[740px]/detail-facts:grid-cols-3 @[960px]/detail-facts:grid-cols-4",
 }
 
 const workspaceFactColumnsClass: Record<2 | 3 | 4, string> = {
@@ -828,17 +836,22 @@ export function DetailWorkspaceFacts({
     className?: string
 }) {
     return (
-        <dl
-            data-slot="detail-workspace-facts"
-            aria-label={ariaLabel}
-            className={cn(
-                "grid gap-x-6 gap-y-4",
-                factsColumnsClass[columns],
-                className,
-            )}
+        <div
+            data-slot="detail-workspace-facts-container"
+            className="@container/detail-facts min-w-0"
         >
-            {children}
-        </dl>
+            <dl
+                data-slot="detail-workspace-facts"
+                aria-label={ariaLabel}
+                className={cn(
+                    "grid gap-x-6 gap-y-4",
+                    factsColumnsClass[columns],
+                    className,
+                )}
+            >
+                {children}
+            </dl>
+        </div>
     )
 }
 
@@ -862,7 +875,7 @@ export function DetailWorkspaceFact({
             data-slot="detail-workspace-fact"
             className={cn(
                 "min-w-0 space-y-1",
-                span === 2 && "sm:col-span-2",
+                span === 2 && "@[440px]/detail-facts:col-span-2",
                 span === "full" && "col-span-full",
                 className,
             )}
@@ -903,17 +916,22 @@ export function DetailWorkspaceMetrics({
 }) {
     return (
         <div
-            data-slot="detail-workspace-metrics"
-            data-variant={variant}
-            aria-label={ariaLabel}
-            className={cn(
-                "grid gap-x-6 gap-y-3.5",
-                metricsColumnsClass[columns],
-                variant === "bar" ? "py-3.5" : "py-1",
-                className,
-            )}
+            data-slot="detail-workspace-metrics-container"
+            className="@container/detail-metrics min-w-0"
         >
-            {children}
+            <div
+                data-slot="detail-workspace-metrics"
+                data-variant={variant}
+                aria-label={ariaLabel}
+                className={cn(
+                    "grid gap-x-6 gap-y-3.5",
+                    metricsColumnsClass[columns],
+                    variant === "bar" ? "py-3.5" : "py-1",
+                    className,
+                )}
+            >
+                {children}
+            </div>
         </div>
     )
 }
@@ -1213,6 +1231,117 @@ export function DetailWorkspaceSkeleton({
                 mainSkeleton
             )}
         </PageScaffold>
+    )
+}
+
+export type DetailWorkspaceActionButtonTier =
+    | "primary"
+    | "quiet"
+    | "quiet-danger"
+
+export type DetailWorkspaceActionButtonProps = LoadingButtonProps & {
+    /**
+     * 详情页头与保存胶囊动作视觉分级（对齐 docs/detail-page-design-system.md §3）：
+     * - `primary`：唯一实心飞书蓝主动作（保存更新 / 创建 / 提交）；
+     * - `quiet`：无框中性轻按钮（取消修改 / 导出 / 打印）；
+     * - `quiet-danger`：静默危险轻按钮（停用 / 作废，静止灰字、悬停显柔和红底红字）。
+     */
+    tier?: DetailWorkspaceActionButtonTier
+}
+
+/** 详情工作面统一动作分级按钮：收敛页头与保存胶囊的主次/危险样式，避免各页手写 variant 与 className。 */
+export function DetailWorkspaceActionButton({
+    tier = "quiet",
+    variant,
+    size = "sm",
+    className,
+    ...props
+}: DetailWorkspaceActionButtonProps) {
+    const resolvedVariant =
+        variant ?? (tier === "primary" ? "default" : "ghost")
+    const tierClassName =
+        tier === "primary"
+            ? "px-3.5"
+            : tier === "quiet-danger"
+              ? styles.quietDangerButton
+              : styles.quietButton
+    return (
+        <LoadingButton
+            data-action-tier={tier}
+            variant={resolvedVariant}
+            size={size}
+            className={cn(tierClassName, className)}
+            {...props}
+        />
+    )
+}
+
+export type DetailFormGridProps = React.ComponentProps<"div"> & {
+    /**
+     * - `grid`（默认）：标准 12 列详情表单栅格（`grid gap-x-5 gap-y-4 sm:grid-cols-12`）；
+     * - `stack`：仅注入柔底轻控件与只读表面样式，不预设 12 列网格。
+     */
+    layout?: "grid" | "stack"
+}
+
+/**
+ * 详情工作面自包含柔底表单网格：
+ * 内聚柔底轻描边输入、悬停、聚焦亮蓝与只读轻表面样式，
+ * 脱离 `.erp-detail-workspace-page`（如置于弹窗或抽屉内）仍保持完全一致的视觉呈现。
+ */
+export function DetailFormGrid({
+    layout = "grid",
+    className,
+    ...props
+}: DetailFormGridProps) {
+    return (
+        <div
+            data-slot="detail-form-grid"
+            className={cn(
+                "min-w-0",
+                layout === "grid" && "grid gap-x-5 gap-y-4 sm:grid-cols-12",
+                styles.formGridSurface,
+                className,
+            )}
+            {...props}
+        />
+    )
+}
+
+export type DetailInlineTableProps = React.ComponentProps<"div"> & {
+    /**
+     * - `inline`（默认）：无外框上下细线容器（`detailWorkspaceStyles.inlineTableWrapper`）；
+     * - `scroll`：带横向滚动容器（`detailWorkspaceStyles.dataTableWrapper`）；
+     * - `none`：不加外层上下细线（适配已有边界的嵌套子表）。
+     */
+    frame?: "inline" | "scroll" | "none"
+    /** 保留首尾列左右内边距（对应 `data-inset-cells`），默认首尾列外沿贴齐容器。 */
+    insetCells?: boolean
+}
+
+/**
+ * 详情工作面自包含无框内联编辑表容器：
+ * 内聚纯白表头、无四周边框、单元格内静止无框柔底输入与聚焦亮蓝光环样式，
+ * 脱离 `.erp-detail-workspace-page`（如置于弹窗或抽屉内）仍保持一致手感。
+ */
+export function DetailInlineTable({
+    frame = "inline",
+    insetCells = false,
+    className,
+    ...props
+}: DetailInlineTableProps) {
+    return (
+        <div
+            data-slot="detail-inline-table"
+            data-inset-cells={insetCells ? "" : undefined}
+            className={cn(
+                frame === "inline" && styles.inlineTableWrapper,
+                frame === "scroll" && styles.dataTableWrapper,
+                styles.inlineTableSurface,
+                className,
+            )}
+            {...props}
+        />
     )
 }
 

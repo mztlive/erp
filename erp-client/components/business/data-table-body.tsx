@@ -7,7 +7,10 @@ import {
     type Table as TanStackTable,
 } from "@tanstack/react-table"
 
-import { BusinessFailureState } from "@/components/business/feedback"
+import {
+    BusinessEmptyState,
+    BusinessFailureState,
+} from "@/components/business/feedback-states"
 import {
     alignmentClass,
     columnRuntimeWidth,
@@ -55,6 +58,7 @@ export function DataTableBody<TData>({
     loading,
     showErrorState,
     errorState,
+    error,
     errorTitle,
     errorSummary,
     onRetry,
@@ -79,6 +83,7 @@ export function DataTableBody<TData>({
     loading: boolean
     showErrorState: boolean
     errorState?: ReactNode
+    error?: unknown
     errorTitle?: ReactNode
     errorSummary?: ReactNode
     onRetry?: () => void
@@ -117,9 +122,16 @@ export function DataTableBody<TData>({
                             {errorState ?? (
                                 <BusinessFailureState
                                     kind="system"
-                                    title={errorTitle ?? "数据加载失败"}
+                                    error={error ?? undefined}
+                                    title={
+                                        errorTitle ??
+                                        (error != null
+                                            ? undefined
+                                            : "数据加载失败")
+                                    }
                                     description={errorSummary}
                                     onRetry={onRetry}
+                                    idPrefix={idPrefix}
                                 />
                             )}
                         </div>
@@ -305,21 +317,38 @@ export function DataTableBody<TData>({
                     >
                         <div className="sticky left-0 w-[calc(100cqw-3rem)] max-w-full whitespace-normal">
                             {emptyState ?? (
-                                <div className="flex flex-col items-center gap-2 py-2 text-center">
-                                    <p className="text-body-compact text-muted-foreground">
-                                        {emptyTitle ?? "当前筛选没有结果"}
-                                    </p>
-                                    {emptyDescription != null ? (
-                                        <p className="text-xs text-muted-foreground">
-                                            {emptyDescription}
-                                        </p>
-                                    ) : null}
-                                    {emptyAction != null ? (
-                                        <div className="flex flex-wrap justify-center gap-2 pt-1">
-                                            {emptyAction}
-                                        </div>
-                                    ) : null}
-                                </div>
+                                <BusinessEmptyState
+                                    kind={
+                                        emptyTitle != null
+                                            ? "no-data"
+                                            : "filter"
+                                    }
+                                    title={
+                                        typeof emptyTitle === "string"
+                                            ? emptyTitle
+                                            : emptyTitle == null
+                                              ? "当前筛选没有结果"
+                                              : ""
+                                    }
+                                    description={
+                                        typeof emptyTitle === "string" ||
+                                        emptyTitle == null ? (
+                                            (emptyDescription ??
+                                            (emptyTitle != null
+                                                ? ""
+                                                : undefined))
+                                        ) : (
+                                            <>
+                                                <span className="block font-heading text-section-title font-semibold tracking-tight text-foreground">
+                                                    {emptyTitle}
+                                                </span>
+                                                {emptyDescription}
+                                            </>
+                                        )
+                                    }
+                                    action={emptyAction}
+                                    className="px-4 py-6"
+                                />
                             )}
                         </div>
                     </TableCell>
