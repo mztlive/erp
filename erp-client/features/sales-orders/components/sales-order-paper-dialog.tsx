@@ -1,11 +1,7 @@
 "use client"
 
-import {
-    DeliveryAllocationPrintAppendix,
-    MoneyValue,
-    PaperDocument,
-    QuantityValue,
-} from "@/components/business"
+import { MoneyValue, PaperDocument, QuantityValue } from "@/components/business"
+import { DeliveryAllocationPrintAppendix } from "@/features/regions"
 import { welfareScenarioLabel } from "@/lib/business-options"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {

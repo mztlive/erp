@@ -13,7 +13,7 @@ import {
     WorkItemResponsibilityDialog,
     type WorkItemResponsibilitySummary,
     type WorkItemResponsibilityTarget,
-} from "@/components/business/work-item-responsibility-dialog"
+} from "@/features/work-items"
 import {
     WorkspaceSplitQueue,
     type WorkspaceQueueLayoutMode,

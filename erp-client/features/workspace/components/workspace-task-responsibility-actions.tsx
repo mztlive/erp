@@ -6,7 +6,7 @@ import { ArrowRightLeftIcon, CircleOffIcon } from "lucide-react"
 import {
     WorkItemResponsibilityDialog,
     type WorkItemResponsibilityTarget,
-} from "@/components/business/work-item-responsibility-dialog"
+} from "@/features/work-items"
 import { Button } from "@/components/ui/button"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import type { WorkspaceWorkItem } from "../types"

@@ -5,7 +5,6 @@ import { FileTextIcon, MapPinIcon, PrinterIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
-    DeliveryAllocationOverview,
     DetailWorkspaceMeta,
     MoneyValue,
     detailWorkspaceStyles,
@@ -23,6 +22,7 @@ import {
 } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
 import { StatusBadge } from "@/components/ui/status-badge"
+import { DeliveryAllocationOverview } from "@/features/regions"
 import { SalesOrderPaperDocument } from "@/features/sales-orders/components/sales-order-paper-dialog"
 import { useSalesOrderDetailQuery } from "@/features/sales-orders/hooks/queries"
 import { NATURE_LABEL } from "@/features/sales-orders/lib/labels"

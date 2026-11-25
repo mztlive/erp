@@ -2,12 +2,8 @@
 
 import type { Ref } from "react"
 
-import {
-    DeliveryAllocationPrintAppendix,
-    MoneyValue,
-    PaperDocument,
-    QuantityValue,
-} from "@/components/business"
+import { MoneyValue, PaperDocument, QuantityValue } from "@/components/business"
+import { DeliveryAllocationPrintAppendix } from "@/features/regions"
 import { paymentTermLabel, welfareScenarioLabel } from "@/lib/business-options"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import {
     ArrowUpIcon,
     ChevronDownIcon,
@@ -24,7 +24,6 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { toast } from "@/components/ui/toast"
-import { RegionName } from "@/features/regions"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { fullDeliveryAddress } from "@/lib/delivery-address"
 import {
@@ -52,23 +51,53 @@ export type DeliveryFulfillmentDescriptor = Readonly<{
     targetWarehouseName?: string | null
 }>
 
+export type DeliveryAllocationOverviewProps = Readonly<{
+    idPrefix: string
+    sectionId?: string
+    lines: readonly DeliveryAllocationLineInput[]
+    summary?: DeliveryAllocationSummary
+    fulfillment?: DeliveryFulfillmentDescriptor | null
+    focusedLineId?: string | null
+    onClearFocus?: () => void
+    /** 多址定位后点击返回明细行锚点。 */
+    onReturnToLine?: (lineId: string) => void
+    /** 地址分组列表的展示密度。 */
+    density?: "default" | "compact"
+    /** 将入仓、未指定地址与整单统一 1 处地址收敛为单行轻量提示条，避免审批页过度拉长。 */
+    compactSimpleStates?: boolean
+    emptyMessage?: string
+    title?: string
+    /** 缺失 `region_name` 时的区划代码渲染回调（缺省回退展示 `regionCode`）。 */
+    renderRegionName?: (regionCode: string) => ReactNode
+}>
+
+export type DeliveryAllocationPrintAppendixProps = Readonly<{
+    lines: readonly DeliveryAllocationLineInput[]
+    /** 缺失 `region_name` 时的区划代码渲染回调（缺省回退展示 `regionCode`）。 */
+    renderRegionName?: (regionCode: string) => ReactNode
+}>
+
 const INITIAL_VISIBLE_COUNT = 5
 
 function AddressText({
     regionCode,
     regionName,
     address,
+    renderRegionName,
 }: {
     regionCode: string
     regionName?: string | null
     address: string
+    renderRegionName?: (regionCode: string) => ReactNode
 }) {
     const cleanRegion = regionName?.trim()
     return (
         <>
-            {!cleanRegion && regionCode ? (
-                <RegionName code={regionCode} />
-            ) : null}
+            {!cleanRegion && regionCode
+                ? renderRegionName
+                    ? renderRegionName(regionCode)
+                    : regionCode
+                : null}
             {fullDeliveryAddress({ region_name: cleanRegion, address })}
         </>
     )
@@ -120,23 +149,8 @@ export function DeliveryAllocationOverview({
     compactSimpleStates = false,
     emptyMessage = "本次提交暂未指定收货地址，将在履约环节补充。",
     title = "交付与收货地址",
-}: {
-    idPrefix: string
-    sectionId?: string
-    lines: readonly DeliveryAllocationLineInput[]
-    summary?: DeliveryAllocationSummary
-    fulfillment?: DeliveryFulfillmentDescriptor | null
-    focusedLineId?: string | null
-    onClearFocus?: () => void
-    /** 多址定位后点击返回明细行锚点。 */
-    onReturnToLine?: (lineId: string) => void
-    /** 地址分组列表的展示密度。 */
-    density?: "default" | "compact"
-    /** 将入仓、未指定地址与整单统一 1 处地址收敛为单行轻量提示条，避免审批页过度拉长。 */
-    compactSimpleStates?: boolean
-    emptyMessage?: string
-    title?: string
-}) {
+    renderRegionName,
+}: DeliveryAllocationOverviewProps) {
     const summary = useMemo(
         () => externalSummary ?? buildDeliveryAllocationSummary(lines),
         [externalSummary, lines],
@@ -319,6 +333,7 @@ export function DeliveryAllocationOverview({
                                 regionCode={only.regionCode}
                                 regionName={only.regionName}
                                 address={only.address}
+                                renderRegionName={renderRegionName}
                             />
                         </span>
                     </div>
@@ -366,6 +381,7 @@ export function DeliveryAllocationOverview({
                                     regionCode={only.regionCode}
                                     regionName={only.regionName}
                                     address={only.address}
+                                    renderRegionName={renderRegionName}
                                 />
                             </p>
                         </div>
@@ -608,6 +624,7 @@ export function DeliveryAllocationOverview({
                                         group={group}
                                         compact={compact}
                                         idPrefix={`${idPrefix}-addr-${toAutomationIdSegment(String(index + 1))}`}
+                                        renderRegionName={renderRegionName}
                                     />
                                 ))}
                             </ol>
@@ -623,6 +640,7 @@ export function DeliveryAllocationOverview({
                                     key={group.lineId}
                                     group={group}
                                     compact={compact}
+                                    renderRegionName={renderRegionName}
                                 />
                             ))}
                         </div>
@@ -681,11 +699,13 @@ function AddressGroupRow({
     group,
     idPrefix,
     compact,
+    renderRegionName,
 }: {
     index: number
     group: DeliveryAddressGroup
     idPrefix: string
     compact: boolean
+    renderRegionName?: (regionCode: string) => ReactNode
 }) {
     return (
         <li className={compact ? "space-y-1 py-2" : "space-y-2 px-3.5 py-3"}>
@@ -719,6 +739,7 @@ function AddressGroupRow({
                             regionCode={group.regionCode}
                             regionName={group.regionName}
                             address={group.address}
+                            renderRegionName={renderRegionName}
                         />
                     </p>
                 </div>
@@ -764,9 +785,11 @@ function AddressGroupRow({
 function ItemAddressGroupRow({
     group,
     compact,
+    renderRegionName,
 }: {
     group: DeliveryItemGroup
     compact: boolean
+    renderRegionName?: (regionCode: string) => ReactNode
 }) {
     return (
         <div className={compact ? "space-y-1 py-2" : "space-y-2 px-3.5 py-3"}>
@@ -827,6 +850,7 @@ function ItemAddressGroupRow({
                                         regionCode={row.region_code}
                                         regionName={row.region_name}
                                         address={row.address}
+                                        renderRegionName={renderRegionName}
                                     />
                                 </p>
                             </div>
@@ -847,9 +871,8 @@ function ItemAddressGroupRow({
 /** 供纸质单据预览（PaperDocument appendix）使用的静态只读收货地址附表。 */
 export function DeliveryAllocationPrintAppendix({
     lines,
-}: {
-    lines: readonly DeliveryAllocationLineInput[]
-}) {
+    renderRegionName,
+}: DeliveryAllocationPrintAppendixProps) {
     const summary = useMemo(
         () => buildDeliveryAllocationSummary(lines),
         [lines],
@@ -877,6 +900,7 @@ export function DeliveryAllocationPrintAppendix({
                         regionCode={only.regionCode}
                         regionName={only.regionName}
                         address={only.address}
+                        renderRegionName={renderRegionName}
                     />
                 </p>
             </section>
@@ -932,6 +956,7 @@ export function DeliveryAllocationPrintAppendix({
                                         regionCode={group.regionCode}
                                         regionName={group.regionName}
                                         address={group.address}
+                                        renderRegionName={renderRegionName}
                                     />
                                 </TableCell>
                                 <TableCell className="py-2 align-top whitespace-normal">

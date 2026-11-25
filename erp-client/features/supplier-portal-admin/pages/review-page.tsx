@@ -18,8 +18,8 @@ import {
     type DetailWorkspaceTabItem,
 } from "@/components/business"
 import { useWorkspaceInspectorMode } from "@/components/business/workspace-task-pane"
-import { WorkItemResponsibilityDialog } from "@/components/business/work-item-responsibility-dialog"
 import { Button } from "@/components/ui/button"
+import { WorkItemResponsibilityDialog } from "@/features/work-items"
 import { useWorkItemDetailQuery } from "@/features/work-items/queries"
 import type { PortalApplication } from "@/features/supplier-portal/types"
 import { PortalApplicationContent } from "@/features/supplier-portal/components/application-content"

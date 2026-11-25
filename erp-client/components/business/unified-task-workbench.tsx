@@ -17,13 +17,34 @@ import { PanelRightCloseIcon, PanelRightOpenIcon } from "lucide-react"
 
 import { IconActionButton } from "@/components/business/icon-action-button"
 import { workspaceTaskSurfacePadClassName } from "@/components/business/page"
+import { NativeCheckbox } from "@/components/ui/checkbox"
 import {
     ResizableHandle,
     ResizablePanel,
     ResizablePanelGroup,
 } from "@/components/ui/resizable"
+import { AUTO_NEXT_LABEL } from "@/lib/task-status-dictionary"
 import { cn } from "@/lib/utils"
 import { subscribeWorkspaceHotkeyAction } from "@/lib/workspace-hotkeys"
+
+export type UnifiedTaskWorkbenchAutoNext = Readonly<{
+    /** 是否显示开关；默认 `true`（传 `false` 时不渲染任何 DOM）。 */
+    visible?: boolean
+    /** 受控选中状态；未传时组件内部维护状态并按需读写 `storageKey`。 */
+    checked?: boolean
+    /** 非受控模式的初始值（默认 `false`）。 */
+    defaultChecked?: boolean
+    /** 选中态变更回调。 */
+    onCheckedChange?: (checked: boolean) => void
+    /** 非受控模式下持久化到 `localStorage` 的键名（以 `"1"` / `"0"` 存储）。 */
+    storageKey?: string
+    /** 原生复选框 DOM `id`（默认 `${idPrefix}-auto-next`）。 */
+    id?: string
+    /** 自定义标签文案；默认 `AUTO_NEXT_LABEL`（"处理后自动下一项"）。 */
+    label?: string
+    /** 是否禁用开关。 */
+    disabled?: boolean
+}>
 
 export type TaskWorkbenchArchetype =
     | "decision" // Archetype 1: 72/28 双栏，右轨挂载 Route + Trail + MaterialViewer
@@ -58,6 +79,8 @@ export type UnifiedTaskWorkbenchProps = Readonly<{
     kpiStrip?: ReactNode
     /** Archetype 1/3 专用右侧上下文轨；支持折叠与拖拽调宽至 50% 对照附件。 */
     contextRail?: UnifiedTaskWorkbenchContextRail
+    /** 底栏左侧标准「处理后自动下一项」开关；省略或 `visible: false` 时不渲染。 */
+    autoNext?: UnifiedTaskWorkbenchAutoNext
     footerLeading?: ReactNode
     footerSummary?: ReactNode
     footerActions?: ReactNode
@@ -162,6 +185,108 @@ function writeStoredRailPercent(
     }
 }
 
+function readStoredAutoNext(
+    storageKey: string | undefined,
+    fallback: boolean,
+): boolean {
+    if (!storageKey || typeof window === "undefined") return fallback
+    try {
+        const raw = window.localStorage.getItem(storageKey)
+        if (raw === null) return fallback
+        return raw === "1" || raw === "true"
+    } catch {
+        return fallback
+    }
+}
+
+function writeStoredAutoNext(
+    storageKey: string | undefined,
+    checked: boolean,
+): void {
+    if (!storageKey || typeof window === "undefined") return
+    try {
+        window.localStorage.setItem(storageKey, checked ? "1" : "0")
+    } catch {
+        // 隐私模式下忽略本地存储写入失败
+    }
+}
+
+export type WorkspaceTaskAutoNextToggleProps = Readonly<{
+    id: string
+    checked?: boolean
+    defaultChecked?: boolean
+    onCheckedChange?: (checked: boolean) => void
+    storageKey?: string
+    label?: string
+    disabled?: boolean
+    className?: string
+}>
+
+/** 任务页底栏标准「处理后自动下一项」偏好开关；支持受控态与可选 `localStorage` 持久化。 */
+export function WorkspaceTaskAutoNextToggle({
+    id,
+    checked: controlledChecked,
+    defaultChecked = false,
+    onCheckedChange,
+    storageKey,
+    label = AUTO_NEXT_LABEL,
+    disabled = false,
+    className,
+}: WorkspaceTaskAutoNextToggleProps) {
+    const [uncontrolledChecked, setUncontrolledChecked] = useState<boolean>(
+        () => readStoredAutoNext(storageKey, defaultChecked),
+    )
+
+    useEffect(() => {
+        if (controlledChecked !== undefined || !storageKey) return
+        setUncontrolledChecked(readStoredAutoNext(storageKey, defaultChecked))
+        const onStorage = (event: StorageEvent) => {
+            if (event.key === null || event.key === storageKey) {
+                setUncontrolledChecked(
+                    readStoredAutoNext(storageKey, defaultChecked),
+                )
+            }
+        }
+        window.addEventListener("storage", onStorage)
+        return () => window.removeEventListener("storage", onStorage)
+    }, [controlledChecked, defaultChecked, storageKey])
+
+    const checked = controlledChecked ?? uncontrolledChecked
+
+    const handleCheckedChange = useCallback(
+        (value: boolean) => {
+            const next = value === true
+            if (controlledChecked === undefined) {
+                setUncontrolledChecked(next)
+                writeStoredAutoNext(storageKey, next)
+            }
+            onCheckedChange?.(next)
+        },
+        [controlledChecked, onCheckedChange, storageKey],
+    )
+
+    return (
+        <label
+            data-slot="workspace-task-auto-next"
+            htmlFor={id}
+            className={cn(
+                "flex shrink-0 cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none hover:text-foreground",
+                disabled &&
+                    "cursor-not-allowed opacity-50 hover:text-muted-foreground",
+                className,
+            )}
+        >
+            <NativeCheckbox
+                id={id}
+                checked={checked}
+                disabled={disabled}
+                onCheckedChange={handleCheckedChange}
+            />
+            {label}
+        </label>
+    )
+}
+
 /**
  * 统一任务与审批工作台骨架（4 原型容器查询引擎）：
  * - 顶部 56px 紧凑吸顶页头，底部 48px 紧凑吸底操作栏；
@@ -175,6 +300,7 @@ export function UnifiedTaskWorkbench({
     alertBanner,
     kpiStrip,
     contextRail,
+    autoNext,
     footerLeading,
     footerSummary,
     footerActions,
@@ -460,6 +586,19 @@ export function UnifiedTaskWorkbench({
             </aside>
         ) : null
 
+    const autoNextControl =
+        autoNext && autoNext.visible !== false ? (
+            <WorkspaceTaskAutoNextToggle
+                id={autoNext.id ?? `${idPrefix}-auto-next`}
+                checked={autoNext.checked}
+                defaultChecked={autoNext.defaultChecked}
+                onCheckedChange={autoNext.onCheckedChange}
+                storageKey={autoNext.storageKey}
+                label={autoNext.label}
+                disabled={autoNext.disabled}
+            />
+        ) : null
+
     return (
         <UnifiedTaskWorkbenchRailContext.Provider value={railControl}>
             <section
@@ -606,6 +745,7 @@ export function UnifiedTaskWorkbench({
                             : workspaceTaskSurfacePadClassName,
                     )}
                 >
+                    {autoNextControl}
                     {footerLeading}
                     {footerSummary}
                     {footerSummaryHostRef ? (

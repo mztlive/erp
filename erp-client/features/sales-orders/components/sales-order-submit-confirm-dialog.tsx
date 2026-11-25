@@ -3,11 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { ArrowRightIcon, FileTextIcon, MapPinIcon } from "lucide-react"
 
-import {
-    DeliveryAllocationOverview,
-    DetailWorkspaceMeta,
-    MoneyValue,
-} from "@/components/business"
+import { DetailWorkspaceMeta, MoneyValue } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -24,6 +20,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { SubmissionRouteConfirmation } from "@/features/approval-workflow/components/submission-route-confirmation"
 import { useResubmissionReason } from "@/features/approval-workflow/hooks/use-resubmission-reason"
 import type { DocumentApprovalView } from "@/features/approval-workflow/types"
+import { DeliveryAllocationOverview } from "@/features/regions"
 import type { SalesOrderSubmitSnapshot } from "@/features/sales-orders/components/sales-order-submit-confirm-summary"
 import { SalesOrderSubmitPaper } from "@/features/sales-orders/components/sales-order-submit-paper"
 import { NATURE_LABEL } from "@/features/sales-orders/lib/labels"

@@ -5,12 +5,12 @@ import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { SalesLinePriceComparison } from "@/components/business/sales-line-price-comparison"
 
 import {
-    DeliveryAllocationPrintAppendix,
     MoneyValue,
     PaperDocument,
     QuantityValue,
     RateValue,
 } from "@/components/business"
+import { DeliveryAllocationPrintAppendix } from "@/features/regions"
 import {
     buildDeliveryAllocationSummary,
     formatLineDeliveryHint,

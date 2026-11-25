@@ -12,6 +12,7 @@ import { createPortal } from "react-dom"
 import {
     UnifiedTaskWorkbench,
     type TaskWorkbenchArchetype,
+    type UnifiedTaskWorkbenchAutoNext,
     type UnifiedTaskWorkbenchContextRail,
 } from "@/components/business/unified-task-workbench"
 
@@ -48,6 +49,8 @@ export type WorkspaceTaskPageLayout = {
     summary?: ReactNode
     aside?: ReactNode
     contextRail?: UnifiedTaskWorkbenchContextRail
+    /** 底栏左侧标准「处理后自动下一项」开关；可被内层 `WorkspaceTaskPane` 的 `autoNext` 覆盖。 */
+    autoNext?: UnifiedTaskWorkbenchAutoNext
     footerLeading?: ReactNode
     footer?: ReactNode
 }
@@ -126,6 +129,10 @@ export type WorkspaceTaskPaneProps = {
     archetype?: TaskWorkbenchArchetype
     /** 显式提供右侧上下文轨（审批轨迹 / 附件对照 / 诊断载荷）。 */
     contextRail?: UnifiedTaskWorkbenchContextRail
+    /** 底栏左侧标准「处理后自动下一项」开关；未传时继承 WorkspaceTaskPageProvider 配置。 */
+    autoNext?: UnifiedTaskWorkbenchAutoNext
+    /** 附加在底栏左侧的自定义内容（位于 `autoNext` 开关之后）。 */
+    footerLeading?: ReactNode
     footer?: ReactNode
     children: ReactNode
     idPrefix?: string
@@ -144,6 +151,8 @@ export function WorkspaceTaskPane({
     kpiStrip,
     archetype,
     contextRail,
+    autoNext,
+    footerLeading,
     footer,
     children,
     idPrefix,
@@ -184,6 +193,8 @@ export function WorkspaceTaskPane({
                                 alertBanner={alertBanner}
                                 kpiStrip={kpiStrip}
                                 contextRail={contextRail}
+                                autoNext={autoNext}
+                                footerLeading={footerLeading}
                                 footerSummaryHostRef={setFooterSummaryHost}
                                 footerHostRef={setFooterHost}
                                 footerActions={footer}
@@ -239,6 +250,24 @@ export function WorkspaceTaskPane({
     const showSummaryHost =
         !layout.fullWidth && (!layout.singleColumn || layout.summaryInHeader)
 
+    const effectiveAutoNext = autoNext ?? layout.autoNext
+    const effectiveFooterLeading = layout.fillBody ? (
+        layout.footer || layout.footerLeading || footerLeading ? (
+            <>
+                {layout.footer}
+                {layout.footerLeading}
+                {footerLeading}
+            </>
+        ) : undefined
+    ) : layout.footerLeading && footerLeading ? (
+        <>
+            {layout.footerLeading}
+            {footerLeading}
+        </>
+    ) : (
+        (layout.footerLeading ?? footerLeading)
+    )
+
     return (
         <WorkspaceTaskFooterHostContext.Provider value={hostValue}>
             <WorkspaceTaskNavigationContext.Provider
@@ -255,22 +284,14 @@ export function WorkspaceTaskPane({
                         alertBanner={alertBanner}
                         kpiStrip={resolvedKpiStrip}
                         contextRail={effectiveContextRail}
+                        autoNext={effectiveAutoNext}
                         summaryHostRef={
                             showSummaryHost ? setSummaryHost : undefined
                         }
                         asideHostRef={
                             effectiveContextRail ? setAsideHost : undefined
                         }
-                        footerLeading={
-                            layout.fillBody ? (
-                                <>
-                                    {layout.footer}
-                                    {layout.footerLeading}
-                                </>
-                            ) : (
-                                layout.footerLeading
-                            )
-                        }
+                        footerLeading={effectiveFooterLeading}
                         footerSummary={
                             !layout.fillBody ? layout.footer : undefined
                         }

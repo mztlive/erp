@@ -1,35 +1,11 @@
 import { MoneyValue } from "@/components/business"
-import { cn } from "@/lib/utils"
 import type { PurchaseMarginTotals } from "./workspace-purchase-comparison-model"
 
-export function PurchaseProfitValue({
-    amount,
-    className,
-}: {
-    amount: string | null
-    className?: string
-}) {
-    const loss = amount?.startsWith("-")
-    const profit = amount != null && !loss && amount !== "0.00"
-
-    return (
-        <span
-            className={cn(
-                "font-medium whitespace-nowrap",
-                loss && "text-destructive-soft-foreground",
-                profit && "text-success-soft-foreground",
-                className,
-            )}
-        >
-            {loss ? "亏 " : profit ? "赚 " : null}
-            <MoneyValue
-                display="exact"
-                value={loss ? amount?.slice(1) : amount}
-                inheritColor
-            />
-        </span>
-    )
-}
+export {
+    ProfitValue,
+    PurchaseProfitValue,
+    type ProfitValueProps,
+} from "@/components/business/task/profit-value"
 
 export function PurchaseAmountDetails({
     supply,

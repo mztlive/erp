@@ -7,7 +7,6 @@ import {
     useState,
     type PointerEvent as ReactPointerEvent,
 } from "react"
-import { useQuery } from "@tanstack/react-query"
 import {
     ChevronLeftIcon,
     ChevronRightIcon,
@@ -44,18 +43,47 @@ import {
     type PdfRotation,
 } from "@/components/business/pdf-document-canvas"
 
+export type MaterialFilePreviewState = Readonly<{
+    data?: Blob | null
+    isLoading?: boolean
+    error?: unknown
+    onRetry?: () => void
+}>
+
 export type MaterialFileItem = Readonly<{
     id: string
     name: string
     mimeType?: string
     sizeBytes?: number
-    /** 由各业务域 apiGetBlob(...) 提供；预览器托管 ObjectURL 与 Blob.arrayBuffer 释放 */
-    loadPreview: (signal: AbortSignal) => Promise<Blob>
+    /** 外部已注入的预览 Blob（传入时跳过异步拉取，直接渲染） */
+    previewBlob?: Blob | null
+    /** 外部受控预览加载态（配合外部数据注入使用） */
+    previewLoading?: boolean
+    /** 外部受控预览错误态 */
+    previewError?: unknown
+    /** 外部受控预览重试回调 */
+    onRetryPreview?: () => void
+    /** 由各业务域 apiGetBlob(...) 提供；预览器托管 AbortController 与 ObjectURL 生命周期 */
+    loadPreview?: (signal: AbortSignal) => Promise<Blob>
     onDownload: () => Promise<void>
 }>
 
 export type UnifiedMaterialViewerProps = Readonly<{
-    files: readonly MaterialFileItem[]
+    files?: readonly MaterialFileItem[]
+    /** 可选的外部材料清单异步加载回调（当未直接传入 files 时由预览器拉取） */
+    loadMaterials?: (
+        signal: AbortSignal,
+    ) => Promise<readonly MaterialFileItem[]>
+    /** 可选的统一预览加载回调（优先于单文件 loadPreview，便于外部统一接入缓存或状态层） */
+    loadPreview?: (file: MaterialFileItem, signal: AbortSignal) => Promise<Blob>
+    /** 可选的外部注入当前文件预览状态（传入时由外部完全接管预览数据、加载态与错误重试） */
+    previewState?: MaterialFilePreviewState
+    /** 外部受控材料清单加载态 */
+    materialsLoading?: boolean
+    /** 外部受控材料清单错误态 */
+    materialsError?: unknown
+    /** 外部受控材料清单重试回调 */
+    onRetryMaterials?: () => void
     activeFileId?: string
     onActiveFileChange?: (id: string) => void
     /** "docked" 嵌入工作台右栏做左右对照；"dialog" 窄屏全幅灯箱 */
@@ -511,6 +539,8 @@ function MaterialFilePane({
     enabled,
     mode,
     idPrefix,
+    viewerLoadPreview,
+    externalPreviewState,
     fullscreen,
     onToggleFullscreen,
 }: {
@@ -518,6 +548,11 @@ function MaterialFilePane({
     enabled: boolean
     mode: "docked" | "dialog"
     idPrefix: string
+    viewerLoadPreview?: (
+        file: MaterialFileItem,
+        signal: AbortSignal,
+    ) => Promise<Blob>
+    externalPreviewState?: MaterialFilePreviewState
     fullscreen?: boolean
     onToggleFullscreen?: () => void
 }) {
@@ -528,29 +563,112 @@ function MaterialFilePane({
     const [pdfPageCount, setPdfPageCount] = useState(0)
     const [downloading, setDownloading] = useState(false)
     const [downloadError, setDownloadError] = useState<string | null>(null)
+    const [internalPreview, setInternalPreview] = useState<{
+        status: "idle" | "loading" | "success" | "error"
+        data: Blob | null
+        error: unknown
+    }>({
+        status: "idle",
+        data: null,
+        error: null,
+    })
+    const [retryToken, setRetryToken] = useState(0)
 
     const hintKind = detectKindFromMetadata(file.mimeType, file.name)
-    const previewQuery = useQuery({
-        queryKey: [
-            "unified-material-viewer",
-            idPrefix,
-            file.id,
-            file.name,
-            file.mimeType ?? "",
-            file.sizeBytes ?? 0,
-        ],
-        queryFn: ({ signal }) => file.loadPreview(signal),
-        enabled: enabled && hintKind !== "unsupported",
-        staleTime: 0,
-        gcTime: 0,
-        retry: false,
-    })
+    const hasExternalPreview =
+        externalPreviewState !== undefined ||
+        file.previewBlob !== undefined ||
+        file.previewLoading !== undefined ||
+        file.previewError !== undefined
+
+    const loadPreviewFn = viewerLoadPreview
+        ? (signal: AbortSignal) => viewerLoadPreview(file, signal)
+        : file.loadPreview
+    const hasLoader = Boolean(loadPreviewFn)
+    const loadPreviewRef = useRef(loadPreviewFn)
+    loadPreviewRef.current = loadPreviewFn
+
+    const fileMimeType = file.mimeType ?? ""
+    const fileSizeBytes = file.sizeBytes ?? 0
+    const shouldLoadInternally =
+        !hasExternalPreview &&
+        enabled &&
+        hintKind !== "unsupported" &&
+        hasLoader
+
+    useEffect(() => {
+        if (!shouldLoadInternally) {
+            setInternalPreview((current) =>
+                current.status === "idle" &&
+                current.data === null &&
+                current.error === null
+                    ? current
+                    : { status: "idle", data: null, error: null },
+            )
+            return
+        }
+        const loader = loadPreviewRef.current
+        if (!loader) return
+
+        const controller = new AbortController()
+        let active = true
+        setInternalPreview({ status: "loading", data: null, error: null })
+
+        void Promise.resolve()
+            .then(() => loader(controller.signal))
+            .then((blob) => {
+                if (!active || controller.signal.aborted) return
+                setInternalPreview({
+                    status: "success",
+                    data: blob,
+                    error: null,
+                })
+            })
+            .catch((cause: unknown) => {
+                if (!active || controller.signal.aborted) return
+                setInternalPreview({
+                    status: "error",
+                    data: null,
+                    error: cause,
+                })
+            })
+
+        return () => {
+            active = false
+            controller.abort()
+        }
+    }, [
+        shouldLoadInternally,
+        idPrefix,
+        file.id,
+        file.name,
+        fileMimeType,
+        fileSizeBytes,
+        retryToken,
+    ])
+
+    const previewBlob = hasExternalPreview
+        ? (externalPreviewState?.data ?? file.previewBlob ?? null)
+        : internalPreview.data
+    const previewError = hasExternalPreview
+        ? (externalPreviewState?.error ?? file.previewError ?? null)
+        : internalPreview.status === "error"
+          ? internalPreview.error
+          : null
+    const previewLoading = hasExternalPreview
+        ? Boolean(externalPreviewState?.isLoading ?? file.previewLoading)
+        : shouldLoadInternally &&
+          (internalPreview.status === "idle" ||
+              internalPreview.status === "loading")
+    const handleRetryPreview = hasExternalPreview
+        ? (externalPreviewState?.onRetry ?? file.onRetryPreview)
+        : () => setRetryToken((count) => count + 1)
 
     const effectiveKind: Exclude<PreviewMediaKind, "unknown"> | "loading" =
-        hintKind === "unsupported"
+        hintKind === "unsupported" || (!hasExternalPreview && !hasLoader)
             ? "unsupported"
-            : previewQuery.data
-              ? detectKindFromBlob(previewQuery.data, file.mimeType, file.name)
+            : previewBlob
+              ? detectKindFromBlob(previewBlob, file.mimeType, file.name)
               : "loading"
 
     const canManipulate = effectiveKind === "pdf" || effectiveKind === "image"
@@ -795,27 +913,29 @@ function MaterialFilePane({
                         下载原文件
                     </LoadingButton>
                 </div>
-            ) : previewQuery.isError ? (
+            ) : previewError ? (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
                     <p
                         role="alert"
                         className="text-body-compact text-destructive"
                     >
                         {getErrorMessage(
-                            previewQuery.error,
+                            previewError,
                             "附件预览读取失败，请重试",
                         )}
                     </p>
                     <div className="flex flex-wrap items-center justify-center gap-2">
-                        <Button
-                            id={`${idPrefix}-retry`}
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => void previewQuery.refetch()}
-                        >
-                            重试预览
-                        </Button>
+                        {handleRetryPreview ? (
+                            <Button
+                                id={`${idPrefix}-retry`}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleRetryPreview()}
+                            >
+                                重试预览
+                            </Button>
+                        ) : null}
                         <LoadingButton
                             id={`${idPrefix}-error-download`}
                             type="button"
@@ -828,7 +948,7 @@ function MaterialFilePane({
                         </LoadingButton>
                     </div>
                 </div>
-            ) : previewQuery.isPending || !previewQuery.data ? (
+            ) : previewLoading || !previewBlob ? (
                 <div
                     role="status"
                     className="flex flex-1 items-center justify-center gap-2 text-xs text-muted-foreground"
@@ -838,7 +958,7 @@ function MaterialFilePane({
                 </div>
             ) : effectiveKind === "pdf" ? (
                 <PdfDocumentCanvas
-                    blob={previewQuery.data}
+                    blob={previewBlob}
                     scale={zoom}
                     fitWidth={fitWidth}
                     rotation={rotation}
@@ -856,7 +976,7 @@ function MaterialFilePane({
                 />
             ) : (
                 <ImageBlobViewport
-                    blob={previewQuery.data}
+                    blob={previewBlob}
                     fileName={file.name}
                     zoom={zoom}
                     fitWidth={fitWidth}
@@ -977,14 +1097,22 @@ function MultiFileSwitcher({
     )
 }
 
+const EMPTY_MATERIAL_FILES: readonly MaterialFileItem[] = []
+
 /**
  * 统一附件与材料对照预览器：
- * - 严格通过业务域提供的认证 `loadPreview(signal)` 拉取 `Blob`，不向 `<img>`/`pdfjs` 传递裸受保护 URL；
+ * - 支持外部注入材料清单/预览数据，或通过 `loadMaterials` / `loadPreview(signal)` 回调拉取认证 `Blob`，不向 `<img>`/`pdfjs` 传递裸受保护 URL；
  * - 支持 PDF（`PdfDocumentCanvas`）、图片（原生 `<img>` 缩放/适应宽度/90° 旋转/拖拽滚动）与其他格式降级下载卡；
  * - 支持 `mode="docked"`（工作台右栏左右对照）与 `mode="dialog"`（灯箱预览）。
  */
 export function UnifiedMaterialViewer({
     files,
+    loadMaterials,
+    loadPreview,
+    previewState,
+    materialsLoading = false,
+    materialsError,
+    onRetryMaterials,
     activeFileId,
     onActiveFileChange,
     mode,
@@ -994,14 +1122,89 @@ export function UnifiedMaterialViewer({
     className,
     emptyMessage = "暂无可预览的附件。",
 }: UnifiedMaterialViewerProps) {
+    const loadMaterialsRef = useRef(loadMaterials)
+    loadMaterialsRef.current = loadMaterials
+    const shouldLoadMaterials =
+        files === undefined &&
+        Boolean(loadMaterials) &&
+        (mode === "docked" || open)
+
+    const [loadedMaterials, setLoadedMaterials] = useState<{
+        status: "idle" | "loading" | "success" | "error"
+        data: readonly MaterialFileItem[]
+        error: unknown
+    }>({
+        status: "idle",
+        data: EMPTY_MATERIAL_FILES,
+        error: null,
+    })
+    const [materialsRetryToken, setMaterialsRetryToken] = useState(0)
+
+    useEffect(() => {
+        if (!shouldLoadMaterials) return
+        const loader = loadMaterialsRef.current
+        if (!loader) return
+
+        const controller = new AbortController()
+        let active = true
+        setLoadedMaterials((current) => ({
+            status: "loading",
+            data: current.data,
+            error: null,
+        }))
+
+        void Promise.resolve()
+            .then(() => loader(controller.signal))
+            .then((items) => {
+                if (!active || controller.signal.aborted) return
+                setLoadedMaterials({
+                    status: "success",
+                    data: items,
+                    error: null,
+                })
+            })
+            .catch((cause: unknown) => {
+                if (!active || controller.signal.aborted) return
+                setLoadedMaterials({
+                    status: "error",
+                    data: EMPTY_MATERIAL_FILES,
+                    error: cause,
+                })
+            })
+
+        return () => {
+            active = false
+            controller.abort()
+        }
+    }, [shouldLoadMaterials, idPrefix, materialsRetryToken])
+
+    const resolvedFiles = files ?? loadedMaterials.data
+    const resolvedMaterialsLoading =
+        Boolean(materialsLoading) ||
+        (shouldLoadMaterials &&
+            (loadedMaterials.status === "idle" ||
+                loadedMaterials.status === "loading"))
+    const resolvedMaterialsError =
+        materialsError ??
+        (files === undefined && loadedMaterials.status === "error"
+            ? loadedMaterials.error
+            : null)
+    const handleRetryMaterials =
+        onRetryMaterials ??
+        (files === undefined && loadMaterials
+            ? () => setMaterialsRetryToken((count) => count + 1)
+            : undefined)
+
     const [internalFileId, setInternalFileId] = useState<string | undefined>(
-        () => files[0]?.id,
+        () => resolvedFiles[0]?.id,
     )
     const [fullscreen, setFullscreen] = useState(false)
 
     const resolvedFile =
-        files.find((item) => item.id === (activeFileId ?? internalFileId)) ??
-        files[0] ??
+        resolvedFiles.find(
+            (item) => item.id === (activeFileId ?? internalFileId),
+        ) ??
+        resolvedFiles[0] ??
         null
 
     const handleSelectFile = (nextId: string) => {
@@ -1013,6 +1216,53 @@ export function UnifiedMaterialViewer({
 
     if (mode === "docked") {
         if (!resolvedFile) {
+            if (resolvedMaterialsError) {
+                return (
+                    <div
+                        data-slot="unified-material-viewer"
+                        className={cn(
+                            "flex min-h-48 flex-1 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border bg-muted/15 p-6 text-center",
+                            className,
+                        )}
+                    >
+                        <p
+                            role="alert"
+                            className="text-body-compact text-destructive"
+                        >
+                            {getErrorMessage(
+                                resolvedMaterialsError,
+                                "附件列表读取失败，请重试",
+                            )}
+                        </p>
+                        {handleRetryMaterials ? (
+                            <Button
+                                id={`${idPrefix}-materials-retry`}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleRetryMaterials()}
+                            >
+                                重试加载
+                            </Button>
+                        ) : null}
+                    </div>
+                )
+            }
+            if (resolvedMaterialsLoading) {
+                return (
+                    <div
+                        data-slot="unified-material-viewer"
+                        role="status"
+                        className={cn(
+                            "flex min-h-48 flex-1 items-center justify-center gap-2 rounded-md border border-dashed border-border bg-muted/15 p-6 text-xs text-muted-foreground",
+                            className,
+                        )}
+                    >
+                        <Spinner />
+                        正在读取附件…
+                    </div>
+                )
+            }
             return (
                 <div
                     data-slot="unified-material-viewer"
@@ -1036,7 +1286,7 @@ export function UnifiedMaterialViewer({
                 )}
             >
                 <MultiFileSwitcher
-                    files={files}
+                    files={resolvedFiles}
                     activeFileId={resolvedFile.id}
                     onSelect={handleSelectFile}
                     idPrefix={idPrefix}
@@ -1047,6 +1297,8 @@ export function UnifiedMaterialViewer({
                     enabled
                     mode="docked"
                     idPrefix={idPrefix}
+                    viewerLoadPreview={loadPreview}
+                    externalPreviewState={previewState}
                 />
             </section>
         )
@@ -1078,15 +1330,17 @@ export function UnifiedMaterialViewer({
                             enabled={open}
                             mode="dialog"
                             idPrefix={idPrefix}
+                            viewerLoadPreview={loadPreview}
+                            externalPreviewState={previewState}
                             fullscreen={fullscreen}
                             onToggleFullscreen={() =>
                                 setFullscreen((current) => !current)
                             }
                         />
-                        {files.length > 1 ? (
+                        {resolvedFiles.length > 1 ? (
                             <div className="shrink-0 border-t border-border/70">
                                 <MultiFileSwitcher
-                                    files={files}
+                                    files={resolvedFiles}
                                     activeFileId={resolvedFile.id}
                                     onSelect={handleSelectFile}
                                     idPrefix={idPrefix}
@@ -1095,9 +1349,42 @@ export function UnifiedMaterialViewer({
                         ) : null}
                     </>
                 ) : (
-                    <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-xs text-muted-foreground">
+                    <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-xs text-muted-foreground">
                         <DialogTitle className="sr-only">附件预览</DialogTitle>
-                        <p>{emptyMessage}</p>
+                        {resolvedMaterialsError ? (
+                            <>
+                                <p
+                                    role="alert"
+                                    className="text-body-compact text-destructive"
+                                >
+                                    {getErrorMessage(
+                                        resolvedMaterialsError,
+                                        "附件列表读取失败，请重试",
+                                    )}
+                                </p>
+                                {handleRetryMaterials ? (
+                                    <Button
+                                        id={`${idPrefix}-materials-retry`}
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleRetryMaterials()}
+                                    >
+                                        重试加载
+                                    </Button>
+                                ) : null}
+                            </>
+                        ) : resolvedMaterialsLoading ? (
+                            <div
+                                role="status"
+                                className="flex items-center justify-center gap-2"
+                            >
+                                <Spinner />
+                                正在读取附件…
+                            </div>
+                        ) : (
+                            <p>{emptyMessage}</p>
+                        )}
                         <DialogClose
                             render={
                                 <Button

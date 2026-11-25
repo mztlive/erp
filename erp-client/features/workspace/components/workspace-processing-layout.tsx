@@ -1,17 +1,21 @@
 "use client"
 
 import type { ReactNode } from "react"
+
+import {
+    WorkspaceProcessingPane,
+    type WorkspaceProcessingPaneProps,
+} from "@/components/business/task/workspace-processing-pane"
 import type { TaskWorkbenchArchetype } from "@/components/business/unified-task-workbench"
 import {
     WorkspaceTaskPageProvider,
-    WorkspaceTaskPane,
     type WorkspaceTaskBackLink,
-    type WorkspaceTaskPaneProps,
 } from "@/components/business/workspace-task-pane"
-import { NativeCheckbox } from "@/components/ui/checkbox"
-import { AUTO_NEXT_LABEL } from "@/lib/task-status-dictionary"
+
 import type { WorkspaceWorkItem } from "../types"
 import { isApprovalWorkbenchTask } from "../lib/navigation-eligibility"
+
+export { WorkspaceProcessingPane, type WorkspaceProcessingPaneProps }
 
 const ACTION_TASK_TYPES = new Set([
     "PURCHASE_PAYMENT_ARRANGEMENT",
@@ -33,11 +37,6 @@ const INVESTIGATION_TASK_TYPES = new Set([
     "INTEGRATION_RESULT_UNKNOWN",
     "BUSINESS_EXCEPTION",
 ])
-
-/** 完整办理页直接复用统一工作台骨架（UnifiedTaskWorkbench）。 */
-export function WorkspaceProcessingPane(props: WorkspaceTaskPaneProps) {
-    return <WorkspaceTaskPane {...props} />
-}
 
 /**
  * 所有审批、执行与只读跟踪入口共用纯白通栏工作台骨架：
@@ -140,22 +139,14 @@ export function WorkspaceProcessingLayout({
             }
             summary={null}
             aside={null}
-            footerLeading={
-                showAutoNext ? (
-                    <label
-                        htmlFor="workspace-processing-auto-next"
-                        className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none hover:text-foreground"
-                    >
-                        <NativeCheckbox
-                            id="workspace-processing-auto-next"
-                            checked={autoNext}
-                            onCheckedChange={(value) =>
-                                onAutoNextChange(value === true)
-                            }
-                        />
-                        {AUTO_NEXT_LABEL}
-                    </label>
-                ) : null
+            autoNext={
+                showAutoNext
+                    ? {
+                          id: "workspace-processing-auto-next",
+                          checked: autoNext,
+                          onCheckedChange: onAutoNextChange,
+                      }
+                    : undefined
             }
             footer={null}
         >

@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query"
 import { useStore } from "@tanstack/react-form"
 import { CircleAlertIcon, TriangleAlertIcon } from "lucide-react"
 import { z } from "zod"
@@ -22,21 +21,8 @@ import {
 } from "@/components/ui/dialog"
 import { FieldGroup } from "@/components/ui/field"
 import { toast } from "@/components/ui/toast"
-import {
-    getWorkItemReassignCandidates,
-    submitWorkItemResponsibility,
-} from "@/features/work-items/api"
-import {
-    synchronizeWorkItemConflict,
-    workItemKeys,
-} from "@/features/work-items/queries"
-import type {
-    WorkItemReassignCandidate,
-    WorkItemResponsibilityCommand,
-} from "@/features/work-items/types"
 import { getErrorMessage } from "@/lib/api/errors"
 import { toAutomationIdSegment } from "@/lib/automation-id"
-import { queryKeyRoots } from "@/lib/query-key-roots"
 import {
     WORK_ITEM_CLOSE_COMMENT_MAX_CHARS,
     WORK_ITEM_REASSIGN_REASON_MAX_CHARS,
@@ -44,7 +30,6 @@ import {
     workItemReassignReasonSchema,
 } from "@/lib/validation/reason-length"
 
-const BATCH_CONCURRENCY = 3
 const REPLACEMENT_ID_MAX_CHARS = 128
 
 export type WorkItemCloseReasonOption = Readonly<{
@@ -68,6 +53,40 @@ export type WorkItemResponsibilitySummary = Readonly<{
     failed: { id: string; message: string }[]
 }>
 
+export type WorkItemReassignCandidateItem = Readonly<{
+    user_id: string
+    display_name: string
+    account: string
+}>
+
+export type WorkItemResponsibilityCommandInput =
+    | Readonly<{
+          kind: "REASSIGN"
+          workItemId: string
+          expectedTaskVersion: string
+          targetUserId: string
+          reason: string
+          idempotencyKey: string
+      }>
+    | Readonly<{
+          kind: "CLOSE"
+          workItemId: string
+          expectedTaskVersion: string
+          reasonCode: string
+          replacementWorkItemId?: string
+          comment?: string
+          idempotencyKey: string
+      }>
+
+export type WorkItemResponsibilityBatchCommand = Readonly<{
+    target: WorkItemResponsibilityTarget
+    command: WorkItemResponsibilityCommandInput
+}>
+
+export type WorkItemResponsibilityExecutionOutcome =
+    | Readonly<{ ok: true; id: string }>
+    | Readonly<{ ok: false; id: string; label: string; message: string }>
+
 export type WorkItemResponsibilityDialogProps = Readonly<{
     mode: "reassign" | "close"
     targets: readonly WorkItemResponsibilityTarget[]
@@ -76,6 +95,24 @@ export type WorkItemResponsibilityDialogProps = Readonly<{
     open: boolean
     onOpenChange: (open: boolean) => void
     onCompleted: (summary: WorkItemResponsibilitySummary) => void
+    /** `mode="reassign"` 外部注入的合格候选接收人列表（批量模式为交集结果）。 */
+    candidates?: readonly WorkItemReassignCandidateItem[]
+    /** `mode="reassign"` 候选人首次加载中状态。 */
+    candidatesPending?: boolean
+    /** `mode="reassign"` 候选人后台刷新中状态。 */
+    candidatesFetching?: boolean
+    /** `mode="reassign"` 候选人数据已就绪（用于判定批量交集为空）。 */
+    candidatesReady?: boolean
+    /** `mode="reassign"` 候选人加载失败错误。 */
+    candidatesError?: unknown
+    /** `mode="reassign"` 候选人重新加载回调。 */
+    onRetryCandidates?: () => Promise<void>
+    /** 外部受控提交中状态。 */
+    submitting?: boolean
+    /** 责任命令批量执行回调，由业务域绑定接口调用、并发调度、冲突同步与缓存失效。 */
+    onSubmitCommands: (
+        commands: readonly WorkItemResponsibilityBatchCommand[],
+    ) => Promise<readonly WorkItemResponsibilityExecutionOutcome[]>
     /** 自定义原生自动化 ID 前缀。 */
     idPrefix?: string
     /** 自定义弹窗标题。 */
@@ -99,30 +136,12 @@ export const DEFAULT_WORK_ITEM_CLOSE_REASON_OPTIONS: readonly WorkItemCloseReaso
         },
     ]
 
-async function runWithConcurrency<T, R>(
-    items: readonly T[],
-    concurrency: number,
-    worker: (item: T) => Promise<R>,
-): Promise<R[]> {
-    if (items.length === 0) return []
-    const results: (R | undefined)[] = Array.from({ length: items.length })
-    let cursor = 0
-    const workerCount = Math.max(1, Math.min(concurrency, items.length))
-    await Promise.all(
-        Array.from({ length: workerCount }, async () => {
-            while (cursor < items.length) {
-                const index = cursor
-                cursor += 1
-                results[index] = await worker(items[index])
-            }
-        }),
-    )
-    return results as R[]
-}
+const EMPTY_CANDIDATES: readonly WorkItemReassignCandidateItem[] = []
 
-function intersectReassignCandidates(
-    lists: readonly (readonly WorkItemReassignCandidate[])[],
-): WorkItemReassignCandidate[] {
+/** 对多个任务的转交候选人列表求交集，仅保留同时具备全部任务处理资格的候选人。 */
+export function intersectWorkItemReassignCandidates<
+    T extends WorkItemReassignCandidateItem,
+>(lists: readonly (readonly T[])[]): T[] {
     if (lists.length === 0) return []
     let commonIds = new Set(lists[0].map((candidate) => candidate.user_id))
     for (let index = 1; index < lists.length; index += 1) {
@@ -141,16 +160,12 @@ function firstFieldErrorMessage(
     return toFieldErrors(errors).find((item) => item?.message)?.message
 }
 
-type ExecutionOutcome =
-    | { ok: true; id: string }
-    | { ok: false; id: string; label: string; message: string }
-
 /**
- * 统一任务责任管理弹窗：支持单条与批量 `REASSIGN`（转交）及 `CLOSE`（受控关闭）。
+ * 统一任务责任管理弹窗纯 UI 原语：支持单条与批量 `REASSIGN`（转交）及 `CLOSE`（受控关闭）。
  *
- * - `reassign`：按任务并发拉取候选接收人并自动求交集，原因必填且 ≤ 150 字；
+ * - `reassign`：消费外部注入的候选人列表与加载/错误状态，原因必填且 ≤ 150 字；
  * - `close`：严格对齐后端 `reason_code`、`comment ≤ 100 字` 及 `DUPLICATE` 替代任务编号校验；
- * - 提交统一以并发度 3 调度并回报 `{ succeededIds, failed }`。
+ * - 业务查询、提交执行与冲突同步由外部 `onSubmitCommands` 注入，弹窗负责表单校验、幂等键维护与结果回报。
  */
 export function WorkItemResponsibilityDialog({
     mode,
@@ -159,6 +174,14 @@ export function WorkItemResponsibilityDialog({
     open,
     onOpenChange,
     onCompleted,
+    candidates = EMPTY_CANDIDATES,
+    candidatesPending = false,
+    candidatesFetching = false,
+    candidatesReady,
+    candidatesError,
+    onRetryCandidates,
+    submitting = false,
+    onSubmitCommands,
     idPrefix,
     title,
     description,
@@ -187,7 +210,7 @@ export function WorkItemResponsibilityDialog({
     const defaultCloseReasonCode =
         availableCloseOptions.length === 1 ? availableCloseOptions[0].code : ""
 
-    const queryClient = useQueryClient()
+    const [internalSubmitting, setInternalSubmitting] = React.useState(false)
     const [submitFailures, setSubmitFailures] = React.useState<
         readonly { id: string; label: string; message: string }[]
     >([])
@@ -196,61 +219,28 @@ export function WorkItemResponsibilityDialog({
         new Map<string, { fingerprint: string; key: string }>(),
     )
 
-    const candidateQueries = useQueries({
-        queries: targets.map((target) => ({
-            queryKey: workItemKeys.reassignCandidates(target.workItemId),
-            queryFn: () => getWorkItemReassignCandidates(target.workItemId),
-            enabled:
-                open &&
-                mode === "reassign" &&
-                target.workItemId.trim().length > 0,
-        })),
-    })
-
-    const candidatesPending =
-        mode === "reassign" && candidateQueries.some((query) => query.isPending)
-    const candidatesFetching =
-        mode === "reassign" &&
-        candidateQueries.some((query) => query.isFetching)
-    const candidateErrorQuery =
-        mode === "reassign"
-            ? candidateQueries.find((query) => query.isError)
-            : undefined
-    const candidatesReady =
+    const isSubmitting = submitting || internalSubmitting
+    const hasCandidateError = mode === "reassign" && candidatesError != null
+    const resolvedCandidatesReady =
         mode === "reassign" &&
         targets.length > 0 &&
-        candidateQueries.every((query) => query.isSuccess)
-
-    const eligibleCandidates = React.useMemo(() => {
-        if (!candidatesReady) return []
-        return intersectReassignCandidates(
-            candidateQueries.map((query) => query.data ?? []),
-        )
-    }, [candidateQueries, candidatesReady])
+        (candidatesReady ?? (!candidatesPending && !hasCandidateError))
 
     const candidateOptions = React.useMemo(
         () =>
-            eligibleCandidates.map((candidate) => ({
+            candidates.map((candidate) => ({
                 value: candidate.user_id,
                 label: `${candidate.display_name} · ${candidate.account}`,
                 keywords: `${candidate.display_name} ${candidate.account}`,
             })),
-        [eligibleCandidates],
+        [candidates],
     )
 
     const emptyBatchIntersection =
         mode === "reassign" &&
         isBatch &&
-        candidatesReady &&
-        eligibleCandidates.length === 0
-
-    const refetchCandidates = React.useCallback(async () => {
-        const results = await Promise.all(
-            candidateQueries.map((query) => query.refetch()),
-        )
-        const failed = results.find((result) => result.error)
-        if (failed?.error) throw failed.error
-    }, [candidateQueries])
+        resolvedCandidatesReady &&
+        candidates.length === 0
 
     const acquireIdempotencyKey = React.useCallback(
         (workItemId: string, fingerprint: string): string => {
@@ -267,56 +257,6 @@ export function WorkItemResponsibilityDialog({
         },
         [mode],
     )
-
-    const batchMutation = useMutation({
-        meta: { affectsDataScope: true },
-        mutationFn: async (
-            commands: readonly {
-                target: WorkItemResponsibilityTarget
-                command: WorkItemResponsibilityCommand
-            }[],
-        ): Promise<ExecutionOutcome[]> => {
-            const outcomes = await runWithConcurrency(
-                commands,
-                BATCH_CONCURRENCY,
-                async ({ target, command }): Promise<ExecutionOutcome> => {
-                    try {
-                        await submitWorkItemResponsibility(command)
-                        intentKeysRef.current.delete(target.workItemId)
-                        return { ok: true, id: target.workItemId }
-                    } catch (cause) {
-                        await synchronizeWorkItemConflict(
-                            queryClient,
-                            command,
-                            cause,
-                        )
-                        return {
-                            ok: false,
-                            id: target.workItemId,
-                            label: target.label,
-                            message: getErrorMessage(
-                                cause,
-                                mode === "reassign"
-                                    ? "任务责任未转交，请刷新后重试"
-                                    : "任务未关闭，请刷新后重试",
-                            ),
-                        }
-                    }
-                },
-            )
-            if (outcomes.some((outcome) => outcome.ok)) {
-                await Promise.all([
-                    queryClient.invalidateQueries({
-                        queryKey: workItemKeys.all,
-                    }),
-                    queryClient.invalidateQueries({
-                        queryKey: queryKeyRoots.workspaceHome,
-                    }),
-                ])
-            }
-            return outcomes
-        },
-    })
 
     const reassignSchema = React.useMemo(
         () =>
@@ -434,14 +374,11 @@ export function WorkItemResponsibilityDialog({
             },
         },
         onSubmit: async ({ value }) => {
-            if (batchMutation.isPending || targets.length === 0) return
+            if (isSubmitting || targets.length === 0) return
             setSubmitError(null)
             setSubmitFailures([])
 
-            let commands: {
-                target: WorkItemResponsibilityTarget
-                command: WorkItemResponsibilityCommand
-            }[]
+            let commands: WorkItemResponsibilityBatchCommand[]
 
             if (mode === "reassign") {
                 const parsed = reassignSchema.safeParse({
@@ -539,22 +476,45 @@ export function WorkItemResponsibilityDialog({
                 })
             }
 
-            const outcomes = await batchMutation.mutateAsync(commands)
+            let outcomes: readonly WorkItemResponsibilityExecutionOutcome[]
+            setInternalSubmitting(true)
+            try {
+                outcomes = await onSubmitCommands(commands)
+            } catch (cause) {
+                setSubmitError(
+                    getErrorMessage(
+                        cause,
+                        mode === "reassign"
+                            ? "任务责任未转交，请刷新后重试"
+                            : "任务未关闭，请刷新后重试",
+                    ),
+                )
+                return
+            } finally {
+                setInternalSubmitting(false)
+            }
+
+            for (const outcome of outcomes) {
+                if (outcome.ok) {
+                    intentKeysRef.current.delete(outcome.id)
+                }
+            }
+
             const succeededIds = outcomes
                 .filter(
-                    (outcome): outcome is { ok: true; id: string } =>
+                    (outcome): outcome is Readonly<{ ok: true; id: string }> =>
                         outcome.ok,
                 )
                 .map((outcome) => outcome.id)
             const failedDetails = outcomes.filter(
                 (
                     outcome,
-                ): outcome is {
+                ): outcome is Readonly<{
                     ok: false
                     id: string
                     label: string
                     message: string
-                } => !outcome.ok,
+                }> => !outcome.ok,
             )
             const summary: WorkItemResponsibilitySummary = {
                 succeededIds,
@@ -670,9 +630,9 @@ export function WorkItemResponsibilityDialog({
 
     const canSubmitReassign =
         mode === "reassign" &&
-        !batchMutation.isPending &&
+        !isSubmitting &&
         !candidatesPending &&
-        !candidateErrorQuery &&
+        !hasCandidateError &&
         !emptyBatchIntersection &&
         targets.length > 0 &&
         candidateOptions.some(
@@ -682,7 +642,7 @@ export function WorkItemResponsibilityDialog({
 
     const canSubmitClose =
         mode === "close" &&
-        !batchMutation.isPending &&
+        !isSubmitting &&
         targets.length > 0 &&
         availableCloseOptions.length > 0 &&
         closeSchema.safeParse({
@@ -713,7 +673,7 @@ export function WorkItemResponsibilityDialog({
         <Dialog
             open={open}
             onOpenChange={(next) => {
-                if (!next && batchMutation.isPending) return
+                if (!next && isSubmitting) return
                 onOpenChange(next)
             }}
         >
@@ -722,7 +682,7 @@ export function WorkItemResponsibilityDialog({
                 size="md"
                 scroll="body"
                 closeButtonId={`${resolvedPrefix}-close${idSuffix}`}
-                showCloseButton={!batchMutation.isPending}
+                showCloseButton={!isSubmitting}
             >
                 <DialogHeader>
                     <DialogTitle>{resolvedTitle}</DialogTitle>
@@ -760,26 +720,30 @@ export function WorkItemResponsibilityDialog({
                             </div>
                         ) : null}
 
-                        {candidateErrorQuery ? (
+                        {hasCandidateError ? (
                             <Alert variant="destructive">
                                 <TriangleAlertIcon aria-hidden="true" />
                                 <AlertTitle>候选人员加载失败</AlertTitle>
                                 <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
                                     <span>
                                         {getErrorMessage(
-                                            candidateErrorQuery.error,
+                                            candidatesError,
                                             "请刷新候选人员后重试",
                                         )}
                                     </span>
-                                    <Button
-                                        id={`${resolvedPrefix}-retry-candidates${idSuffix}`}
-                                        type="button"
-                                        size="xs"
-                                        variant="outline"
-                                        onClick={() => void refetchCandidates()}
-                                    >
-                                        重新加载
-                                    </Button>
+                                    {onRetryCandidates ? (
+                                        <Button
+                                            id={`${resolvedPrefix}-retry-candidates${idSuffix}`}
+                                            type="button"
+                                            size="xs"
+                                            variant="outline"
+                                            onClick={() =>
+                                                void onRetryCandidates()
+                                            }
+                                        >
+                                            重新加载
+                                        </Button>
+                                    ) : null}
                                 </AlertDescription>
                             </Alert>
                         ) : null}
@@ -842,7 +806,7 @@ export function WorkItemResponsibilityDialog({
                                             id={`${resolvedPrefix}-target${idSuffix}`}
                                             label="新责任人"
                                             options={candidateOptions}
-                                            onRefresh={refetchCandidates}
+                                            onRefresh={onRetryCandidates}
                                             placeholder="选择接收人"
                                             emptyLabel={
                                                 isBatch
@@ -851,7 +815,7 @@ export function WorkItemResponsibilityDialog({
                                             }
                                             loading={candidatesFetching}
                                             disabled={
-                                                batchMutation.isPending ||
+                                                isSubmitting ||
                                                 candidatesPending ||
                                                 emptyBatchIntersection
                                             }
@@ -877,7 +841,7 @@ export function WorkItemResponsibilityDialog({
                                             value={field.state.value}
                                             onChange={field.handleChange}
                                             onBlur={field.handleBlur}
-                                            disabled={batchMutation.isPending}
+                                            disabled={isSubmitting}
                                             error={
                                                 field.state.meta.isTouched
                                                     ? firstFieldErrorMessage(
@@ -903,7 +867,7 @@ export function WorkItemResponsibilityDialog({
                                             options={closeOptionItems}
                                             placeholder="选择关闭原因"
                                             emptyLabel="暂无可用关闭原因"
-                                            disabled={batchMutation.isPending}
+                                            disabled={isSubmitting}
                                             allowClear={false}
                                             required
                                         />
@@ -919,9 +883,7 @@ export function WorkItemResponsibilityDialog({
                                                 label="替代任务编号"
                                                 placeholder="输入同类型有效替代任务的编号"
                                                 description="仅可关联同一异常类别的开放正式任务，不能填写当前任务自身。"
-                                                disabled={
-                                                    batchMutation.isPending
-                                                }
+                                                disabled={isSubmitting}
                                                 required
                                             />
                                         )}
@@ -950,7 +912,7 @@ export function WorkItemResponsibilityDialog({
                                             value={field.state.value}
                                             onChange={field.handleChange}
                                             onBlur={field.handleBlur}
-                                            disabled={batchMutation.isPending}
+                                            disabled={isSubmitting}
                                             error={
                                                 field.state.meta.isTouched
                                                     ? firstFieldErrorMessage(
@@ -976,7 +938,7 @@ export function WorkItemResponsibilityDialog({
                                     id={`${resolvedPrefix}-cancel${idSuffix}`}
                                     type="button"
                                     variant="outline"
-                                    disabled={batchMutation.isPending}
+                                    disabled={isSubmitting}
                                 />
                             }
                         >
@@ -997,7 +959,7 @@ export function WorkItemResponsibilityDialog({
                                 variant={
                                     mode === "close" ? "destructive" : "default"
                                 }
-                                loading={batchMutation.isPending}
+                                loading={isSubmitting}
                                 disabled={submitDisabled}
                             />
                         </form.AppForm>
