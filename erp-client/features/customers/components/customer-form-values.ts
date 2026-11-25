@@ -64,19 +64,8 @@ export type CustomerFormApi = AppFieldExtendedReactFormApi<
     any,
     any,
     any,
-    {
-        TextField: typeof import("@/components/form").TextField
-        TextareaField: typeof import("@/components/form").TextareaField
-        SelectField: typeof import("@/components/form").SelectField
-        MultiSelectField: typeof import("@/components/form").MultiSelectField
-        PdfUploadField: typeof import("@/components/form").PdfUploadField
-        EvidenceUploadField: typeof import("@/components/form").EvidenceUploadField
-        DateField: typeof import("@/components/form").DateField
-        DateTimeField: typeof import("@/components/form").DateTimeField
-    },
-    {
-        SubmitButton: typeof import("@/components/form").SubmitButton
-    }
+    import("@/components/form").AppFieldComponents,
+    import("@/components/form").AppFormComponents
 >
 
 export { newIdempotencyKey } from "@/lib/idempotency-key"

@@ -57,6 +57,7 @@ function FileUpload({
     previewActions = "default",
     showPreviewStatus = true,
     idPrefix,
+    name,
     inputId,
     selectId,
     selectLabel,
@@ -94,6 +95,8 @@ function FileUpload({
     /** 是否显示预览状态文案（已上传、已保存等）。 */
     showPreviewStatus?: boolean
     idPrefix?: string
+    /** 透传给可见上传/更换按钮，支持服务端字段错误自动聚焦。 */
+    name?: string
     /** 迁移旧入口时保留原生 input 和触发按钮的自动化 ID。 */
     inputId?: string
     selectId?: string
@@ -235,6 +238,7 @@ function FileUpload({
                         selectId ??
                         (idPrefix ? `${idPrefix}-select` : undefined)
                     }
+                    name={name}
                     type="button"
                     variant="secondary"
                     size={previewActions === "overlay" ? "icon-xs" : "icon-sm"}
@@ -505,6 +509,7 @@ function FileUpload({
                                 selectId ??
                                 (idPrefix ? `${idPrefix}-select` : undefined)
                             }
+                            name={name}
                             type="button"
                             variant={
                                 effectiveDensity === "hero"

@@ -1,30 +1,33 @@
 "use client"
 
+import type { ComponentProps, FocusEventHandler, ReactNode } from "react"
+
+import { hasFieldDescription, useFieldA11y } from "@/components/form/field-a11y"
 import { FieldFrame } from "@/components/form/field-frame"
-import { useFieldA11y } from "@/components/form/field-a11y"
 import { FieldDescription } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
+import { Input, type InputSize } from "@/components/ui/input"
 import { describeMoney } from "@/lib/money-display"
 import { cn } from "@/lib/utils"
 
-type TextFieldProps = {
+export type TextFieldProps = {
     label: string
     hideLabel?: boolean
-    description?: string
+    description?: ReactNode
     placeholder?: string
-    type?: React.ComponentProps<"input">["type"]
+    type?: ComponentProps<"input">["type"]
+    size?: InputSize
     disabled?: boolean
     required?: boolean
     className?: string
     inputClassName?: string
     autoComplete?: string
-    inputMode?: React.ComponentProps<"input">["inputMode"]
-    min?: React.ComponentProps<"input">["min"]
-    max?: React.ComponentProps<"input">["max"]
-    step?: React.ComponentProps<"input">["step"]
+    inputMode?: ComponentProps<"input">["inputMode"]
+    min?: ComponentProps<"input">["min"]
+    max?: ComponentProps<"input">["max"]
+    step?: ComponentProps<"input">["step"]
     testId?: string
     id?: string
-    onBlur?: React.FocusEventHandler<HTMLInputElement>
+    onBlur?: FocusEventHandler<HTMLInputElement>
     "aria-describedby"?: string
     /** 金额仍以元录入；显示保留全部精度的中文辅助读数。 */
     money?: boolean
@@ -40,6 +43,7 @@ export function TextField({
     description,
     placeholder,
     type = "text",
+    size,
     disabled,
     required,
     className,
@@ -62,7 +66,7 @@ export function TextField({
     const moneyHint = money ? describeMoney(field.state.value)?.readout : null
     const describedBy = [
         ariaDescribedBy,
-        description ? descriptionId : undefined,
+        hasFieldDescription(description) ? descriptionId : undefined,
         isInvalid ? errorId : undefined,
         moneyHint ? moneyHintId : undefined,
     ]
@@ -94,6 +98,7 @@ export function TextField({
                 id={resolvedId}
                 name={field.name}
                 type={type}
+                size={size}
                 value={field.state.value ?? ""}
                 placeholder={placeholder}
                 disabled={disabled}

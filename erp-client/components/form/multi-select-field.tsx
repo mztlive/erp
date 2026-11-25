@@ -1,26 +1,31 @@
 "use client"
 
-import type { ComboboxRefreshProps } from "@/components/business/combobox-refresh"
+import type { ComponentProps, ReactNode } from "react"
 
-import { MultiOptionCombobox } from "@/components/business"
-import { FieldFrame } from "@/components/form/field-frame"
 import { useFieldA11y } from "@/components/form/field-a11y"
+import { FieldFrame } from "@/components/form/field-frame"
 import type { SelectFieldOption } from "@/components/form/select-field"
+import type { ComboboxRefreshProps } from "@/components/ui/combobox-refresh"
+import { MultiOptionCombobox } from "@/components/ui/multi-option-combobox"
 import { cn } from "@/lib/utils"
 
-type MultiSelectFieldProps = ComboboxRefreshProps & {
+export type MultiSelectFieldProps = ComboboxRefreshProps & {
     label: string
+    hideLabel?: boolean
     options: readonly SelectFieldOption[]
     placeholder?: string
     emptyLabel?: string
-    description?: string
+    description?: ReactNode
     loading?: boolean
     disabled?: boolean
     required?: boolean
+    size?: ComponentProps<typeof MultiOptionCombobox>["size"]
     className?: string
+    inputClassName?: string
     id?: string
     /** 标签只显示短名称；选项列表仍保留完整描述。 */
     getChipLabel?: (option: SelectFieldOption) => string
+    onValueChange?: (value: string[]) => void
 }
 
 /**
@@ -29,6 +34,7 @@ type MultiSelectFieldProps = ComboboxRefreshProps & {
  */
 export function MultiSelectField({
     label,
+    hideLabel = false,
     options,
     placeholder,
     emptyLabel,
@@ -37,9 +43,12 @@ export function MultiSelectField({
     disabled,
     onRefresh,
     required,
+    size,
     className,
+    inputClassName,
     id,
     getChipLabel,
+    onValueChange,
 }: MultiSelectFieldProps) {
     const {
         field,
@@ -55,6 +64,7 @@ export function MultiSelectField({
         <FieldFrame
             className={cn(className)}
             label={label}
+            labelClassName={hideLabel ? "sr-only" : undefined}
             htmlFor={resolvedId}
             required={required}
             description={description}
@@ -66,6 +76,9 @@ export function MultiSelectField({
         >
             <MultiOptionCombobox
                 id={resolvedId}
+                name={field.name}
+                size={size}
+                inputClassName={cn("w-full", inputClassName)}
                 options={options}
                 value={field.state.value ?? []}
                 loading={loading}
@@ -79,7 +92,10 @@ export function MultiSelectField({
                 aria-describedby={describedBy || undefined}
                 onBlur={field.handleBlur}
                 getChipLabel={getChipLabel}
-                onValueChange={(next) => field.handleChange(next)}
+                onValueChange={(next) => {
+                    field.handleChange(next)
+                    onValueChange?.(next)
+                }}
             />
         </FieldFrame>
     )

@@ -1,17 +1,17 @@
 "use client"
 
+import type { ComponentProps, ReactNode } from "react"
 import type { Matcher } from "react-day-picker"
-import type { ComponentProps } from "react"
 
-import { FieldFrame } from "@/components/form/field-frame"
 import { useFieldA11y } from "@/components/form/field-a11y"
+import { FieldFrame } from "@/components/form/field-frame"
 import { DatePicker, DateTimeLocalPicker } from "@/components/ui/date-picker"
 import { cn } from "@/lib/utils"
 
-type DateFieldProps = {
+export type DateFieldProps = {
     label: string
     hideLabel?: boolean
-    description?: string
+    description?: ReactNode
     placeholder?: string
     disabled?: boolean
     required?: boolean
@@ -69,6 +69,7 @@ export function DateField({
         >
             <DatePicker
                 id={resolvedId}
+                name={field.name}
                 size={size}
                 value={field.state.value || undefined}
                 onValueChange={(next) => {
@@ -88,10 +89,10 @@ export function DateField({
     )
 }
 
-type DateTimeFieldProps = {
+export type DateTimeFieldProps = {
     label: string
     hideLabel?: boolean
-    description?: string
+    description?: ReactNode
     placeholder?: string
     disabled?: boolean
     required?: boolean
@@ -151,6 +152,7 @@ export function DateTimeField({
         >
             <DateTimeLocalPicker
                 id={resolvedId}
+                name={field.name}
                 size={size}
                 value={field.state.value || undefined}
                 onValueChange={(next) => {

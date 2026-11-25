@@ -113,6 +113,7 @@ const DATE_PICKER_CLEAR_SIZE = {
 
 function DatePicker({
     id,
+    name,
     value,
     onValueChange,
     placeholder = "选择日期",
@@ -127,6 +128,7 @@ function DatePicker({
     "aria-describedby": ariaDescribedby,
 }: {
     id?: string
+    name?: string
     value?: string
     onValueChange?: (value?: string) => void
     placeholder?: string
@@ -157,6 +159,7 @@ function DatePicker({
                     render={
                         <Button
                             id={id}
+                            name={name}
                             type="button"
                             variant="control"
                             size={size}
@@ -253,12 +256,14 @@ function DatePicker({
 
 function DateRangePicker({
     id,
+    name,
     value,
     onValueChange,
     placeholder = "选择日期范围",
     filterLabel,
     disabled,
     disabledDates,
+    clearable = true,
     className,
     size = "default",
     fieldLabel,
@@ -266,12 +271,14 @@ function DateRangePicker({
     "aria-describedby": ariaDescribedby,
 }: {
     id?: string
+    name?: string
     value?: DateRangeValue
     onValueChange?: (value?: DateRangeValue) => void
     placeholder?: string
     filterLabel?: string
     disabled?: boolean
     disabledDates?: Matcher | Matcher[]
+    clearable?: boolean
     className?: string
     size?: DatePickerSize
     /** 使用外部筛选标签，并将日历图标对齐到右侧。 */
@@ -305,6 +312,7 @@ function DateRangePicker({
                     render={
                         <Button
                             id={id}
+                            name={name}
                             type="button"
                             variant="control"
                             size={size}
@@ -350,7 +358,7 @@ function DateRangePicker({
                         />
                     )}
                 </PopoverTrigger>
-                {hasValue ? (
+                {clearable && hasValue ? (
                     <Button
                         id={id ? `${id}-clear` : undefined}
                         type="button"
@@ -391,6 +399,7 @@ function DateRangePicker({
 
 function DateTimePicker({
     id,
+    name,
     value,
     onValueChange,
     timeZone = "Asia/Shanghai",
@@ -405,6 +414,7 @@ function DateTimePicker({
     "aria-describedby": ariaDescribedby,
 }: {
     id?: string
+    name?: string
     value?: ZonedDateTimeValue
     onValueChange?: (value?: ZonedDateTimeValue) => void
     timeZone?: string
@@ -447,6 +457,7 @@ function DateTimePicker({
                     render={
                         <Button
                             id={id}
+                            name={name}
                             type="button"
                             variant="control"
                             size={size}
@@ -544,6 +555,7 @@ function DateTimePicker({
  */
 function DateTimeLocalPicker({
     id,
+    name,
     value,
     onValueChange,
     timeZone = "Asia/Shanghai",
@@ -558,6 +570,7 @@ function DateTimeLocalPicker({
     "aria-describedby": ariaDescribedby,
 }: {
     id?: string
+    name?: string
     value?: string
     onValueChange?: (value?: string) => void
     timeZone?: string
@@ -574,6 +587,7 @@ function DateTimeLocalPicker({
     return (
         <DateTimePicker
             id={id}
+            name={name}
             value={parseDatetimeLocalValue(value, timeZone)}
             onValueChange={(next) =>
                 onValueChange?.(
@@ -637,6 +651,7 @@ function formatZonedRangeLabel(
  */
 function DateTimeRangePicker({
     id,
+    name,
     value,
     onValueChange,
     timeZone = "Asia/Shanghai",
@@ -651,6 +666,7 @@ function DateTimeRangePicker({
     "aria-describedby": ariaDescribedby,
 }: {
     id?: string
+    name?: string
     value?: { from?: ZonedDateTimeValue; to?: ZonedDateTimeValue }
     onValueChange?: (value?: {
         from?: ZonedDateTimeValue
@@ -698,6 +714,7 @@ function DateTimeRangePicker({
                     render={
                         <Button
                             id={id}
+                            name={name}
                             type="button"
                             variant="control"
                             size={size}
@@ -846,6 +863,7 @@ function DateTimeRangePicker({
  */
 function DateTimeRangeLocalPicker({
     id,
+    name,
     value,
     onValueChange,
     timeZone = "Asia/Shanghai",
@@ -860,6 +878,7 @@ function DateTimeRangeLocalPicker({
     "aria-describedby": ariaDescribedby,
 }: {
     id?: string
+    name?: string
     value?: DateTimeRangeValue
     onValueChange?: (value?: DateTimeRangeValue) => void
     timeZone?: string
@@ -876,6 +895,7 @@ function DateTimeRangeLocalPicker({
     return (
         <DateTimeRangePicker
             id={id}
+            name={name}
             value={{
                 from: parseDatetimeLocalValue(value?.from, timeZone),
                 to: parseDatetimeLocalValue(value?.to, timeZone),

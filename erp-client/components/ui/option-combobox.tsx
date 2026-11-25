@@ -1,0 +1,251 @@
+"use client"
+
+import * as React from "react"
+
+import { Button } from "@/components/ui/button"
+import {
+    Combobox,
+    ComboboxContent,
+    ComboboxEmpty,
+    ComboboxInput,
+    ComboboxItem,
+    ComboboxList,
+} from "@/components/ui/combobox"
+import {
+    MISSING_SELECTION_CHECKING_LABEL,
+    MISSING_SELECTION_UNAVAILABLE_LABEL,
+    remoteSearchFromInputChange,
+    useStickySelected,
+} from "@/components/ui/combobox-input-search"
+import {
+    ComboboxRefresh,
+    type ComboboxRefreshProps,
+} from "@/components/ui/combobox-refresh"
+import { InputGroupAddon } from "@/components/ui/input-group"
+import { toAutomationIdSegment } from "@/lib/automation-id"
+import { cn } from "@/lib/utils"
+
+/** 通用可搜索选项；用于枚举、筛选与轻量业务列表。 */
+export type ComboboxOption = Readonly<{
+    value: string
+    label: string
+    disabled?: boolean
+    /** 额外参与搜索的文本（编号、别名等） */
+    keywords?: string
+}>
+
+export type OptionComboboxProps = ComboboxRefreshProps & {
+    options: readonly ComboboxOption[]
+    value?: string | null
+    onValueChange: (value: string | null) => void
+    placeholder?: string
+    /** 查询栏常驻名称，与选中值分开显示，不随选择或输入消失。 */
+    filterLabel?: string
+    emptyLabel?: string
+    searchPlaceholder?: string
+    /** 服务端已完成搜索时关闭本地二次过滤。 */
+    filterMode?: "local" | "remote"
+    /**
+     * 当前列表没有已选项时是否沿用上次名称。
+     * 默认与本地过滤一致；授权目录传 false，避免撤权后仍显示旧名称。
+     */
+    retainMissingSelection?: boolean
+    /** 输入变化通知；远程模式下用于触发查询。 */
+    onSearchChange?: (query: string) => void
+    disabled?: boolean
+    loading?: boolean
+    onLoadMore?: () => void
+    /** 是否显示清除按钮；默认 true */
+    allowClear?: boolean
+    required?: boolean
+    id?: string
+    /** 透传给可见输入框，支持服务端字段错误自动聚焦。 */
+    name?: string
+    /** 保留既有自动化选项 ID；未传入时由输入框 ID 派生。 */
+    getOptionId?: (value: string) => string
+    "aria-label"?: string
+    "aria-invalid"?: boolean
+    "aria-describedby"?: string
+    className?: string
+    /** 输入框外层 InputGroup 的 className（宽度等） */
+    inputClassName?: string
+    size?: "sm" | "default"
+    /** 嵌入外层 InputGroup，由外层统一提供边框和焦点反馈。 */
+    inInputGroup?: boolean
+    onBlur?: () => void
+}
+
+type InternalOption = ComboboxOption & { __search: string }
+
+function toInternal(options: readonly ComboboxOption[]): InternalOption[] {
+    return options.map((option) => ({
+        ...option,
+        __search: [option.label, option.value, option.keywords]
+            .filter(Boolean)
+            .join(" "),
+    }))
+}
+
+/**
+ * 基于 `components/ui/combobox` 的可搜索单选。
+ * 用于替代 Select / NativeSelect：筛选条、表单枚举等。
+ */
+export function OptionCombobox({
+    options,
+    value,
+    onValueChange,
+    placeholder = "请选择",
+    filterLabel,
+    searchPlaceholder,
+    emptyLabel = "没有符合条件的选项",
+    disabled = false,
+    loading = false,
+    onLoadMore,
+    onRefresh,
+    filterMode = "local",
+    retainMissingSelection,
+    onSearchChange,
+    allowClear = true,
+    required = false,
+    id,
+    name,
+    getOptionId,
+    "aria-label": ariaLabel,
+    "aria-invalid": ariaInvalid,
+    "aria-describedby": ariaDescribedBy,
+    className,
+    inputClassName,
+    size = "default",
+    inInputGroup = false,
+    onBlur,
+}: OptionComboboxProps) {
+    const items = React.useMemo(() => toInternal(options), [options])
+    const resolved = useStickySelected(
+        items,
+        value ?? undefined,
+        (item) => item.value,
+        retainMissingSelection ?? filterMode !== "remote",
+    )
+    const selected: InternalOption | null =
+        resolved ??
+        (value
+            ? {
+                  value,
+                  label: loading
+                      ? MISSING_SELECTION_CHECKING_LABEL
+                      : MISSING_SELECTION_UNAVAILABLE_LABEL,
+                  __search: "",
+              }
+            : null)
+
+    return (
+        <Combobox
+            items={items}
+            value={selected}
+            onValueChange={(next) => {
+                onValueChange(next?.value ?? null)
+            }}
+            onInputValueChange={(query, details) => {
+                const nextQuery = remoteSearchFromInputChange(
+                    query,
+                    details.reason,
+                )
+                if (nextQuery !== undefined) onSearchChange?.(nextQuery)
+            }}
+            itemToStringLabel={(item) => item.label}
+            itemToStringValue={(item) => item.value}
+            isItemEqualToValue={(item, current) => item.value === current.value}
+            filter={(item, query) => {
+                if (filterMode === "remote") return true
+                const q = query.trim().toLowerCase()
+                if (!q) return true
+                return item.__search.toLowerCase().includes(q)
+            }}
+            disabled={disabled}
+            required={required}
+        >
+            <div
+                data-slot="option-combobox"
+                data-size={size}
+                data-has-value={selected ? "true" : undefined}
+                className={cn("min-w-0", className)}
+            >
+                <ComboboxInput
+                    id={id}
+                    name={name}
+                    triggerId={id ? `${id}-trigger` : undefined}
+                    clearId={id ? `${id}-clear` : undefined}
+                    aria-label={ariaLabel}
+                    aria-invalid={ariaInvalid || undefined}
+                    aria-describedby={ariaDescribedBy}
+                    aria-busy={loading || undefined}
+                    placeholder={searchPlaceholder ?? placeholder}
+                    showClear={allowClear && !disabled}
+                    disabled={disabled}
+                    onBlur={onBlur}
+                    className={cn(
+                        "w-full",
+                        size === "sm" &&
+                            "h-control-sm min-h-control-sm *:data-[slot=input-group-control]:h-control-sm *:data-[slot=input-group-control]:text-xs",
+                        inInputGroup &&
+                            "rounded-none border-0 bg-transparent shadow-none hover:bg-transparent has-[[data-slot=input-group-control]:focus-visible]:bg-transparent has-[[data-slot=input-group-control]:focus-visible]:ring-0 has-[[data-slot][aria-invalid=true]]:bg-transparent has-[[data-slot][aria-invalid=true]]:ring-0",
+                        inputClassName,
+                    )}
+                >
+                    {filterLabel && (
+                        <InputGroupAddon
+                            data-filter-label=""
+                            className="shrink-0 whitespace-nowrap pr-0 font-normal text-muted-foreground/80"
+                        >
+                            {filterLabel}：
+                        </InputGroupAddon>
+                    )}
+                </ComboboxInput>
+                <ComboboxContent>
+                    <ComboboxEmpty>
+                        {loading ? "正在加载…" : emptyLabel}
+                    </ComboboxEmpty>
+                    <ComboboxList>
+                        {(item: InternalOption) => (
+                            <ComboboxItem
+                                key={item.value}
+                                id={
+                                    getOptionId?.(item.value) ??
+                                    (id
+                                        ? `${id}-option-${toAutomationIdSegment(item.value)}`
+                                        : undefined)
+                                }
+                                value={item}
+                                disabled={item.disabled}
+                                className="w-max min-w-full"
+                            >
+                                <span className="shrink-0 whitespace-nowrap">
+                                    {item.label}
+                                </span>
+                            </ComboboxItem>
+                        )}
+                    </ComboboxList>
+                    {onLoadMore ? (
+                        <Button
+                            id={id ? `${id}-more` : undefined}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="w-full"
+                            disabled={loading}
+                            onClick={onLoadMore}
+                        >
+                            加载更多
+                        </Button>
+                    ) : null}
+                    <ComboboxRefresh
+                        id={id}
+                        onRefresh={onRefresh}
+                        loading={loading}
+                        disabled={disabled}
+                    />
+                </ComboboxContent>
+            </div>
+        </Combobox>
+    )
+}

@@ -1,27 +1,17 @@
 "use client"
 
-import { FieldFrame } from "@/components/form/field-frame"
-import { useFieldA11y } from "@/components/form/field-a11y"
-import { FileUpload } from "@/components/ui/file-upload"
+import type { ReactNode } from "react"
 
-/** 绑定 TanStack Form 的单文件上传字段；业务侧只提供文件类型与文案。 */
-export function SingleFileField({
-    label,
-    hideLabel = false,
-    description,
-    density = "default",
-    disabled,
-    required,
-    id,
-    accept,
-    maxFileSize,
-    uploadLabel,
-    uploadDescription,
-    selectedDescription,
-}: {
+import { useFieldA11y } from "@/components/form/field-a11y"
+import { FieldFrame } from "@/components/form/field-frame"
+import { FileUpload } from "@/components/ui/file-upload"
+import { cn } from "@/lib/utils"
+
+export type SingleFileFieldProps = {
     label: string
     hideLabel?: boolean
-    description?: string
+    description?: ReactNode
+    className?: string
     density?: "default" | "compact"
     disabled?: boolean
     required?: boolean
@@ -31,7 +21,24 @@ export function SingleFileField({
     uploadLabel: string
     uploadDescription: string
     selectedDescription?: string
-}) {
+}
+
+/** 绑定 TanStack Form 的单文件上传字段；业务侧只提供文件类型与文案。 */
+export function SingleFileField({
+    label,
+    hideLabel = false,
+    description,
+    className,
+    density = "default",
+    disabled,
+    required,
+    id,
+    accept,
+    maxFileSize,
+    uploadLabel,
+    uploadDescription,
+    selectedDescription,
+}: SingleFileFieldProps) {
     const {
         field,
         isInvalid,
@@ -45,6 +52,7 @@ export function SingleFileField({
 
     return (
         <FieldFrame
+            className={cn(className)}
             label={label}
             labelClassName={hideLabel ? "sr-only" : undefined}
             htmlFor={`${resolvedId}-input`}
@@ -60,6 +68,7 @@ export function SingleFileField({
                 selectedDescription={selectedDescription}
                 density={density}
                 idPrefix={resolvedId}
+                name={field.name}
                 accept={accept}
                 multiple={false}
                 maxFileSize={maxFileSize}

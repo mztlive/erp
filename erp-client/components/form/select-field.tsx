@@ -1,10 +1,11 @@
 "use client"
 
-import type { ComboboxRefreshProps } from "@/components/business/combobox-refresh"
+import type { ComponentProps, ReactNode } from "react"
 
-import { OptionCombobox } from "@/components/business/option-combobox"
-import { FieldFrame } from "@/components/form/field-frame"
 import { useFieldA11y } from "@/components/form/field-a11y"
+import { FieldFrame } from "@/components/form/field-frame"
+import type { ComboboxRefreshProps } from "@/components/ui/combobox-refresh"
+import { OptionCombobox } from "@/components/ui/option-combobox"
 import { cn } from "@/lib/utils"
 
 export type SelectFieldOption = Readonly<{
@@ -14,12 +15,12 @@ export type SelectFieldOption = Readonly<{
     keywords?: string
 }>
 
-type SelectFieldProps = ComboboxRefreshProps & {
+export type SelectFieldProps = ComboboxRefreshProps & {
     label: string
     options: readonly SelectFieldOption[]
     placeholder?: string
     emptyLabel?: string
-    description?: string
+    description?: ReactNode
     disabled?: boolean
     loading?: boolean
     required?: boolean
@@ -29,7 +30,7 @@ type SelectFieldProps = ComboboxRefreshProps & {
     /** 输入框宽度等；历史 prop 名 selectClassName 仍可用 */
     selectClassName?: string
     inputClassName?: string
-    size?: React.ComponentProps<typeof OptionCombobox>["size"]
+    size?: ComponentProps<typeof OptionCombobox>["size"]
     allowClear?: boolean
     onValueChange?: (value: string) => void
     id?: string
@@ -87,6 +88,7 @@ export function SelectField({
                 inInputGroup={inInputGroup}
                 size={size}
                 id={resolvedId}
+                name={field.name}
                 options={options}
                 value={field.state.value || null}
                 disabled={disabled}
