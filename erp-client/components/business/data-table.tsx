@@ -439,7 +439,7 @@ function DataTable<TData>({
                 className={cn(
                     "overflow-hidden rounded-lg border border-border/90 bg-card [container-type:inline-size]",
                     scrollable &&
-                        "min-h-0 flex-1 [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-auto [&>[data-slot=table-container]>table>thead]:sticky [&>[data-slot=table-container]>table>thead]:top-0 [&>[data-slot=table-container]>table>thead]:z-40",
+                        "min-h-0 flex-1 [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-auto [&>[data-slot=table-container]>table>thead]:sticky [&>[data-slot=table-container]>table>thead]:top-0 [&>[data-slot=table-container]>table>thead]:z-20",
                 )}
             >
                 {loading && data.length > 0 && showRefreshingBanner ? (

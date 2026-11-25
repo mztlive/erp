@@ -18,7 +18,7 @@ import {
     type LucideIcon,
 } from "lucide-react"
 
-import { Alert } from "@/components/ui/alert"
+import type { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
@@ -32,7 +32,7 @@ import {
 import { Kbd } from "@/components/ui/kbd"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
-import type { StatusTone } from "@/components/ui/status-badge"
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import {
     Tooltip,
     TooltipContent,
@@ -40,7 +40,7 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { fieldErrorMessages } from "@/lib/api/field-errors"
-import { getErrorPresentation } from "@/lib/api/errors"
+import { getErrorPresentation, isApiError } from "@/lib/api/errors"
 import { readProblemCopy, type ReadProblemContext } from "@/lib/system-feedback"
 import { freshnessText, versionText, workspaceLabel } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
@@ -247,6 +247,33 @@ type FailureStatePreset = {
     label: string
 }
 
+const failureSurfaceClasses: Record<
+    NonNullable<AlertVariant>,
+    { container: string; icon: string }
+> = {
+    default: {
+        container: "border-border bg-card text-foreground",
+        icon: "text-muted-foreground",
+    },
+    destructive: {
+        container:
+            "border-destructive-border bg-destructive-soft/75 text-foreground",
+        icon: "text-destructive-soft-foreground",
+    },
+    warning: {
+        container: "border-warning-border bg-warning-soft/75 text-foreground",
+        icon: "text-warning-soft-foreground",
+    },
+    info: {
+        container: "border-info-border bg-info-soft/75 text-foreground",
+        icon: "text-info-soft-foreground",
+    },
+    success: {
+        container: "border-success-border bg-success-soft/75 text-foreground",
+        icon: "text-success-soft-foreground",
+    },
+}
+
 const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
     validation: {
         title: "填写内容有误",
@@ -324,6 +351,8 @@ type BusinessFailureStateProps = {
     errorCode?: string
     nextResponsible?: string
     details?: React.ReactNode
+    /** 技术详情默认折叠；需要直接平铺展示时可显式传入 false。 */
+    collapsibleDetails?: boolean
     action?: React.ReactNode
     /** 快捷重试回调；渲染「重试」按钮（与 action 二选一，action 优先）。 */
     onRetry?: () => void
@@ -342,6 +371,7 @@ function BusinessFailureState({
     errorCode,
     nextResponsible,
     details,
+    collapsibleDetails = true,
     action,
     onRetry,
     retryLabel = "重试",
@@ -357,8 +387,39 @@ function BusinessFailureState({
             : undefined
     const resolvedKind = presentation?.kind ?? kind ?? "system"
     const preset = failureStatePresets[resolvedKind]
+    const PresetIcon = preset.icon
+    const surface = failureSurfaceClasses[preset.variant ?? "default"]
     const resolvedErrorCode = errorCode ?? presentation?.code
-    const TechnicalContainer = idPrefix || id ? "details" : "div"
+    const technicalId = idPrefix
+        ? `${idPrefix}-technical`
+        : id
+          ? `${id}-technical`
+          : undefined
+    const hasTechnicalDetails = Boolean(
+        resolvedErrorCode || presentation?.requestId || nextResponsible,
+    )
+    const technicalDetailsList = hasTechnicalDetails ? (
+        <dl className="mt-2 grid gap-1 text-xs">
+            {resolvedErrorCode ? (
+                <div className="flex flex-wrap gap-1">
+                    <dt className="font-medium">错误编号：</dt>
+                    <dd className="num font-mono">{resolvedErrorCode}</dd>
+                </div>
+            ) : null}
+            {presentation?.requestId ? (
+                <div className="flex flex-wrap gap-1">
+                    <dt className="font-medium">请求编号：</dt>
+                    <dd className="num font-mono">{presentation.requestId}</dd>
+                </div>
+            ) : null}
+            {nextResponsible ? (
+                <div className="flex flex-wrap gap-1">
+                    <dt className="font-medium">下一责任人：</dt>
+                    <dd>{nextResponsible}</dd>
+                </div>
+            ) : null}
+        </dl>
+    ) : null
 
     const retryId = idPrefix
         ? `${idPrefix}-retry`
@@ -381,21 +442,28 @@ function BusinessFailureState({
 
     return (
         <section
-            role="status"
+            role={preset.variant === "destructive" ? "alert" : "status"}
             data-slot="business-failure-state"
             data-kind={resolvedKind}
+            data-variant={preset.variant}
             className={cn(
-                "space-y-2 rounded-lg border border-border p-4 text-body-compact",
+                "space-y-2 rounded-lg border p-4 text-body-compact",
+                surface.container,
                 className,
             )}
         >
-            <div className="font-medium">
+            <div className="flex flex-wrap items-center gap-2 font-medium">
+                <PresetIcon
+                    className={cn("size-4 shrink-0", surface.icon)}
+                    aria-hidden="true"
+                />
                 <span>
                     {title ??
                         readCopy?.title ??
                         presentation?.title ??
                         preset.title}
                 </span>
+                <StatusBadge tone={preset.tone} label={preset.label} />
             </div>
             <div className="text-muted-foreground">
                 <div className="flex flex-col gap-3">
@@ -407,57 +475,25 @@ function BusinessFailureState({
                             description ??
                             preset.description}
                     </p>
-                    {resolvedErrorCode ||
-                    presentation?.requestId ||
-                    nextResponsible ? (
-                        <TechnicalContainer>
-                            {idPrefix || id ? (
+                    {technicalDetailsList ? (
+                        collapsibleDetails ? (
+                            <details>
                                 <summary
-                                    id={
-                                        idPrefix
-                                            ? `${idPrefix}-technical`
-                                            : id
-                                              ? `${id}-technical`
-                                              : undefined
-                                    }
-                                    className="cursor-pointer text-xs"
+                                    id={technicalId}
+                                    className="cursor-pointer text-xs text-muted-foreground hover:text-foreground"
                                 >
                                     技术详情
                                 </summary>
-                            ) : (
-                                <p className="text-xs">技术详情</p>
-                            )}
-                            <dl className="mt-2 grid gap-1 text-xs">
-                                {resolvedErrorCode ? (
-                                    <div className="flex flex-wrap gap-1">
-                                        <dt className="font-medium">
-                                            错误编号：
-                                        </dt>
-                                        <dd className="num font-mono">
-                                            {resolvedErrorCode}
-                                        </dd>
-                                    </div>
-                                ) : null}
-                                {presentation?.requestId ? (
-                                    <div className="flex flex-wrap gap-1">
-                                        <dt className="font-medium">
-                                            请求编号：
-                                        </dt>
-                                        <dd className="num font-mono">
-                                            {presentation.requestId}
-                                        </dd>
-                                    </div>
-                                ) : null}
-                                {nextResponsible ? (
-                                    <div className="flex flex-wrap gap-1">
-                                        <dt className="font-medium">
-                                            下一责任人：
-                                        </dt>
-                                        <dd>{nextResponsible}</dd>
-                                    </div>
-                                ) : null}
-                            </dl>
-                        </TechnicalContainer>
+                                {technicalDetailsList}
+                            </details>
+                        ) : (
+                            <div>
+                                <p className="text-xs font-medium text-muted-foreground">
+                                    技术详情
+                                </p>
+                                {technicalDetailsList}
+                            </div>
+                        )
                     ) : null}
                     {presentation?.fieldErrors ? (
                         <ul className="list-disc space-y-1 pl-5">
@@ -490,7 +526,7 @@ type AsyncSectionStateProps = {
     loadingLabel?: string
     refreshingLabel?: string
     loadingFallback?: React.ReactNode
-    error?: React.ReactNode
+    error?: unknown
     errorKind?: BusinessFailureKind
     retryAction?: React.ReactNode
     id?: string
@@ -527,6 +563,7 @@ function AsyncSectionState({
 }: AsyncSectionStateProps) {
     const hasChildren = React.Children.count(children) > 0
     const showActivity = status === "loading" || status === "refreshing"
+    const isStructuredError = error instanceof Error || isApiError(error)
 
     return (
         <section
@@ -556,7 +593,12 @@ function AsyncSectionState({
             {status === "error" ? (
                 <BusinessFailureState
                     kind={errorKind}
-                    description={error}
+                    error={isStructuredError ? error : undefined}
+                    description={
+                        isStructuredError
+                            ? undefined
+                            : (error as React.ReactNode)
+                    }
                     action={retryAction}
                     id={id}
                     idPrefix={idPrefix}

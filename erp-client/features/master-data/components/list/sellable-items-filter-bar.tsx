@@ -117,7 +117,6 @@ export function SellableItemsFilterBar({
     return (
         <ListWorkspaceFilterBar
             morePresentation="popover"
-            moreSize="wide"
             className="[&_[data-slot=list-toolbar-filters]]:min-w-0 [&_[data-slot=list-toolbar-filters]]:shrink [&_[data-slot=list-toolbar-filters]]:self-center"
             idPrefix={prefix}
             formAriaLabel={formAriaLabel}

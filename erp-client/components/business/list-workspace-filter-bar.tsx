@@ -264,8 +264,7 @@ export function ListWorkspaceFilterBar({
     morePanelId,
     morePanel,
     morePanelAriaLabel = "更多筛选条件",
-    morePresentation = "inline",
-    moreSize: _moreSize = "wide",
+    morePresentation = "popover",
     commonFilters,
     primaryFilters,
     resultStatus = null,
@@ -299,9 +298,8 @@ export function ListWorkspaceFilterBar({
     morePanelId?: string
     morePanel?: React.ReactNode
     morePanelAriaLabel?: string
-    /** 浮动筛选按页面启用，保留其余列表的既有展开形式。 */
-    morePresentation?: "inline" | "popover"
-    moreSize?: "compact" | "wide" | "medium"
+    /** 默认展开式通栏托盘（`"popover"` / `"tray"`）；旧版内联布局显式传 `"inline"`。 */
+    morePresentation?: "inline" | "popover" | "tray"
     commonFilters?: React.ReactNode
     /** 常用条件置于搜索之后、查询按钮之前；不影响默认的次行布局。 */
     primaryFilters?: React.ReactNode
@@ -376,26 +374,21 @@ export function ListWorkspaceFilterBar({
     const inlineStatusHost = useTableInlineFilterStatusHost()
     const appliedChipsHost = useTableAppliedChipsHost()
     const filterTrayHost = useTableFilterTrayHost()
-    const hasInlineChips =
-        morePresentation !== "popover" && visibleChips.length > 0
+    const isTrayPresentation = morePresentation !== "inline"
+    const hasInlineChips = !isTrayPresentation && visibleChips.length > 0
     const compactInlineStatus = Boolean(
         inlineStatusHost &&
-        (resultStatus != null ||
-            (morePresentation === "popover" && !idleHint)) &&
+        (resultStatus != null || (isTrayPresentation && !idleHint)) &&
         !hasInlineChips &&
         !statusActions,
     )
     const portalAppliedChips = Boolean(
-        morePresentation === "popover" &&
-        appliedChipsHost &&
-        visibleChips.length > 0,
+        isTrayPresentation && appliedChipsHost && visibleChips.length > 0,
     )
     const appliedChips = visibleChips.length ? (
         <>
             <span className="shrink-0 text-muted-foreground/80">
-                {morePresentation === "popover"
-                    ? listFilterText.selected
-                    : "已生效"}
+                {isTrayPresentation ? listFilterText.selected : "已生效"}
             </span>
             {visibleChips.map((chip) => (
                 <FilterChip
@@ -418,16 +411,14 @@ export function ListWorkspaceFilterBar({
                     className="h-6 px-1.5 text-xs font-normal text-muted-foreground hover:bg-transparent hover:text-primary"
                     onClick={onClearAll}
                 >
-                    {morePresentation === "popover"
-                        ? listFilterText.clear
-                        : "清除全部"}
+                    {isTrayPresentation ? listFilterText.clear : "清除全部"}
                 </Button>
             ) : null}
         </>
     ) : null
     const statusRow =
         resultStatus ||
-        (morePresentation !== "popover" && appliedChips) ||
+        (!isTrayPresentation && appliedChips) ||
         idleHint ||
         effectivePending ||
         statusActions ? (
@@ -449,7 +440,7 @@ export function ListWorkspaceFilterBar({
                         {resultStatus}
                     </span>
                 ) : null}
-                {morePresentation !== "popover" ? appliedChips : null}
+                {!isTrayPresentation ? appliedChips : null}
                 {idleHint || effectivePending || statusActions ? (
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:ml-auto">
                         {idleHint || effectivePending ? (
@@ -504,8 +495,7 @@ export function ListWorkspaceFilterBar({
             <ListToolbar
                 className={cn(
                     listWorkspaceFilterBarClassName,
-                    morePresentation === "popover" &&
-                        listWorkspacePopoverFiltersClassName,
+                    isTrayPresentation && listWorkspacePopoverFiltersClassName,
                     density === "compact" && "gap-2",
                     className,
                 )}
@@ -535,7 +525,7 @@ export function ListWorkspaceFilterBar({
                 actions={actions}
                 secondary={
                     commonFilters ||
-                    (morePresentation === "popover" &&
+                    (isTrayPresentation &&
                         visibleChips.length > 0 &&
                         !appliedChipsHost) ||
                     (showMore && !filterTrayHost) ||
@@ -553,7 +543,7 @@ export function ListWorkspaceFilterBar({
                                     {commonFilters}
                                 </div>
                             ) : null}
-                            {morePresentation === "popover" &&
+                            {isTrayPresentation &&
                             appliedChips &&
                             !appliedChipsHost ? (
                                 <div

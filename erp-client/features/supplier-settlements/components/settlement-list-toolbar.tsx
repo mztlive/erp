@@ -139,7 +139,6 @@ export function SettlementListToolbar({
         <ListWorkspaceFilterBar
             density="compact"
             morePresentation="popover"
-            moreSize="wide"
             idPrefix={prefix}
             formAriaLabel="结算单查询"
             onSubmit={applyFilters}

@@ -140,7 +140,7 @@ interface StatusTrackSummaryProps extends Omit<
 > {
     tracks: readonly StatusTrack[]
     variant?: StatusTrackSummaryVariant
-    appearance?: "badge" | "text"
+    appearance?: "badge" | "text" | "quiet"
 }
 
 /** 并列展示互不覆盖的状态轴，例如主状态、履约、回款和开票。 */
@@ -359,7 +359,7 @@ export function taxAmountToneClass(label: unknown): string {
         : ""
 }
 
-type MoneyValueSize = "inherit" | "section" | "summary" | "hero"
+type MoneyValueSize = "inherit" | "compact" | "section" | "summary" | "hero"
 type MoneyValueDisplay = "full" | "compact" | "exact"
 
 const moneyMagnitudeClasses: Record<MoneyMagnitude, string> = {
@@ -371,6 +371,7 @@ const moneyMagnitudeClasses: Record<MoneyMagnitude, string> = {
 
 const moneyValueSizeClassNames: Record<MoneyValueSize, string> = {
     inherit: "",
+    compact: "text-value-compact font-semibold tracking-tight",
     section: "text-value-section font-semibold tracking-tight",
     summary: "text-value-summary font-semibold tracking-tight",
     hero: "text-value-hero font-semibold tracking-tight",
@@ -450,7 +451,12 @@ function MoneyValue({
                         moneyValueSizeClassNames[size],
                         compactPrimary && "print:hidden",
                         compactPrimary &&
+                            !inheritColor &&
                             moneyMagnitudeClasses[amount.magnitude],
+                        compactPrimary &&
+                            inheritColor &&
+                            amount.magnitude === "yi" &&
+                            "font-semibold",
                         !compactPrimary && !inheritColor && "text-foreground",
                         isUnavailable && "text-muted-foreground",
                     )}
@@ -466,7 +472,7 @@ function MoneyValue({
                         data-slot="money-value-hint"
                         aria-hidden={!compactPrimary || undefined}
                         className={cn(
-                            "num whitespace-nowrap text-xs font-normal leading-5",
+                            "num whitespace-nowrap text-xs font-normal",
                             compactPrimary
                                 ? "text-muted-foreground print:text-inherit"
                                 : `${moneyMagnitudeClasses[amount.magnitude]} print:hidden`,
@@ -495,13 +501,32 @@ function MoneyValue({
     )
 }
 
+type ValueTone =
+    | "neutral"
+    | "muted"
+    | "info"
+    | "success"
+    | "warning"
+    | "destructive"
+
+const valueToneClassNames: Record<ValueTone, string> = {
+    neutral: "text-foreground",
+    muted: "text-muted-foreground",
+    info: "text-info-soft-foreground",
+    success: "text-success-soft-foreground",
+    warning: "text-warning-soft-foreground",
+    destructive: "text-destructive-soft-foreground",
+}
+
 interface QuantityValueProps extends Omit<
     React.ComponentProps<"span">,
     "children"
 > {
     value: string
     unit: React.ReactNode
-    tone?: "neutral" | "warning"
+    tone?: ValueTone
+    /** 继承父级语义色；默认按 tone 着色。 */
+    inheritColor?: boolean
 }
 
 /** 精确展示数量十进制字符串及其单位，不进行单位换算。 */
@@ -509,6 +534,7 @@ function QuantityValue({
     value,
     unit,
     tone = "neutral",
+    inheritColor = false,
     className,
     ...props
 }: QuantityValueProps) {
@@ -521,9 +547,7 @@ function QuantityValue({
             <span
                 className={cn(
                     "num",
-                    tone === "warning"
-                        ? "text-warning-soft-foreground"
-                        : "text-foreground",
+                    !inheritColor && valueToneClassNames[tone],
                 )}
             >
                 {formatDecimal(value)}
@@ -540,14 +564,28 @@ interface RateValueProps extends Omit<
     /** 已按百分点表达的十进制字符串；组件不会乘以 100。 */
     value: string
     precision: number
+    tone?: ValueTone
+    /** 继承父级语义色；默认按 tone 着色。 */
+    inheritColor?: boolean
 }
 
 /** 按指定精度展示百分点十进制字符串；不会把值转换为浮点数。 */
-function RateValue({ value, precision, className, ...props }: RateValueProps) {
+function RateValue({
+    value,
+    precision,
+    tone = "neutral",
+    inheritColor = false,
+    className,
+    ...props
+}: RateValueProps) {
     return (
         <span
             data-slot="rate-value"
-            className={cn("num whitespace-nowrap text-foreground", className)}
+            className={cn(
+                "num whitespace-nowrap",
+                !inheritColor && valueToneClassNames[tone],
+                className,
+            )}
             {...props}
         >
             {formatDecimal(value, precision)}%
@@ -658,4 +696,5 @@ export {
     type StatusTrackSummaryProps,
     type StatusTrackSummaryVariant,
     type TaxBasis,
+    type ValueTone,
 }

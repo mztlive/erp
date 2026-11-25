@@ -63,6 +63,7 @@ export function DateField({
             description={description}
             descriptionId={descriptionId}
             isInvalid={isInvalid}
+            disabled={disabled}
             errorId={errorId}
             errors={errors}
         >
@@ -100,6 +101,7 @@ type DateTimeFieldProps = {
     disabledDates?: Matcher | Matcher[]
     className?: string
     inputClassName?: string
+    size?: ComponentProps<typeof DateTimeLocalPicker>["size"]
     id?: string
 }
 
@@ -120,6 +122,7 @@ export function DateTimeField({
     disabledDates,
     className,
     inputClassName,
+    size,
     id,
 }: DateTimeFieldProps) {
     const {
@@ -142,11 +145,13 @@ export function DateTimeField({
             description={description}
             descriptionId={descriptionId}
             isInvalid={isInvalid}
+            disabled={disabled}
             errorId={errorId}
             errors={errors}
         >
             <DateTimeLocalPicker
                 id={resolvedId}
+                size={size}
                 value={field.state.value || undefined}
                 onValueChange={(next) => {
                     field.handleChange(next ?? "")

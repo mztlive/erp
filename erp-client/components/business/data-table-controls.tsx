@@ -334,7 +334,9 @@ function DataTablePagination<TData>({
     const { pageIndex, pageSize } = table.getState().pagination
     const pageCount = table.getPageCount()
     const rowCount = table.getRowCount()
-    const selectedCount = Object.keys(table.getState().rowSelection).length
+    const selectedCount = Object.values(table.getState().rowSelection).filter(
+        Boolean,
+    ).length
     const hasSelectionDock = useHasSelectionDock()
     const needsPager = pageCount > 1
 

@@ -137,6 +137,7 @@ function BusinessObjectCombobox({
         >
             <div
                 data-slot="business-object-combobox"
+                data-has-value={selected ? "true" : undefined}
                 className={cn("min-w-0", className)}
             >
                 <ComboboxInput
@@ -148,7 +149,7 @@ function BusinessObjectCombobox({
                     aria-describedby={ariaDescribedBy}
                     aria-busy={loading}
                     placeholder={placeholder}
-                    showClear={allowClear}
+                    showClear={allowClear && !disabled}
                     onBlur={onBlur}
                     disabled={disabled}
                     className={cn(
@@ -158,7 +159,10 @@ function BusinessObjectCombobox({
                     )}
                 >
                     {filterLabel ? (
-                        <InputGroupAddon className="shrink-0 whitespace-nowrap font-normal">
+                        <InputGroupAddon
+                            data-filter-label=""
+                            className="shrink-0 whitespace-nowrap pr-0 font-normal text-muted-foreground/80"
+                        >
                             {filterLabel}：
                         </InputGroupAddon>
                     ) : null}
@@ -190,17 +194,25 @@ function BusinessObjectCombobox({
                                             />
                                         ) : null}
                                     </div>
-                                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                        <span className="num">{item.code}</span>
-                                        {item.validUntil ? (
-                                            <span className="num">
-                                                有效至 {item.validUntil}
-                                            </span>
-                                        ) : null}
-                                        {item.description ? (
-                                            <span>{item.description}</span>
-                                        ) : null}
-                                    </div>
+                                    {item.code ||
+                                    item.validUntil ||
+                                    item.description ? (
+                                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                            {item.code ? (
+                                                <span className="num">
+                                                    {item.code}
+                                                </span>
+                                            ) : null}
+                                            {item.validUntil ? (
+                                                <span className="num">
+                                                    有效至 {item.validUntil}
+                                                </span>
+                                            ) : null}
+                                            {item.description ? (
+                                                <span>{item.description}</span>
+                                            ) : null}
+                                        </div>
+                                    ) : null}
                                 </div>
                             </ComboboxItem>
                         ))}

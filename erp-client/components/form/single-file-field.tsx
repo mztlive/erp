@@ -52,6 +52,7 @@ export function SingleFileField({
             description={description}
             descriptionId={descriptionId}
             isInvalid={isInvalid}
+            disabled={disabled}
             errorId={errorId}
             errors={errors}
         >

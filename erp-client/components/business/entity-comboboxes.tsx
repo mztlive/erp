@@ -224,12 +224,14 @@ export function SupplierCombobox({
             mapToOptions(
                 suppliers.map((s) => ({
                     id: s.supplierId,
-                    code: s.supplierCode ?? s.supplierId,
+                    code: s.supplierCode ?? "",
                     label: s.supplierName,
-                    status: {
-                        label: s.statusLabel ?? "可选",
-                        tone: s.statusTone ?? "neutral",
-                    },
+                    status: s.statusLabel
+                        ? {
+                              label: s.statusLabel,
+                              tone: s.statusTone ?? "neutral",
+                          }
+                        : undefined,
                     description: s.description,
                 })),
             ),
@@ -282,10 +284,12 @@ export function ProductCombobox({
                     id: p.productId,
                     code: p.sku,
                     label: p.name,
-                    status: {
-                        label: p.statusLabel ?? "可选",
-                        tone: p.statusTone ?? "neutral",
-                    },
+                    status: p.statusLabel
+                        ? {
+                              label: p.statusLabel,
+                              tone: p.statusTone ?? "neutral",
+                          }
+                        : undefined,
                     description: p.description,
                 })),
             ),
@@ -336,12 +340,14 @@ export function SettlementPartyCombobox({
             mapToOptions(
                 parties.map((p) => ({
                     id: p.partyId,
-                    code: p.partyCode ?? p.partyId,
+                    code: p.partyCode ?? "",
                     label: p.displayName,
-                    status: {
-                        label: p.statusLabel ?? "可选",
-                        tone: p.statusTone ?? "neutral",
-                    },
+                    status: p.statusLabel
+                        ? {
+                              label: p.statusLabel,
+                              tone: p.statusTone ?? "neutral",
+                          }
+                        : undefined,
                     description: p.description,
                 })),
             ),
@@ -388,12 +394,14 @@ export function WarehouseCombobox({
             mapToOptions(
                 warehouses.map((w) => ({
                     id: w.warehouseId,
-                    code: w.warehouseCode ?? w.warehouseId,
+                    code: w.warehouseCode ?? "",
                     label: w.warehouseName,
-                    status: {
-                        label: w.statusLabel ?? "可选",
-                        tone: w.statusTone ?? "neutral",
-                    },
+                    status: w.statusLabel
+                        ? {
+                              label: w.statusLabel,
+                              tone: w.statusTone ?? "neutral",
+                          }
+                        : undefined,
                     description: w.description,
                 })),
             ),
@@ -440,7 +448,7 @@ export function OwnerCombobox({
             mapToOptions(
                 owners.map((o) => ({
                     id: o.userId,
-                    code: o.userCode ?? o.userId,
+                    code: o.userCode ?? "",
                     label: o.displayName,
                     status: {
                         label: o.statusLabel ?? "在职",

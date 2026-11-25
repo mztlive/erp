@@ -1,6 +1,6 @@
 /** Shared Tailwind classes for business list workspaces (Feishu Bitable pure-white edge-to-edge surface + soft borderless toolbar). */
 export const listWorkspaceStyles = {
-    page: "erp-list-workspace-page max-w-none gap-0 bg-card px-workspace-inline py-0 md:px-page-inline md:py-0 min-[75rem]:px-page-inline-lg",
+    page: "erp-list-workspace-page max-w-none gap-0 bg-card px-workspace-inline py-0 md:px-page-inline md:py-0 @[70rem]/workspace:px-page-inline-lg",
     header: "flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border/60 bg-card py-2 md:min-h-12 md:py-0",
     eyebrow:
         "inline-flex shrink-0 items-center rounded-sm bg-muted/80 px-1.5 py-0.5 text-tiny leading-4 font-medium text-muted-foreground",

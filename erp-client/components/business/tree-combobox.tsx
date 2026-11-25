@@ -68,6 +68,9 @@ export type TreeComboboxProps = ComboboxRefreshProps & {
     loading?: boolean
     disabled?: boolean
     required?: boolean
+    allowClear?: boolean
+    size?: "sm" | "default"
+    onBlur?: () => void
     id?: string
     "aria-invalid"?: boolean
     "aria-describedby"?: string
@@ -268,6 +271,9 @@ export function TreeCombobox({
     onRefresh,
     disabled = false,
     required = false,
+    allowClear = true,
+    size = "default",
+    onBlur,
     id,
     "aria-invalid": ariaInvalid,
     "aria-describedby": ariaDescribedBy,
@@ -366,9 +372,15 @@ export function TreeCombobox({
             items={displayEntries.map(({ node }) => node)}
             value={selected}
             onValueChange={(next) => onValueChange(next?.id)}
-            onInputValueChange={(next) => {
-                setQuery(next)
-                onSearchChange?.(next)
+            onInputValueChange={(next, details) => {
+                const nextQuery = remoteSearchFromInputChange(
+                    next,
+                    details.reason,
+                )
+                if (nextQuery !== undefined) {
+                    setQuery(nextQuery)
+                    onSearchChange?.(nextQuery)
+                }
             }}
             itemToStringLabel={(item) => item.label}
             itemToStringValue={(item) => item.id}
@@ -380,6 +392,7 @@ export function TreeCombobox({
         >
             <div
                 data-slot="tree-combobox"
+                data-size={size}
                 data-has-value={selected ? "true" : undefined}
                 className={cn("min-w-0", className)}
             >
@@ -392,9 +405,14 @@ export function TreeCombobox({
                     aria-describedby={ariaDescribedBy}
                     aria-busy={loading}
                     placeholder={placeholder}
-                    showClear
+                    showClear={allowClear && !disabled}
                     disabled={disabled}
-                    className="w-full"
+                    onBlur={onBlur}
+                    className={cn(
+                        "w-full",
+                        size === "sm" &&
+                            "h-control-sm min-h-control-sm *:data-[slot=input-group-control]:h-control-sm *:data-[slot=input-group-control]:text-xs",
+                    )}
                 >
                     {filterLabel ? (
                         <InputGroupAddon
@@ -438,6 +456,8 @@ export type MultiTreeComboboxProps = ComboboxRefreshProps & {
     value: readonly string[]
     onValueChange: (ids: string[]) => void
     label: string
+    /** 查询栏常驻名称；传入时以单行紧凑触发器展示，避免标签撑高工具栏。 */
+    filterLabel?: string
     compact?: boolean
     placeholder?: string
     emptyLabel?: string
@@ -472,6 +492,7 @@ export function MultiTreeCombobox({
     value,
     onValueChange,
     label,
+    filterLabel,
     compact = false,
     placeholder = "搜索名称",
     emptyLabel = "没有符合条件的选项",
@@ -490,6 +511,7 @@ export function MultiTreeCombobox({
         ids: ReadonlySet<string>
     } | null>(null)
     const anchorRef = useComboboxAnchor()
+    const useTriggerMode = compact || Boolean(filterLabel)
     const searching = query.trim().length > 0
     const { byId, pathLabel } = React.useMemo(() => indexNodes(nodes), [nodes])
     const parentIds = React.useMemo(() => collectParentIds(nodes), [nodes])
@@ -599,7 +621,7 @@ export function MultiTreeCombobox({
                 data-has-value={selected.length > 0 ? "true" : undefined}
                 className={cn("min-w-0", className)}
             >
-                {compact ? (
+                {useTriggerMode ? (
                     <ComboboxTrigger
                         id={id}
                         aria-label={label}
@@ -609,12 +631,24 @@ export function MultiTreeCombobox({
                             <Button
                                 type="button"
                                 variant="control"
-                                className="w-full min-w-0 justify-start gap-1"
+                                className="w-full min-w-0 justify-start gap-1 px-2.5"
                             />
                         }
                     >
+                        {filterLabel ? (
+                            <span
+                                data-filter-label=""
+                                className="shrink-0 text-muted-foreground/80"
+                            >
+                                {filterLabel}：
+                            </span>
+                        ) : null}
                         <span
-                            className="min-w-0 flex-1 truncate text-left"
+                            className={cn(
+                                "min-w-0 flex-1 truncate text-left",
+                                selected.length === 0 &&
+                                    "text-muted-foreground/75",
+                            )}
                             data-slot="filter-selection-summary"
                         >
                             {selected.length === 0
@@ -662,7 +696,7 @@ export function MultiTreeCombobox({
                 )}
             </div>
             <ComboboxContent anchor={anchorRef}>
-                {compact && (
+                {useTriggerMode && (
                     <ComboboxInput
                         id={id ? `${id}-search` : undefined}
                         aria-label={`搜索${label}`}
@@ -670,7 +704,9 @@ export function MultiTreeCombobox({
                         showTrigger={false}
                     />
                 )}
-                <ComboboxEmpty>{emptyLabel}</ComboboxEmpty>
+                <ComboboxEmpty>
+                    {loading ? "正在加载…" : emptyLabel}
+                </ComboboxEmpty>
                 <ComboboxList>
                     {displayEntries.map(({ node, depth }) => (
                         <TreeOption

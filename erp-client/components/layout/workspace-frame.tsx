@@ -72,15 +72,50 @@ export function WorkspaceFrame({ children }: { children: React.ReactNode }) {
             childList: true,
             characterData: true,
         })
-        const handleQuickSearchShortcut = (event: KeyboardEvent) => {
+        const handleHostShortcuts = (event: KeyboardEvent) => {
             if (isWorkspaceQuickSearchShortcut(event)) {
                 event.preventDefault()
                 workspaceHost()?.openQuickSearch?.()
+                return
+            }
+            if (
+                typeof event.key === "string" &&
+                !event.defaultPrevented &&
+                !event.isComposing &&
+                !event.altKey &&
+                !event.shiftKey &&
+                (event.metaKey || event.ctrlKey) &&
+                event.key.toLowerCase() === "b"
+            ) {
+                event.preventDefault()
+                if (
+                    !event.repeat &&
+                    workspaceHost() &&
+                    window.parent &&
+                    window.parent !== window
+                ) {
+                    try {
+                        const ParentKeyboardEvent =
+                            (window.parent as Window & typeof globalThis)
+                                .KeyboardEvent ?? KeyboardEvent
+                        window.parent.dispatchEvent(
+                            new ParentKeyboardEvent("keydown", {
+                                key: "b",
+                                ctrlKey: event.ctrlKey,
+                                metaKey: event.metaKey,
+                                bubbles: true,
+                                cancelable: true,
+                            }),
+                        )
+                    } catch {
+                        // Ignore cross-origin parent shortcut forwarding errors.
+                    }
+                }
             }
         }
         document.addEventListener("click", interceptWorkspaceLink, true)
         window.addEventListener("keydown", handleWorkspaceCloseShortcut, true)
-        window.addEventListener("keydown", handleQuickSearchShortcut, true)
+        window.addEventListener("keydown", handleHostShortcuts, true)
         window.addEventListener("erp-workspace-form-state", report)
         window.addEventListener("hashchange", report)
 
@@ -102,11 +137,7 @@ export function WorkspaceFrame({ children }: { children: React.ReactNode }) {
                 handleWorkspaceCloseShortcut,
                 true,
             )
-            window.removeEventListener(
-                "keydown",
-                handleQuickSearchShortcut,
-                true,
-            )
+            window.removeEventListener("keydown", handleHostShortcuts, true)
             window.removeEventListener("erp-workspace-form-state", report)
             window.removeEventListener("hashchange", report)
             delete window.erpWorkspaceGo
@@ -138,6 +169,17 @@ export function WorkspaceFrame({ children }: { children: React.ReactNode }) {
             )
         }
         applyWorkspaceViewportDensity(document, readInitialDensity())
+        try {
+            const parentDark =
+                window.parent?.document?.documentElement?.classList.contains(
+                    "dark",
+                )
+            if (typeof parentDark === "boolean") {
+                document.documentElement.classList.toggle("dark", parentDark)
+            }
+        } catch {
+            // Ignore cross-origin parent inspection errors.
+        }
 
         window.erpWorkspaceSetDensity = (density) => {
             applyWorkspaceViewportDensity(document, density)

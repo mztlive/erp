@@ -97,7 +97,6 @@ function AccessListToolbar({
     return (
         <ListWorkspaceFilterBar
             morePresentation="popover"
-            moreSize="wide"
             idPrefix={idPrefix}
             formAriaLabel={isAudit ? "审计事件查询" : "角色查询"}
             onSubmit={applyFilters}

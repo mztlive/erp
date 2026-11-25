@@ -57,6 +57,7 @@ export function TextField({
 }: TextFieldProps) {
     const { field, isInvalid, errors, resolvedId, descriptionId, errorId } =
         useFieldA11y<string>(description, id)
+    const isNumericInput = money || type === "number"
     const moneyHintId = `${resolvedId}-money-hint`
     const moneyHint = money ? describeMoney(field.state.value)?.readout : null
     const describedBy = [
@@ -78,6 +79,7 @@ export function TextField({
             description={description}
             descriptionId={descriptionId}
             isInvalid={isInvalid}
+            disabled={disabled}
             errorId={errorId}
             errors={errors}
             afterDescription={
@@ -96,14 +98,16 @@ export function TextField({
                 placeholder={placeholder}
                 disabled={disabled}
                 autoComplete={autoComplete}
-                inputMode={inputMode}
+                inputMode={
+                    inputMode ?? (isNumericInput ? "decimal" : undefined)
+                }
                 min={min}
                 max={max}
                 step={step}
                 data-testid={testId}
                 aria-invalid={isInvalid || undefined}
                 aria-describedby={describedBy || undefined}
-                className={inputClassName}
+                className={cn(isNumericInput && "num", inputClassName)}
                 onBlur={(event) => {
                     field.handleBlur()
                     onBlur?.(event)

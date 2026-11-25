@@ -175,7 +175,6 @@ export function IntegrationQueueToolbar({
             </div>
             <ListWorkspaceFilterBar
                 morePresentation="popover"
-                moreSize="compact"
                 density="compact"
                 idPrefix="integration-queue-toolbar"
                 formAriaLabel="接口错误队列查询"

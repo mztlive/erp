@@ -235,21 +235,14 @@
     --radius-3xl: 1rem; /* 16px */
     --radius-4xl: 1.25rem; /* 20px */
 
-    /* 飞书 Universe Design 轻盈通透投影（基于墨灰 #1F2329） */
-    --shadow-2xs: 0 1px 2px 0 rgb(31 35 41 / 0.04);
-    --shadow-xs: 0 1px 3px 0 rgb(31 35 41 / 0.05);
-    --shadow-sm:
-        0 2px 6px -1px rgb(31 35 41 / 0.06), 0 1px 2px -1px rgb(31 35 41 / 0.04);
-    --shadow-md:
-        0 6px 16px -4px rgb(31 35 41 / 0.08),
-        0 2px 6px -2px rgb(31 35 41 / 0.04);
-    --shadow-lg:
-        0 12px 28px -6px rgb(31 35 41 / 0.1),
-        0 4px 10px -4px rgb(31 35 41 / 0.05);
-    --shadow-xl:
-        0 20px 36px -8px rgb(31 35 41 / 0.12),
-        0 8px 16px -6px rgb(31 35 41 / 0.05);
-    --shadow-footer: 0 -4px 16px -8px rgb(31 35 41 / 0.08);
+    /* 飞书 Universe Design 轻盈通透投影（基于墨灰 #1F2329；暗色态由 .dark 运行时变量覆写） */
+    --shadow-2xs: var(--elevation-2xs);
+    --shadow-xs: var(--elevation-xs);
+    --shadow-sm: var(--elevation-sm);
+    --shadow-md: var(--elevation-md);
+    --shadow-lg: var(--elevation-lg);
+    --shadow-xl: var(--elevation-xl);
+    --shadow-footer: var(--elevation-footer);
 }
 
 /* --------------------------------------------------------------------------
@@ -384,6 +377,26 @@
     ); /* #1a57ce 飞书蓝选中文字 */
     --sidebar-border: oklch(0.926 0.003 255); /* #eaecef 轻盈 1px 细线 */
     --sidebar-ring: oklch(0.562 0.212 261 / 28%);
+
+    --elevation-2xs: 0 1px 2px 0 rgb(31 35 41 / 0.04);
+    --elevation-xs: 0 1px 3px 0 rgb(31 35 41 / 0.05);
+    --elevation-sm:
+        0 2px 6px -1px rgb(31 35 41 / 0.06), 0 1px 2px -1px rgb(31 35 41 / 0.04);
+    --elevation-md:
+        0 6px 16px -4px rgb(31 35 41 / 0.08),
+        0 2px 6px -2px rgb(31 35 41 / 0.04);
+    --elevation-lg:
+        0 12px 28px -6px rgb(31 35 41 / 0.1),
+        0 4px 10px -4px rgb(31 35 41 / 0.05);
+    --elevation-xl:
+        0 20px 36px -8px rgb(31 35 41 / 0.12),
+        0 8px 16px -6px rgb(31 35 41 / 0.05);
+    --elevation-footer: 0 -4px 16px -8px rgb(31 35 41 / 0.08);
+    --shadow-footer: var(--elevation-footer);
+    --shadow-scroll-chrome: 0 2px 8px -2px rgb(31 35 41 / 0.06);
+    --shadow-scroll-top: 0 2px 6px -2px rgb(31 35 41 / 0.07);
+    --shadow-scroll-left: 6px 0 12px -6px rgb(31 35 41 / 0.09);
+    --shadow-scroll-right: -6px 0 12px -6px rgb(31 35 41 / 0.09);
 }
 
 /* --------------------------------------------------------------------------
@@ -496,6 +509,23 @@
     --sidebar-accent-foreground: oklch(0.84 0.095 258);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.66 0.18 260 / 32%);
+
+    --elevation-2xs: 0 1px 2px 0 rgb(0 0 0 / 0.24);
+    --elevation-xs: 0 1px 3px 0 rgb(0 0 0 / 0.3);
+    --elevation-sm:
+        0 2px 6px -1px rgb(0 0 0 / 0.36), 0 1px 2px -1px rgb(0 0 0 / 0.24);
+    --elevation-md:
+        0 6px 16px -4px rgb(0 0 0 / 0.44), 0 2px 6px -2px rgb(0 0 0 / 0.28);
+    --elevation-lg:
+        0 12px 28px -6px rgb(0 0 0 / 0.52), 0 4px 10px -4px rgb(0 0 0 / 0.32);
+    --elevation-xl:
+        0 20px 36px -8px rgb(0 0 0 / 0.6), 0 8px 16px -6px rgb(0 0 0 / 0.36);
+    --elevation-footer: 0 -4px 16px -8px rgb(0 0 0 / 0.45);
+    --shadow-footer: var(--elevation-footer);
+    --shadow-scroll-chrome: 0 2px 8px -2px rgb(0 0 0 / 0.36);
+    --shadow-scroll-top: 0 2px 6px -2px rgb(0 0 0 / 0.4);
+    --shadow-scroll-left: 6px 0 12px -6px rgb(0 0 0 / 0.48);
+    --shadow-scroll-right: -6px 0 12px -6px rgb(0 0 0 / 0.48);
 }
 
 /* 金额、数量、税率、日期用等宽数字，便于纵向核对（交互规范 §19）。 */
@@ -679,7 +709,7 @@
 }
 .erp-detail-workspace-page
     [data-slot="detail-workspace-chrome"][data-scrolled="true"] {
-    box-shadow: 0 2px 8px -2px rgb(31 35 41 / 0.06);
+    box-shadow: var(--shadow-scroll-chrome);
 }
 .erp-detail-workspace-page [data-slot="detail-workspace-section"] {
     scroll-margin-top: var(--detail-chrome-height, 7rem);
@@ -1245,6 +1275,7 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     :is(
         [data-slot="input-group"],
         [data-slot="multi-option-combobox"] > [data-slot="combobox-trigger"],
+        [data-slot="multi-tree-combobox"] > [data-slot="combobox-trigger"],
         [data-slot="popover-trigger"]:has(> [data-slot="date-picker-value"])
     ):not(:disabled, [data-disabled]) {
     border-color: transparent;
@@ -1562,19 +1593,19 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     [data-slot="table-container"]
     thead
     th {
-    box-shadow: 0 2px 6px -2px rgb(31 35 41 / 0.07);
+    box-shadow: var(--shadow-scroll-top);
 }
 [data-slot="data-table-surface"][data-scrolled-left="true"]
     [data-pinned-edge="left"] {
     box-shadow:
         inset -1px 0 0 var(--border),
-        6px 0 12px -6px rgb(31 35 41 / 0.09);
+        var(--shadow-scroll-left);
 }
 [data-slot="data-table-surface"][data-scrolled-right="true"]
     [data-pinned-edge="right"] {
     box-shadow:
         inset 1px 0 0 var(--border),
-        -6px 0 12px -6px rgb(31 35 41 / 0.09);
+        var(--shadow-scroll-right);
 }
 [data-slot="data-table-surface"][data-scrolled-top="true"][data-scrolled-left="true"]
     [data-slot="table-container"]
@@ -1582,8 +1613,8 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     th[data-pinned-edge="left"] {
     box-shadow:
         inset -1px 0 0 var(--border),
-        6px 0 12px -6px rgb(31 35 41 / 0.09),
-        0 2px 6px -2px rgb(31 35 41 / 0.07);
+        var(--shadow-scroll-left),
+        var(--shadow-scroll-top);
 }
 [data-slot="data-table-surface"][data-scrolled-top="true"][data-scrolled-right="true"]
     [data-slot="table-container"]
@@ -1591,8 +1622,8 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     th[data-pinned-edge="right"] {
     box-shadow:
         inset 1px 0 0 var(--border),
-        -6px 0 12px -6px rgb(31 35 41 / 0.09),
-        0 2px 6px -2px rgb(31 35 41 / 0.07);
+        var(--shadow-scroll-right),
+        var(--shadow-scroll-top);
 }
 
 /* 桌面密度由宿主 WorkspaceTabs 统一计算并同步 data-viewport-density 到宿主及全部子 iframe，

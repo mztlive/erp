@@ -93,7 +93,7 @@ function ErpAppShell({
                 {maintenanceBanner}
                 <div
                     data-slot="erp-shell-content"
-                    className="flex min-h-0 flex-1 flex-col overflow-auto"
+                    className="@container/workspace flex min-h-0 flex-1 flex-col overflow-auto"
                 >
                     {children}
                 </div>

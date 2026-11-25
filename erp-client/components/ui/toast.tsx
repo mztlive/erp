@@ -99,7 +99,7 @@ function ToastDescription({
         <ToastPrimitive.Description
             data-slot="toast-description"
             className={cn(
-                "text-xs wrap-anywhere text-muted-foreground",
+                "text-xs whitespace-pre-line wrap-anywhere text-muted-foreground",
                 className,
             )}
             {...props}

@@ -127,8 +127,8 @@ export function FundsScopeSummaryBar({
                     <dd>
                         <MoneyValue
                             value={wholeTotal}
+                            size="compact"
                             display="exact"
-                            className="text-value-compact font-semibold"
                             unavailableReason={
                                 wholeTotal == null
                                     ? scopeText.wholeRestricted
@@ -144,8 +144,8 @@ export function FundsScopeSummaryBar({
                     <dd>
                         <MoneyValue
                             value={unassigned}
+                            size="compact"
                             display="exact"
-                            className="text-value-compact font-semibold"
                         />
                     </dd>
                 </div>

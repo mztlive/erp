@@ -14,12 +14,45 @@ import {
     columnWidthClass,
     pinningClass,
     sortableHeaderClass,
+    type DataTableColumnWidth,
 } from "@/components/business/data-table-layout"
 import type { ColumnResizeHandlers } from "@/components/business/data-table-resize"
 import { Button } from "@/components/ui/button"
 import { TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
+
+const SEMANTIC_MIN_WIDTH_PX: Record<DataTableColumnWidth, number> = {
+    default: 128,
+    flex: 256,
+    reference: 256,
+    status: 112,
+    amount: 144,
+    quantity: 112,
+    rate: 96,
+    tracks: 256,
+}
+
+function measureHeaderCellMetrics(headerCell: HTMLTableCellElement | null) {
+    if (!headerCell) {
+        return {
+            width: 0,
+            minWidth: undefined as number | undefined,
+            maxWidth: undefined as number | undefined,
+            direction: 1 as 1 | -1,
+        }
+    }
+    const width = headerCell.getBoundingClientRect().width
+    const computedStyle = window.getComputedStyle(headerCell)
+    const parsedMinWidth = Number.parseFloat(computedStyle.minWidth)
+    const parsedMaxWidth = Number.parseFloat(computedStyle.maxWidth)
+    return {
+        width,
+        minWidth: Number.isFinite(parsedMinWidth) ? parsedMinWidth : undefined,
+        maxWidth: Number.isFinite(parsedMaxWidth) ? parsedMaxWidth : undefined,
+        direction: (computedStyle.direction === "rtl" ? -1 : 1) as 1 | -1,
+    }
+}
 
 export function DataTableHeader<TData>({
     table,
@@ -62,6 +95,22 @@ export function DataTableHeader<TData>({
                                     header.column.getIsFirstColumn("right")
                                   ? "right"
                                   : undefined
+                        const semanticMinSize =
+                            header.column.columnDef.minSize ??
+                            (meta?.role
+                                ? 40
+                                : SEMANTIC_MIN_WIDTH_PX[
+                                      meta?.width ?? "default"
+                                  ])
+                        const semanticMaxSize =
+                            header.column.columnDef.maxSize ?? 1_000
+                        const currentAriaWidth = Math.round(
+                            runtimeWidth ??
+                                Math.max(
+                                    semanticMinSize,
+                                    header.column.getSize(),
+                                ),
+                        )
 
                         return (
                             <TableHead
@@ -157,15 +206,9 @@ export function DataTableHeader<TData>({
                                         role="separator"
                                         aria-label={`调整${meta?.label ?? header.column.id}列宽`}
                                         aria-orientation="vertical"
-                                        aria-valuemin={
-                                            header.column.columnDef.minSize ??
-                                            40
-                                        }
-                                        aria-valuemax={
-                                            header.column.columnDef.maxSize ??
-                                            1_000
-                                        }
-                                        aria-valuenow={header.column.getSize()}
+                                        aria-valuemin={semanticMinSize}
+                                        aria-valuemax={semanticMaxSize}
+                                        aria-valuenow={currentAriaWidth}
                                         onDoubleClick={(event) => {
                                             event.stopPropagation()
                                             header.column.resetSize()
@@ -186,22 +229,41 @@ export function DataTableHeader<TData>({
                                                 return
                                             }
                                             event.preventDefault()
+                                            const metrics =
+                                                measureHeaderCellMetrics(
+                                                    event.currentTarget.closest(
+                                                        "th",
+                                                    ),
+                                                )
                                             const minimum =
                                                 header.column.columnDef
-                                                    .minSize ?? 40
+                                                    .minSize ??
+                                                metrics.minWidth ??
+                                                semanticMinSize
                                             const maximum =
                                                 header.column.columnDef
-                                                    .maxSize ?? 1_000
-                                            const delta =
-                                                event.key === "ArrowRight"
+                                                    .maxSize ??
+                                                metrics.maxWidth ??
+                                                semanticMaxSize
+                                            const baseSize =
+                                                metrics.width > 0
+                                                    ? metrics.width
+                                                    : (runtimeWidth ??
+                                                      Math.max(
+                                                          minimum,
+                                                          header.column.getSize(),
+                                                      ))
+                                            const step =
+                                                (event.key === "ArrowRight"
                                                     ? 8
-                                                    : -8
-                                            const size = Math.min(
-                                                maximum,
-                                                Math.max(
-                                                    minimum,
-                                                    header.column.getSize() +
-                                                        delta,
+                                                    : -8) * metrics.direction
+                                            const size = Math.round(
+                                                Math.min(
+                                                    maximum,
+                                                    Math.max(
+                                                        minimum,
+                                                        baseSize + step,
+                                                    ),
                                                 ),
                                             )
                                             table.setColumnSizing(

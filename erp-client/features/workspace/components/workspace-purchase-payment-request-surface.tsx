@@ -507,7 +507,6 @@ function PaymentRequestSurface({
                 contextRail={
                     showDecisionRail && instanceId
                         ? {
-                              defaultTab: "trail",
                               collapsible: true,
                               resizable: true,
                               defaultWidthPercent: 28,

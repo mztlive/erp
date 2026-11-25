@@ -170,6 +170,7 @@ export function SellableListToolbar({
         <ListWorkspaceFilterBar
             idPrefix={prefix}
             formAriaLabel="公司商品池查询"
+            morePresentation="inline"
             onSubmit={applySellableFilters}
             className={
                 variant === "quiet"

@@ -184,6 +184,7 @@ export function WorkspaceTaskPane({
                                 alertBanner={alertBanner}
                                 kpiStrip={kpiStrip}
                                 contextRail={contextRail}
+                                footerSummaryHostRef={setFooterSummaryHost}
                                 footerHostRef={setFooterHost}
                                 footerActions={footer}
                                 idPrefix={idPrefix}

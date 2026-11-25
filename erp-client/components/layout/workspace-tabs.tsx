@@ -156,6 +156,7 @@ export function WorkspaceTabs({
     snapshot.current = { tabs, active, pendingClose }
     const closeRequest = React.useRef<(ids: string[]) => void>(() => {})
     const densityRef = React.useRef<WorkspaceViewportDensity>("comfortable")
+    const darkRef = React.useRef(false)
     const didMountActiveRef = React.useRef(false)
     const queryClient = useQueryClient()
 
@@ -175,6 +176,21 @@ export function WorkspaceTabs({
         [],
     )
 
+    const syncFrameDark = React.useCallback(
+        (iframe: HTMLIFrameElement | undefined, dark: boolean) => {
+            if (!iframe) return
+            try {
+                iframe.contentDocument?.documentElement.classList.toggle(
+                    "dark",
+                    dark,
+                )
+            } catch {
+                // Ignore unloaded or cross-origin frame access errors.
+            }
+        },
+        [],
+    )
+
     const syncAllDensities = React.useCallback(() => {
         const density = computeHostViewportDensity()
         densityRef.current = density
@@ -183,6 +199,14 @@ export function WorkspaceTabs({
             syncFrameDensity(iframe, density)
         }
     }, [syncFrameDensity])
+
+    const syncAllDark = React.useCallback(() => {
+        const dark = document.documentElement.classList.contains("dark")
+        darkRef.current = dark
+        for (const iframe of frames.current.values()) {
+            syncFrameDark(iframe, dark)
+        }
+    }, [syncFrameDark])
 
     const focusActiveFrame = React.useCallback(
         (id: string, options?: { passive?: boolean }) => {
@@ -254,6 +278,16 @@ export function WorkspaceTabs({
             window.removeEventListener("resize", syncAllDensities)
         }
     }, [syncAllDensities])
+
+    React.useEffect(() => {
+        syncAllDark()
+        const observer = new MutationObserver(syncAllDark)
+        observer.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ["class"],
+        })
+        return () => observer.disconnect()
+    }, [syncAllDark])
 
     // 保留到目标页签确认刷新成功；未加载或暂不能刷新的页签可重复接收同一版本。
     const deliverRefresh = React.useCallback((id: string) => {
@@ -615,6 +649,7 @@ export function WorkspaceTabs({
                                             node,
                                             densityRef.current,
                                         )
+                                        syncFrameDark(node, darkRef.current)
                                     } else frames.current.delete(tab.id)
                                 }}
                                 id={`workspace-frame-${tab.id}`}
@@ -632,6 +667,7 @@ export function WorkspaceTabs({
                                     )
                                     const iframe = frames.current.get(tab.id)
                                     syncFrameDensity(iframe, densityRef.current)
+                                    syncFrameDark(iframe, darkRef.current)
                                     deliverRefresh(tab.id)
                                     const isActive =
                                         tab.id === snapshot.current.active

@@ -55,12 +55,12 @@ export function MultiSelectField({
         <FieldFrame
             className={cn(className)}
             label={label}
-            labelClassName={disabled ? "opacity-60" : undefined}
             htmlFor={resolvedId}
             required={required}
             description={description}
             descriptionId={descriptionId}
             isInvalid={isInvalid}
+            disabled={disabled}
             errorId={errorId}
             errors={errors}
         >

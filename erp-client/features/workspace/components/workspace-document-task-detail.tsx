@@ -1243,7 +1243,6 @@ export function WorkspaceDocumentTaskDetail({
             contextRail={
                 showDecisionRail && instanceId
                     ? {
-                          defaultTab: "trail",
                           collapsible: true,
                           resizable: true,
                           defaultWidthPercent: 28,

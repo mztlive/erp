@@ -79,6 +79,7 @@ export function SelectField({
             description={description}
             descriptionId={descriptionId}
             isInvalid={isInvalid}
+            disabled={disabled}
             errorId={errorId}
             errors={errors}
         >

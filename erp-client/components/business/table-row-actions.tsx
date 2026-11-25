@@ -89,16 +89,17 @@ function ActionControl({
 }) {
     const className = cn(
         inlineActionButtonClassName,
-        variant === "outline" && "border-primary/35 hover:border-primary/60",
+        variant === "outline" &&
+            (action.destructive
+                ? "border-destructive/35 hover:border-destructive/60"
+                : "border-primary/35 hover:border-primary/60"),
         action.destructive &&
-            action.placement === "inline" &&
-            "text-destructive hover:bg-destructive-soft hover:text-destructive",
+            "text-destructive group-hover/row:text-destructive group-focus-within/row:text-destructive group-data-[state=selected]/row:text-destructive hover:bg-destructive-soft hover:text-destructive active:bg-destructive-soft",
     )
     const button =
         action.href && !action.disabled && !action.loading ? (
             <Button
                 id={action.id}
-                type="button"
                 size="sm"
                 variant={variant}
                 className={className}

@@ -26,16 +26,15 @@ import { cn } from "@/lib/utils"
 import { subscribeWorkspaceHotkeyAction } from "@/lib/workspace-hotkeys"
 
 export type TaskWorkbenchArchetype =
-    | "decision" // Archetype 1: 66/34 双栏，右轨挂载 Route + Trail + MaterialViewer
+    | "decision" // Archetype 1: 72/28 双栏，右轨挂载 Route + Trail + MaterialViewer
     | "action" // Archetype 2: 100% 通栏专注作业面，无冗余 20rem 侧栏
     | "investigation" // Archetype 3: 顶部诊断横幅 + 排查正文 + 可折叠载荷轨
     | "informational" // Archetype 4: 精简速览面（常运行在 SplitQueue / TaskActionSheet 内）
 
 export type UnifiedTaskWorkbenchContextRail = Readonly<{
-    defaultTab?: "trail" | "materials" | "source-sales" | "timeline"
     collapsible?: boolean
     resizable?: boolean
-    /** 右栏默认宽度百分比（默认 34，可拖拽扩展至 maxWidthPercent 做左右对照）。 */
+    /** 右栏默认宽度百分比（默认 28，可拖拽扩展至 maxWidthPercent 做左右对照）。 */
     defaultWidthPercent?: number
     minWidthPercent?: number
     maxWidthPercent?: number
@@ -166,7 +165,7 @@ function writeStoredRailPercent(
 /**
  * 统一任务与审批工作台骨架（4 原型容器查询引擎）：
  * - 顶部 56px 紧凑吸顶页头，底部 48px 紧凑吸底操作栏；
- * - Archetype 1 (`decision`) / Archetype 3 (`investigation`) 在 `@[960px]/workspace:` 启用可拖拽/可折叠双栏（右轨默认 34%，最大 50% 左右对照附件）；
+ * - Archetype 1 (`decision`) / Archetype 3 (`investigation`) 在 `@[960px]/workspace:` 启用可拖拽/可折叠双栏（右轨默认 28%，最大 50% 左右对照附件）；
  * - Archetype 2 (`action`) / Archetype 4 (`informational`) 默认 100% 通栏单画布，彻底撤除冗余 20rem 侧栏。
  */
 export function UnifiedTaskWorkbench({
@@ -295,7 +294,7 @@ export function UnifiedTaskWorkbench({
 
     const minRailPct = clampPercent(contextRail?.minWidthPercent ?? 24, 20, 50)
     const defaultRailPct = clampPercent(
-        contextRail?.defaultWidthPercent ?? minRailPct,
+        contextRail?.defaultWidthPercent ?? 28,
         minRailPct,
         50,
     )
@@ -412,7 +411,7 @@ export function UnifiedTaskWorkbench({
                 fullWidth &&
                     "flex min-h-0 flex-1 flex-col overflow-hidden [&_[data-slot=page-scaffold]]:h-full",
                 fillBody &&
-                    "lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden",
+                    "@[960px]/workspace:flex @[960px]/workspace:min-h-0 @[960px]/workspace:flex-1 @[960px]/workspace:flex-col @[960px]/workspace:overflow-hidden",
             )}
         >
             {alertBanner ? (
@@ -505,7 +504,7 @@ export function UnifiedTaskWorkbench({
                         showSplitResizable || fullWidth
                             ? "overflow-hidden"
                             : "overflow-y-auto overscroll-contain",
-                        fillBody && "lg:overflow-hidden",
+                        fillBody && "@[960px]/workspace:overflow-hidden",
                     )}
                 >
                     {showSplitResizable ? (
@@ -589,7 +588,7 @@ export function UnifiedTaskWorkbench({
                                 fullWidth &&
                                     "flex flex-col items-stretch overflow-hidden",
                                 fillBody &&
-                                    "lg:flex lg:flex-col lg:items-stretch lg:overflow-hidden",
+                                    "@[960px]/workspace:flex @[960px]/workspace:flex-col @[960px]/workspace:items-stretch @[960px]/workspace:overflow-hidden",
                                 !framed && workspaceTaskSurfacePadClassName,
                             )}
                         >

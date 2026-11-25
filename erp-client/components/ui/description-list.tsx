@@ -7,9 +7,9 @@ const descriptionListVariants = cva("grid gap-x-6 gap-y-4", {
     variants: {
         columns: {
             one: "grid-cols-1",
-            two: "grid-cols-1 sm:grid-cols-2",
-            three: "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3",
-            four: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+            two: "grid-cols-1 @[440px]/description-list:grid-cols-2",
+            three: "grid-cols-1 @[440px]/description-list:grid-cols-2 @[740px]/description-list:grid-cols-3",
+            four: "grid-cols-1 @[440px]/description-list:grid-cols-2 @[740px]/description-list:grid-cols-3 @[960px]/description-list:grid-cols-4",
         },
     },
     defaultVariants: {
@@ -23,11 +23,16 @@ function DescriptionList({
     ...props
 }: React.ComponentProps<"dl"> & VariantProps<typeof descriptionListVariants>) {
     return (
-        <dl
-            data-slot="description-list"
-            className={cn(descriptionListVariants({ columns }), className)}
-            {...props}
-        />
+        <div
+            data-slot="description-list-container"
+            className="@container/description-list min-w-0"
+        >
+            <dl
+                data-slot="description-list"
+                className={cn(descriptionListVariants({ columns }), className)}
+                {...props}
+            />
+        </div>
     )
 }
 

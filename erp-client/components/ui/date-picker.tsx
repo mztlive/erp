@@ -120,7 +120,7 @@ function DatePicker({
     disabledDates,
     clearable = true,
     allowLongTerm = false,
-    size = "lg",
+    size = "default",
     className,
     fieldLabel,
     "aria-invalid": ariaInvalid,
@@ -180,7 +180,7 @@ function DatePicker({
                     <span
                         data-slot="date-picker-value"
                         className={cn(
-                            "min-w-0 truncate",
+                            "num min-w-0 truncate",
                             !value && "text-muted-foreground",
                         )}
                     >
@@ -260,6 +260,7 @@ function DateRangePicker({
     disabled,
     disabledDates,
     className,
+    size = "default",
     fieldLabel,
     "aria-invalid": ariaInvalid,
     "aria-describedby": ariaDescribedby,
@@ -272,6 +273,7 @@ function DateRangePicker({
     disabled?: boolean
     disabledDates?: Matcher | Matcher[]
     className?: string
+    size?: DatePickerSize
     /** 使用外部筛选标签，并将日历图标对齐到右侧。 */
     fieldLabel?: string
     "aria-invalid"?: boolean
@@ -305,7 +307,7 @@ function DateRangePicker({
                             id={id}
                             type="button"
                             variant="control"
-                            size={fieldLabel ? "default" : "lg"}
+                            size={size}
                             className="min-w-0 flex-1 justify-start"
                             disabled={disabled}
                             aria-invalid={ariaInvalid}
@@ -335,7 +337,7 @@ function DateRangePicker({
                     <span
                         data-slot="date-picker-value"
                         className={cn(
-                            "min-w-0 truncate",
+                            "num min-w-0 truncate",
                             !hasValue && "text-muted-foreground",
                         )}
                     >
@@ -353,7 +355,7 @@ function DateRangePicker({
                         id={id ? `${id}-clear` : undefined}
                         type="button"
                         variant="ghost"
-                        size={fieldLabel ? "icon" : "icon-lg"}
+                        size={DATE_PICKER_CLEAR_SIZE[size]}
                         onClick={() => onValueChange?.(undefined)}
                         disabled={disabled}
                         aria-label="清除日期范围"
@@ -397,6 +399,7 @@ function DateTimePicker({
     disabled,
     disabledDates,
     clearable = true,
+    size = "default",
     className,
     "aria-invalid": ariaInvalid,
     "aria-describedby": ariaDescribedby,
@@ -410,6 +413,7 @@ function DateTimePicker({
     disabled?: boolean
     disabledDates?: Matcher | Matcher[]
     clearable?: boolean
+    size?: DatePickerSize
     className?: string
     "aria-invalid"?: boolean
     "aria-describedby"?: string
@@ -435,14 +439,17 @@ function DateTimePicker({
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
-            <div className={cn("flex min-w-0 items-center gap-1", className)}>
+            <div
+                data-has-value={Boolean(value)}
+                className={cn("flex min-w-0 items-center gap-1", className)}
+            >
                 <PopoverTrigger
                     render={
                         <Button
                             id={id}
                             type="button"
                             variant="control"
-                            size="lg"
+                            size={size}
                             className="min-w-0 flex-1 justify-start"
                             disabled={disabled}
                             aria-invalid={ariaInvalid}
@@ -453,8 +460,9 @@ function DateTimePicker({
                 >
                     <ClockIcon data-icon="inline-start" aria-hidden="true" />
                     <span
+                        data-slot="date-picker-value"
                         className={cn(
-                            "truncate",
+                            "num min-w-0 truncate",
                             !value && "text-muted-foreground",
                         )}
                     >
@@ -466,7 +474,7 @@ function DateTimePicker({
                         id={id ? `${id}-clear` : undefined}
                         type="button"
                         variant="ghost"
-                        size="icon-lg"
+                        size={DATE_PICKER_CLEAR_SIZE[size]}
                         onClick={() => onValueChange?.(undefined)}
                         disabled={disabled}
                         aria-label="清除日期时间"
@@ -544,6 +552,7 @@ function DateTimeLocalPicker({
     disabled,
     disabledDates,
     clearable = true,
+    size,
     className,
     "aria-invalid": ariaInvalid,
     "aria-describedby": ariaDescribedby,
@@ -557,6 +566,7 @@ function DateTimeLocalPicker({
     disabled?: boolean
     disabledDates?: Matcher | Matcher[]
     clearable?: boolean
+    size?: DatePickerSize
     className?: string
     "aria-invalid"?: boolean
     "aria-describedby"?: string
@@ -576,6 +586,7 @@ function DateTimeLocalPicker({
             disabled={disabled}
             disabledDates={disabledDates}
             clearable={clearable}
+            size={size}
             className={className}
             aria-invalid={ariaInvalid}
             aria-describedby={ariaDescribedby}
@@ -634,6 +645,7 @@ function DateTimeRangePicker({
     disabled,
     disabledDates,
     clearable = true,
+    size = "default",
     className,
     "aria-invalid": ariaInvalid,
     "aria-describedby": ariaDescribedby,
@@ -650,6 +662,7 @@ function DateTimeRangePicker({
     disabled?: boolean
     disabledDates?: Matcher | Matcher[]
     clearable?: boolean
+    size?: DatePickerSize
     className?: string
     "aria-invalid"?: boolean
     "aria-describedby"?: string
@@ -677,14 +690,17 @@ function DateTimeRangePicker({
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
-            <div className={cn("flex min-w-0 items-center gap-1", className)}>
+            <div
+                data-has-value={Boolean(value?.from || value?.to)}
+                className={cn("flex min-w-0 items-center gap-1", className)}
+            >
                 <PopoverTrigger
                     render={
                         <Button
                             id={id}
                             type="button"
                             variant="control"
-                            size="lg"
+                            size={size}
                             className="min-w-0 flex-1 justify-start"
                             disabled={disabled}
                             aria-invalid={ariaInvalid}
@@ -698,8 +714,9 @@ function DateTimeRangePicker({
                         aria-hidden="true"
                     />
                     <span
+                        data-slot="date-picker-value"
                         className={cn(
-                            "truncate",
+                            "num min-w-0 truncate",
                             !value?.from && "text-muted-foreground",
                         )}
                     >
@@ -711,7 +728,7 @@ function DateTimeRangePicker({
                         id={id ? `${id}-clear` : undefined}
                         type="button"
                         variant="ghost"
-                        size="icon-lg"
+                        size={DATE_PICKER_CLEAR_SIZE[size]}
                         onClick={() => onValueChange?.(undefined)}
                         disabled={disabled}
                         aria-label="清除时间范围"
@@ -837,6 +854,7 @@ function DateTimeRangeLocalPicker({
     disabled,
     disabledDates,
     clearable = true,
+    size,
     className,
     "aria-invalid": ariaInvalid,
     "aria-describedby": ariaDescribedby,
@@ -850,6 +868,7 @@ function DateTimeRangeLocalPicker({
     disabled?: boolean
     disabledDates?: Matcher | Matcher[]
     clearable?: boolean
+    size?: DatePickerSize
     className?: string
     "aria-invalid"?: boolean
     "aria-describedby"?: string
@@ -877,6 +896,7 @@ function DateTimeRangeLocalPicker({
             disabled={disabled}
             disabledDates={disabledDates}
             clearable={clearable}
+            size={size}
             className={className}
             aria-invalid={ariaInvalid}
             aria-describedby={ariaDescribedby}

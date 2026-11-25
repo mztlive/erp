@@ -3,11 +3,14 @@
 import type { ComponentProps } from "react"
 import { Input } from "@/components/ui/input"
 import { describeMoney } from "@/lib/money-display"
+import { cn } from "@/lib/utils"
 
 /** 受控金额仍以元提交，辅助读数不改写输入或业务校验。 */
 export function MoneyInput({
     id,
     value,
+    className,
+    inputMode = "decimal",
     "aria-describedby": describedBy,
     ...props
 }: Omit<ComponentProps<typeof Input>, "id" | "value"> & {
@@ -22,6 +25,8 @@ export function MoneyInput({
                 {...props}
                 id={id}
                 value={value}
+                inputMode={inputMode}
+                className={cn("num", className)}
                 aria-describedby={
                     [describedBy, hint ? hintId : undefined]
                         .filter(Boolean)

@@ -8,6 +8,7 @@ import {
     FieldError,
     FieldLabel,
 } from "@/components/ui/field"
+import { RequiredMark } from "@/components/ui/required-mark"
 
 /**
  * 表单字段的标签、说明和错误外壳。
@@ -22,6 +23,7 @@ export function FieldFrame({
     description,
     descriptionId,
     isInvalid,
+    disabled,
     errorId,
     errors,
     afterDescription,
@@ -35,16 +37,21 @@ export function FieldFrame({
     description?: ReactNode
     descriptionId: string
     isInvalid: boolean
+    disabled?: boolean
     errorId: string
     errors: Array<{ message?: string } | undefined>
     afterDescription?: ReactNode
     children: ReactNode
 }) {
     return (
-        <Field data-invalid={isInvalid || undefined} className={className}>
+        <Field
+            data-invalid={isInvalid || undefined}
+            data-disabled={disabled ? "true" : undefined}
+            className={className}
+        >
             <FieldLabel htmlFor={htmlFor} className={labelClassName}>
                 {label}
-                {required ? <span className="text-destructive">*</span> : null}
+                {required ? <RequiredMark /> : null}
             </FieldLabel>
             {children}
             {description ? (
