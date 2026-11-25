@@ -9,7 +9,11 @@ import {
     XIcon,
 } from "lucide-react"
 
-import { QuantityValue, QuickPreviewSheet } from "@/components/business"
+import {
+    detailWorkspaceStyles,
+    QuantityValue,
+    QuickPreviewSheet,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -422,7 +426,7 @@ export function PurchaseDeliveryPlanExplorer({
 
     return (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card">
-            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 bg-surface-sunken px-5 py-2.5">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 bg-card px-5 py-2.5">
                 <div className="relative min-w-48 flex-1">
                     <SearchIcon
                         aria-hidden="true"
@@ -432,7 +436,7 @@ export function PurchaseDeliveryPlanExplorer({
                         id={`${idPrefix}-search`}
                         aria-label="搜索收货人、电话、地址或商品"
                         placeholder="搜索收货人、电话、地址或商品…"
-                        className="h-control-sm bg-card pr-7 pl-8 text-xs"
+                        className="h-control-sm border-transparent bg-surface-sunken pr-7 pl-8 text-xs shadow-none hover:bg-muted/70 focus-visible:border-primary focus-visible:bg-card"
                         value={query}
                         onChange={(event) => setQuery(event.target.value)}
                     />
@@ -453,28 +457,28 @@ export function PurchaseDeliveryPlanExplorer({
                 <div
                     role="group"
                     aria-label="地址查看维度"
-                    className="flex shrink-0 items-center gap-1"
+                    className={detailWorkspaceStyles.subTabs}
                 >
-                    <Button
+                    <button
                         id={`${idPrefix}-view-item`}
                         type="button"
-                        size="xs"
-                        variant={viewBy === "item" ? "secondary" : "ghost"}
                         aria-pressed={viewBy === "item"}
+                        data-active={viewBy === "item"}
+                        className={detailWorkspaceStyles.subTab}
                         onClick={() => setViewBy("item")}
                     >
                         按商品
-                    </Button>
-                    <Button
+                    </button>
+                    <button
                         id={`${idPrefix}-view-address`}
                         type="button"
-                        size="xs"
-                        variant={viewBy === "address" ? "secondary" : "ghost"}
                         aria-pressed={viewBy === "address"}
+                        data-active={viewBy === "address"}
+                        className={detailWorkspaceStyles.subTab}
                         onClick={() => setViewBy("address")}
                     >
                         按收货地址
-                    </Button>
+                    </button>
                 </div>
                 <span className="num text-xs text-muted-foreground">
                     {viewBy === "item"
@@ -703,10 +707,10 @@ function AddressGroupedList({
                             {address.items.length} 项商品
                         </span>
                     </div>
-                    <p className="text-xs leading-5 break-words text-muted-foreground">
+                    <p className="text-xs break-words text-muted-foreground">
                         {address.fullAddress}
                     </p>
-                    <ul className="space-y-1 rounded-sm bg-muted/35 px-3 py-2 text-xs">
+                    <ul className="space-y-1 rounded-md bg-surface-sunken/70 px-3 py-2 text-xs">
                         {address.items.map((item) => (
                             <li
                                 key={`${address.key}-${item.itemKey}`}
