@@ -170,7 +170,6 @@ export function FundsScopeSummaryBar({
                                     <MoneyValue
                                         value={share.amount}
                                         display="exact"
-                                        className="font-medium text-foreground"
                                     />
                                 </span>
                             ))
@@ -219,7 +218,7 @@ export function FundsScopeSummaryBar({
                                                 <MoneyValue
                                                     value={share.amount}
                                                     display="exact"
-                                                    className="shrink-0 font-medium text-foreground"
+                                                    className="shrink-0"
                                                 />
                                             </li>
                                         ))}

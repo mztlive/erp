@@ -231,7 +231,7 @@ export function SalesDeliveryWorkspaceSheet({
                         onSelectLine={onActiveRowKeyChange}
                     />
                 ) : (
-                    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                    <div className="min-h-0 flex-1 overflow-y-auto px-sheet-inline py-5">
                         {tab === "product" ? (
                             effectiveRowKey ? (
                                 <ProductDeliveryPane

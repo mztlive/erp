@@ -221,7 +221,7 @@ const metricColumnClasses: Record<MetricStripColumns, string> = {
     3: "sm:grid-cols-2 lg:grid-cols-3",
     4: "sm:grid-cols-2 lg:grid-cols-4",
     5: "sm:grid-cols-2 lg:grid-cols-5",
-    6: "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6",
+    6: "sm:grid-cols-2 lg:grid-cols-3 @[1120px]/workspace:grid-cols-6",
 }
 
 export type MetricStripProps = Omit<React.ComponentProps<"div">, "title"> & {

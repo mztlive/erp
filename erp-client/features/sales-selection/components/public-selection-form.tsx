@@ -648,6 +648,10 @@ export const SelectionForm = ({
                             </div>
                         </div>
                         <Badge variant="info" className="shrink-0 rounded-full">
+                            <Package
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                            />
                             批量采购
                         </Badge>
                     </div>

@@ -39,7 +39,7 @@ export function IntegrationQueuePanel({
                     共 {items.length} 项 · 安全故障与结果未知优先
                 </CardDescription>
             </CardHeader>
-            <CardContent className="max-h-[70vh] space-y-2 overflow-y-auto pt-3">
+            <CardContent className="max-h-[70dvh] space-y-2 overflow-y-auto pt-3">
                 {items.map((item) => {
                     const baseHref =
                         item.identity.itemType === "ERROR_TASK"

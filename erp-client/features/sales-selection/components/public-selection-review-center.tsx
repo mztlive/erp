@@ -12,7 +12,7 @@ import {
     X,
 } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -193,7 +193,7 @@ export const SelectionReviewCenter = ({
                             {page.customer_name}
                         </p>
                     </div>
-                    <Badge variant="info">核对中</Badge>
+                    <StatusBadge tone="info" label="核对中" />
                 </header>
 
                 {/* 2. 中间可滚动核对区域 */}

@@ -747,7 +747,7 @@ export function BatchOperationResult({
         <section
             data-slot="batch-operation-result"
             aria-labelledby={titleId}
-            className={cn("space-y-3", className)}
+            className={cn("@container space-y-3", className)}
             {...props}
         >
             <header className="flex flex-wrap items-center gap-2">
@@ -776,7 +776,7 @@ export function BatchOperationResult({
                     className="num"
                 />
             </header>
-            <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-3 @xl:grid-cols-2 @3xl:grid-cols-3">
                 <section className="rounded-lg border border-border bg-card p-3 text-body-compact">
                     <h4 className="flex items-center gap-2 font-medium">
                         <CircleCheckIcon

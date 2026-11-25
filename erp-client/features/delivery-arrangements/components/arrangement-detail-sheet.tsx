@@ -318,7 +318,7 @@ export function ArrangementDetailSheet({
             }
         >
             {/* 固定视图与筛选工具条 */}
-            <div className="shrink-0 space-y-2.5 border-b border-border/60 bg-card px-6 py-3">
+            <div className="shrink-0 space-y-2.5 border-b border-border/60 bg-card px-sheet-inline py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <DetailWorkspaceSubTabs
                         value={viewMode}
@@ -460,7 +460,7 @@ export function ArrangementDetailSheet({
             </div>
 
             {/* 滚动正文区 */}
-            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-sheet-inline py-5">
                 {data.blocked_reason ? (
                     <div
                         role="alert"

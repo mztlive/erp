@@ -151,7 +151,7 @@ export function SalesOrderHandoverButton({
                     setOpen(next)
                 }}
             >
-                <AlertDialogContent className="sm:max-w-md">
+                <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>交接销售责任</AlertDialogTitle>
                         <AlertDialogDescription>

@@ -427,7 +427,7 @@ export function PurchaseDeliveryPlanExplorer({
 
     return (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card">
-            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 bg-card px-5 py-2.5">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 bg-card px-sheet-inline py-2.5">
                 <div className="relative min-w-48 flex-1">
                     <SearchIcon
                         aria-hidden="true"
@@ -501,7 +501,7 @@ export function PurchaseDeliveryPlanExplorer({
                 </LoadingButton>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-sheet-inline py-4">
                 {summary.totalRows === 0 ? (
                     <p className="py-10 text-center text-xs text-muted-foreground">
                         本单暂无指定收货地址。

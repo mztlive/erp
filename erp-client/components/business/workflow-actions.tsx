@@ -207,7 +207,7 @@ export type FormalActionConfirmDialogProps = ControllableDialogProps & {
     effects?: readonly React.ReactNode[]
     /** 需要随正式动作一并提交的显式业务字段。 */
     formContent?: React.ReactNode
-    /** 覆盖确认层宽度等布局，默认 `sm:max-w-xl`。 */
+    /** 覆盖确认层样式；默认宽度由 layout 决定（lg / xl）。 */
     contentClassName?: string
     /** 横版加宽确认层；紧凑版省略装饰图标，将状态放到标题旁。 */
     layout?: "stack" | "landscape" | "compact"
@@ -388,9 +388,9 @@ function FormalActionConfirmDialog({
         >
             {trigger ? <AlertDialogTrigger render={trigger} /> : null}
             <AlertDialogContent
+                size={layout === "landscape" ? "xl" : "lg"}
                 className={cn(
                     "flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden",
-                    layout === "landscape" ? "sm:max-w-4xl" : "sm:max-w-xl",
                     contentClassName,
                 )}
             >

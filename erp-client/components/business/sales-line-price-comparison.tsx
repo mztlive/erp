@@ -38,11 +38,11 @@ export function SalesLinePriceComparison({
 
         return (
             <div className="min-w-44 space-y-1 whitespace-normal text-xs">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-body-compact">
                     <MoneyValue
                         display="exact"
+                        emphasis="strong"
                         value={prices.procurement_supply_price_gross}
-                        className="text-body-compact font-semibold"
                     />
                     {hasWarningChange && formattedChange ? (
                         <StatusBadge
@@ -56,7 +56,7 @@ export function SalesLinePriceComparison({
                             className="num"
                         />
                     ) : (
-                        <span className="text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                             {isUnchanged ? (
                                 <>{basis ? `${basis} · ` : ""}未调整</>
                             ) : !known ? (
@@ -72,8 +72,9 @@ export function SalesLinePriceComparison({
                                 原底价{" "}
                                 <MoneyValue
                                     display="exact"
+                                    emphasis="subtle"
+                                    inheritColor
                                     value={original}
-                                    className="font-normal [&_[data-slot=money-value-number]]:text-inherit"
                                 />
                                 {basis ? ` · ${basis}` : ""}
                             </span>
@@ -86,8 +87,9 @@ export function SalesLinePriceComparison({
                                 含税售价{" "}
                                 <MoneyValue
                                     display="exact"
+                                    emphasis="subtle"
+                                    inheritColor
                                     value={prices.unit_price_gross}
-                                    className="font-normal [&_[data-slot=money-value-number]]:text-inherit"
                                 />
                             </span>
                         ) : null}

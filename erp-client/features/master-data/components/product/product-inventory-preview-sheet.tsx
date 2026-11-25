@@ -125,7 +125,7 @@ export function ProductInventoryPreviewSheet({
         if (inventoryQuery.isPending) {
             return (
                 <div
-                    className="space-y-3 p-5"
+                    className="space-y-3 px-sheet-inline py-5"
                     aria-busy="true"
                     aria-label="正在加载商品库存"
                 >

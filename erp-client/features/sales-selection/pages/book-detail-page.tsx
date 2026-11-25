@@ -741,7 +741,7 @@ export const BookDetailPage = ({ bookId }: { bookId: string }) => {
                     if (!open) setConfirmAction(null)
                 }}
             >
-                <AlertDialogContent className="sm:max-w-md">
+                <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>
                             {confirmMeta?.title}

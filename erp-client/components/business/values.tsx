@@ -363,6 +363,7 @@ export function taxAmountToneClass(label: unknown): string {
 
 type MoneyValueSize = "inherit" | "compact" | "section" | "summary" | "hero"
 type MoneyValueDisplay = "full" | "compact" | "exact"
+type MoneyValueEmphasis = "subtle" | "default" | "strong"
 
 const moneyMagnitudeClasses: Record<MoneyMagnitude, string> = {
     base: "text-foreground",
@@ -379,6 +380,12 @@ const moneyValueSizeClassNames: Record<MoneyValueSize, string> = {
     hero: "text-value-hero font-semibold tracking-tight",
 }
 
+const moneyValueEmphasisClassNames: Record<MoneyValueEmphasis, string> = {
+    subtle: "font-normal",
+    default: "font-medium",
+    strong: "font-semibold",
+}
+
 interface MoneyValueProps extends Omit<
     React.ComponentProps<"span">,
     "children"
@@ -388,6 +395,8 @@ interface MoneyValueProps extends Omit<
     unavailableReason?: React.ReactNode
     /** 只调整金额数字；税口径徽章与不可用原因保持辅助字号。 */
     size?: MoneyValueSize
+    /** 行内金额字重层级：subtle=弱化参考价，default=默认常规，strong=重点强调。 */
+    emphasis?: MoneyValueEmphasis
     /** full：精确金额附量级；compact：简写附精确金额；exact：仅精确金额。 */
     display?: MoneyValueDisplay
     /** 隐藏辅助金额行；compact 模式仍向辅助技术提供完整金额。 */
@@ -402,6 +411,7 @@ function MoneyValue({
     taxBasis,
     unavailableReason,
     size = "inherit",
+    emphasis = "default",
     display = "full",
     showHint = true,
     inheritColor = false,
@@ -420,10 +430,12 @@ function MoneyValue({
             data-tax-basis={taxBasis}
             data-unavailable={isUnavailable || undefined}
             data-size={size}
+            data-emphasis={emphasis}
             data-display={display}
             data-magnitude={amount?.magnitude}
             className={cn(
-                "inline-flex min-w-0 flex-nowrap items-baseline gap-2 font-medium",
+                "inline-flex min-w-0 flex-nowrap items-baseline gap-2",
+                moneyValueEmphasisClassNames[emphasis],
                 className,
             )}
             {...props}
@@ -692,6 +704,7 @@ export {
     type DocumentTotalItem,
     type DocumentTotalsProps,
     type MoneyValueProps,
+    type MoneyValueEmphasis,
     type MoneyValueSize,
     type MoneyValueDisplay,
     type QuantityValueProps,

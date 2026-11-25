@@ -59,7 +59,7 @@ export function FulfillmentQueueList({
             </CardHeader>
             <CardContent
                 ref={containerRef}
-                className="max-h-[min(36rem,70vh)] space-y-2 overflow-y-auto"
+                className="max-h-[min(36rem,70dvh)] space-y-2 overflow-y-auto"
             >
                 {operations.map((item, index) => (
                     <button

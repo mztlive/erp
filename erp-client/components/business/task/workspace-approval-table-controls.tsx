@@ -7,7 +7,7 @@ import {
     XIcon,
 } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -103,18 +103,17 @@ export function ApprovalLineFilterBar({
                             onClick={() => onRiskOnlyChange(true)}
                         >
                             <span>仅看风险项</span>
-                            <Badge
-                                variant={
+                            <StatusBadge
+                                tone={
                                     hasHighRisk
                                         ? "destructive"
                                         : riskCount > 0
                                           ? "warning"
                                           : "neutral"
                                 }
-                                className="rounded-full px-1.5 py-0 text-tiny tabular-nums"
-                            >
-                                {riskCount}
-                            </Badge>
+                                label={String(riskCount)}
+                                className="num rounded-full px-1.5 py-0 text-tiny"
+                            />
                         </button>
                     ) : null}
                 </div>

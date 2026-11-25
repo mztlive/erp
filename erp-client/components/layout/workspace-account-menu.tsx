@@ -84,7 +84,7 @@ export function WorkspaceAccountMenu() {
                                 )}
                             </AvatarFallback>
                         </Avatar>
-                        <span className="hidden min-w-0 text-left text-body-compact leading-tight sm:block">
+                        <span className="hidden min-w-0 text-left text-body-compact sm:block">
                             <span className="block truncate font-medium">
                                 {displayName}
                             </span>

@@ -224,13 +224,14 @@ function ReceiptItem({
                 )}
             </div>
             <div className="min-w-0 flex-1 self-center">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <p className="min-w-0 break-words text-sm leading-snug font-medium">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
+                    <p className="min-w-0 break-words leading-snug font-medium">
                         {item.name}
                     </p>
                     <MoneyValue
                         value={item.amount}
-                        className="ml-auto max-w-full break-all text-sm font-semibold"
+                        emphasis="strong"
+                        className="ml-auto max-w-full break-all"
                     />
                 </div>
                 {item.quantity != null && (

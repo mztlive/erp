@@ -465,7 +465,11 @@ export function SalesOrderCustomerFinancePanel({
                 {detail.isPending ? (
                     <p
                         role="status"
-                        className={isReceivablePreview ? undefined : "p-7"}
+                        className={
+                            isReceivablePreview
+                                ? undefined
+                                : "px-sheet-inline py-5"
+                        }
                     >
                         正在加载记录…
                     </p>
@@ -485,7 +489,13 @@ export function SalesOrderCustomerFinancePanel({
                 ) : detail.data?.invoice ? (
                     <InvoiceDetailBody row={detail.data.invoice} />
                 ) : (
-                    <p className={isReceivablePreview ? undefined : "p-7"}>
+                    <p
+                        className={
+                            isReceivablePreview
+                                ? undefined
+                                : "px-sheet-inline py-5"
+                        }
+                    >
                         未找到可查看的记录。
                     </p>
                 )}
