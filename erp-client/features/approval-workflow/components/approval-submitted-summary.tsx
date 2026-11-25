@@ -387,8 +387,12 @@ function Metadata({
             span: isLong ? "full" : 1,
         })
     })
+    const shortCount = items.filter((item) => item.span !== "full").length
     return (
-        <WorkspaceFactGrid columns={3} ariaLabel="提交信息">
+        <WorkspaceFactGrid
+            columns={shortCount > 0 && shortCount <= 2 ? 2 : 3}
+            ariaLabel="提交信息"
+        >
             {items.map((item) => (
                 <WorkspaceFactItem
                     key={item.key}

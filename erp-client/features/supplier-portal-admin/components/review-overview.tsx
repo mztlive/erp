@@ -202,57 +202,67 @@ export function PortalReviewOverview({
             overview.orderingCode ||
             overview.validFrom ||
             overview.validTo ||
-            overview.reason ? (
-                <WorkspaceFactGrid columns={3}>
-                    {overview.title ? (
-                        <WorkspaceFactItem
-                            label="申请内容"
-                            value={overview.title}
-                        />
-                    ) : null}
-                    {overview.brand ? (
-                        <WorkspaceFactItem
-                            label="品牌"
-                            value={overview.brand}
-                        />
-                    ) : null}
-                    {overview.category ? (
-                        <WorkspaceFactItem
-                            label="建议商品分类"
-                            value={overview.category}
-                        />
-                    ) : null}
-                    {overview.orderingCode ? (
-                        <WorkspaceFactItem
-                            label="供应商订货编码"
-                            value={overview.orderingCode}
-                            numeric
-                            selectable
-                        />
-                    ) : null}
-                    {overview.validFrom ? (
-                        <WorkspaceFactItem
-                            label="拟生效日期"
-                            value={overview.validFrom}
-                            numeric
-                        />
-                    ) : null}
-                    {overview.validTo ? (
-                        <WorkspaceFactItem
-                            label="拟失效日期"
-                            value={overview.validTo}
-                            numeric
-                        />
-                    ) : null}
-                    {overview.reason ? (
-                        <WorkspaceFactItem
-                            label="提交说明"
-                            value={overview.reason}
-                            span="full"
-                        />
-                    ) : null}
-                </WorkspaceFactGrid>
-            ) : null}
+            overview.reason
+                ? (() => {
+                      const hasValidity = Boolean(
+                          overview.validFrom || overview.validTo,
+                      )
+                      const shortCount =
+                          (overview.title ? 1 : 0) +
+                          (overview.brand ? 1 : 0) +
+                          (overview.category ? 1 : 0) +
+                          (overview.orderingCode ? 1 : 0) +
+                          (hasValidity ? 1 : 0)
+                      const overviewColumns: 2 | 3 | 4 =
+                          shortCount <= 2 ? 2 : shortCount === 4 ? 4 : 3
+                      return (
+                          <div className="border-b border-border/60 pb-3.5">
+                              <WorkspaceFactGrid columns={overviewColumns}>
+                                  {overview.title ? (
+                                      <WorkspaceFactItem
+                                          label="申请内容"
+                                          value={overview.title}
+                                      />
+                                  ) : null}
+                                  {overview.brand ? (
+                                      <WorkspaceFactItem
+                                          label="品牌"
+                                          value={overview.brand}
+                                      />
+                                  ) : null}
+                                  {overview.category ? (
+                                      <WorkspaceFactItem
+                                          label="建议商品分类"
+                                          value={overview.category}
+                                      />
+                                  ) : null}
+                                  {overview.orderingCode ? (
+                                      <WorkspaceFactItem
+                                          label="供应商订货编码"
+                                          value={overview.orderingCode}
+                                          numeric
+                                          selectable
+                                      />
+                                  ) : null}
+                                  {hasValidity ? (
+                                      <WorkspaceFactItem
+                                          label="拟定有效期"
+                                          value={`${overview.validFrom ?? "—"} 至 ${overview.validTo ?? "长期"}`}
+                                          numeric
+                                      />
+                                  ) : null}
+                                  {overview.reason ? (
+                                      <WorkspaceFactItem
+                                          label="提交说明"
+                                          value={overview.reason}
+                                          span="full"
+                                      />
+                                  ) : null}
+                              </WorkspaceFactGrid>
+                          </div>
+                      )
+                  })()
+                : null}
         </>
     )
 }

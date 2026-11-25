@@ -26,6 +26,7 @@ import {
     detailWorkspaceStyles,
     MoneyValue,
     WorkspaceFactGrid,
+    WorkspaceFactGroup,
     WorkspaceFactItem,
 } from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -1011,33 +1012,60 @@ function StructuredDiffReview({
 
             {applicant ||
             (!counterpartyShown && counterparty) ||
-            commercialFacts.length > 0 ? (
-                <WorkspaceFactGrid columns={3} ariaLabel="单据资料">
-                    {applicant ? (
-                        <WorkspaceFactItem label="申请人" value={applicant} />
-                    ) : null}
-                    {!counterpartyShown && counterparty ? (
-                        <WorkspaceFactItem
-                            label={meta.counterpartyTitle}
-                            value={counterparty}
-                        />
-                    ) : null}
-                    {commercialFacts.map((field, index) => {
-                        const value = sectionValue(field)
-                        return (
-                            <WorkspaceFactItem
-                                key={`${field.label}-${index}`}
-                                label={field.label}
-                                value={value}
-                                numeric={field.numeric}
-                                span={
-                                    isLongFact(field.label, value) ? "full" : 1
-                                }
-                            />
-                        )
-                    })}
-                </WorkspaceFactGrid>
-            ) : null}
+            commercialFacts.length > 0
+                ? (() => {
+                      const shortCount =
+                          (applicant ? 1 : 0) +
+                          (!counterpartyShown && counterparty ? 1 : 0) +
+                          commercialFacts.filter(
+                              (field) =>
+                                  !isLongFact(field.label, sectionValue(field)),
+                          ).length
+                      const factColumns: 2 | 3 | 4 =
+                          shortCount <= 2 ? 2 : shortCount === 4 ? 4 : 3
+                      return (
+                          <WorkspaceFactGroup
+                              title="单据资料"
+                              divider
+                              className="border-b border-border/60 pb-4"
+                          >
+                              <WorkspaceFactGrid
+                                  columns={factColumns}
+                                  ariaLabel="单据资料"
+                              >
+                                  {applicant ? (
+                                      <WorkspaceFactItem
+                                          label="申请人"
+                                          value={applicant}
+                                      />
+                                  ) : null}
+                                  {!counterpartyShown && counterparty ? (
+                                      <WorkspaceFactItem
+                                          label={meta.counterpartyTitle}
+                                          value={counterparty}
+                                      />
+                                  ) : null}
+                                  {commercialFacts.map((field, index) => {
+                                      const value = sectionValue(field)
+                                      return (
+                                          <WorkspaceFactItem
+                                              key={`${field.label}-${index}`}
+                                              label={field.label}
+                                              value={value}
+                                              numeric={field.numeric}
+                                              span={
+                                                  isLongFact(field.label, value)
+                                                      ? "full"
+                                                      : 1
+                                              }
+                                          />
+                                      )
+                                  })}
+                              </WorkspaceFactGrid>
+                          </WorkspaceFactGroup>
+                      )
+                  })()
+                : null}
 
             <section
                 id={linesId}

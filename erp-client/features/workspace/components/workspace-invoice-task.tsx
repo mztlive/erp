@@ -20,6 +20,7 @@ import {
     WorkspaceFactGrid,
     WorkspaceFactGroup,
     WorkspaceFactItem,
+    detailWorkspaceStyles,
     useWorkspaceInspectorMode,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -68,6 +69,7 @@ import {
 } from "@/lib/fixed-decimal"
 import { hasPermission } from "@/lib/permissions"
 import { isResourceAuthorizationPending } from "@/lib/resource-authorization"
+import { cn } from "@/lib/utils"
 import { subscribeWorkspaceHotkeyAction } from "@/lib/workspace-hotkeys"
 import { sourceSalesOrderHref } from "../lib/source-sales-order"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
@@ -762,7 +764,37 @@ function InvoiceCommercialDetails({
 
     return (
         <section aria-label="开票申请资料" className="min-w-0 space-y-4">
-            <WorkspaceFactGroup title="开票资料与抬头">
+            <WorkspaceFactGroup
+                title="开票资料与抬头"
+                className="border-b border-border/60 pb-4"
+                actions={
+                    request.request_no ? (
+                        canOpenRequest ? (
+                            <Link
+                                id={`${idPrefix}-linked-request-${toAutomationIdSegment(request.id)}`}
+                                href={`/finance/customer-accounts/invoice-requests/${encodeURIComponent(request.id)}`}
+                                className={cn(
+                                    "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium",
+                                    detailWorkspaceStyles.inlineLinkButton,
+                                )}
+                            >
+                                <span className="font-normal text-muted-foreground">
+                                    开票申请
+                                </span>
+                                {requestNumber}
+                                <ArrowUpRightIcon
+                                    aria-hidden="true"
+                                    className="size-3.5"
+                                />
+                            </Link>
+                        ) : (
+                            <span className="text-xs text-muted-foreground">
+                                开票申请 {requestNumber}
+                            </span>
+                        )
+                    ) : undefined
+                }
+            >
                 <WorkspaceFactGrid columns={3} ariaLabel="开票资料与抬头">
                     <WorkspaceFactItem
                         label="购方抬头"
@@ -826,21 +858,6 @@ function InvoiceCommercialDetails({
                         numeric
                         selectable={Boolean(sellerTaxNumber)}
                     />
-                    {request.request_no ? (
-                        <WorkspaceFactItem label="开票申请" numeric>
-                            {canOpenRequest ? (
-                                <Link
-                                    id={`${idPrefix}-linked-request-${toAutomationIdSegment(request.id)}`}
-                                    href={`/finance/customer-accounts/invoice-requests/${encodeURIComponent(request.id)}`}
-                                    className="underline decoration-border underline-offset-4 hover:decoration-foreground"
-                                >
-                                    {requestNumber}
-                                </Link>
-                            ) : (
-                                requestNumber
-                            )}
-                        </WorkspaceFactItem>
-                    ) : null}
                     {data.reason ? (
                         <WorkspaceFactItem
                             label="申请事由"

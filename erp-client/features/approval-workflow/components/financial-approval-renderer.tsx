@@ -396,11 +396,15 @@ function FinancialMetaStream({
     counterparty,
     originalDocument,
     facts,
+    kpiColumns,
+    hasLinesBelow,
 }: {
     supplier: boolean
     counterparty?: string
     originalDocument?: BriefSection
     facts: BriefSection[]
+    kpiColumns: 2 | 3
+    hasLinesBelow: boolean
 }) {
     const seen = new Set<string>()
     const uniqueFacts = facts.filter(({ label, value }) => {
@@ -409,10 +413,28 @@ function FinancialMetaStream({
         seen.add(key)
         return true
     })
+    const shortCount =
+        2 +
+        uniqueFacts.filter(
+            ({ label, value }) =>
+                !(
+                    LONG_REASON_PATTERN.test(label) ||
+                    value.length > 30 ||
+                    value.includes("\n")
+                ),
+        ).length
+    const columns: 2 | 3 =
+        shortCount <= 2 || (kpiColumns === 2 && shortCount === 4) ? 2 : 3
 
     return (
-        <WorkspaceFactGroup title="核心业务与原单依据" className="pt-1">
-            <WorkspaceFactGrid columns={3} ariaLabel="核心业务与原单依据">
+        <WorkspaceFactGroup
+            title="核心业务与原单依据"
+            className={cn(
+                "pt-1",
+                hasLinesBelow && "border-b border-border/60 pb-4",
+            )}
+        >
+            <WorkspaceFactGrid columns={columns} ariaLabel="核心业务与原单依据">
                 <WorkspaceFactItem
                     label={supplier ? "往来供应商" : "往来客户"}
                     value={counterparty ?? "未记录往来单位"}
@@ -819,6 +841,8 @@ function FinancialApprovalContent({
                 counterparty={counterparty}
                 originalDocument={originalDocument}
                 facts={metadata}
+                kpiColumns={balance ? 3 : 2}
+                hasLinesBelow={totalLineCount > 0 || riskLabels.length > 0}
             />
 
             {totalLineCount > 0 || riskLabels.length > 0 ? (

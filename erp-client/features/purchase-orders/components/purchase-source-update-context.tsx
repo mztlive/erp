@@ -7,6 +7,7 @@ import {
     QuantityValue,
     WorkspaceFactGrid,
     WorkspaceFactItem,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
@@ -473,34 +474,56 @@ export function PurchaseSourceUpdateContext({
                 </div>
             </dl>
 
-            <WorkspaceFactGrid columns={3}>
-                <WorkspaceFactItem label="来源销售单">
+            <div
+                aria-label="来源销售与采购状态"
+                className="space-y-2 border-y border-border/60 py-3"
+            >
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+                        <span className="text-xs font-medium text-muted-foreground">
+                            来源销售单
+                        </span>
+                        <span className="num select-all text-body-compact font-semibold text-foreground">
+                            {header.salesOrderNo || "—"}
+                        </span>
+                        <span
+                            aria-hidden="true"
+                            className="h-3 w-px bg-border/80"
+                        />
+                        <span className="text-xs font-medium text-muted-foreground">
+                            采购状态
+                        </span>
+                        <StatusBadge
+                            label={order.identity.statusLabel}
+                            tone={order.identity.statusTone}
+                        />
+                    </div>
                     {header.salesOrderId && header.salesOrderNo ? (
-                        <Link
-                            id={`${idPrefix}-sales`}
-                            href={salesHref}
-                            className="num select-all underline decoration-border underline-offset-4 wrap-anywhere hover:decoration-foreground"
-                        >
-                            {header.salesOrderNo}
-                        </Link>
-                    ) : (
-                        "—"
-                    )}
-                </WorkspaceFactItem>
-                <WorkspaceFactItem label="采购状态">
-                    <StatusBadge
-                        label={order.identity.statusLabel}
-                        tone={order.identity.statusTone}
-                    />
-                </WorkspaceFactItem>
+                        <div className="shrink-0">
+                            <Link
+                                id={`${idPrefix}-sales`}
+                                href={salesHref}
+                                className={cn(
+                                    "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium",
+                                    detailWorkspaceStyles.inlineLinkButton,
+                                )}
+                            >
+                                查看来源销售单
+                            </Link>
+                        </div>
+                    ) : null}
+                </div>
                 {update?.lastMaintainNote && !hasRisk ? (
-                    <WorkspaceFactItem
-                        label="维持原因"
-                        value={update.lastMaintainNote}
-                        span="full"
-                    />
+                    <div className="flex items-start gap-2 rounded-r-md border-l-2 border-info bg-info-soft/30 px-2.5 py-1.5 text-xs">
+                        <p className="min-w-0 whitespace-pre-wrap wrap-anywhere text-foreground/90">
+                            <span className="font-medium text-info-soft-foreground">
+                                维持原因：
+                            </span>
+                            {update.lastMaintainNote}
+                        </p>
+                    </div>
                 ) : null}
-            </WorkspaceFactGrid>
+            </div>
             <Collapsible>
                 <CollapsibleTrigger
                     id={`${idPrefix}-commercial-context`}
@@ -514,41 +537,58 @@ export function PurchaseSourceUpdateContext({
                     {header.targetWarehouseName ? "、目标仓" : ""}
                 </CollapsibleTrigger>
                 <CollapsibleContent className="pt-2.5">
-                    <WorkspaceFactGrid columns={3}>
-                        <WorkspaceFactItem
-                            label="付款条件"
-                            value={header.paymentTermLabel}
-                            span={
-                                header.paymentTermLabel &&
-                                header.paymentTermLabel.length > 30
-                                    ? "full"
-                                    : 1
-                            }
-                        />
-                        <WorkspaceFactItem
-                            label="采购类型"
-                            value={PURCHASE_TYPE_LABEL[header.purchaseType]}
-                        />
-                        <WorkspaceFactItem
-                            label="履约责任"
-                            value={
-                                FULFILLMENT_RESPONSIBILITY_LABEL[
-                                    header.fulfillmentResponsibility
-                                ]
-                            }
-                        />
-                        {header.targetWarehouseName ? (
-                            <WorkspaceFactItem
-                                label="目标仓"
-                                value={header.targetWarehouseName}
-                                span={
-                                    header.targetWarehouseName.length > 30
-                                        ? "full"
-                                        : 1
-                                }
-                            />
-                        ) : null}
-                    </WorkspaceFactGrid>
+                    {(() => {
+                        const isLongPayment = Boolean(
+                            header.paymentTermLabel &&
+                            header.paymentTermLabel.length > 30,
+                        )
+                        const isLongWarehouse = Boolean(
+                            header.targetWarehouseName &&
+                            header.targetWarehouseName.length > 30,
+                        )
+                        const shortClauseCount =
+                            (isLongPayment ? 0 : 1) +
+                            2 +
+                            (header.targetWarehouseName && !isLongWarehouse
+                                ? 1
+                                : 0)
+                        const clauseColumns: 2 | 3 | 4 =
+                            shortClauseCount <= 2
+                                ? 2
+                                : shortClauseCount === 4
+                                  ? 4
+                                  : 3
+                        return (
+                            <WorkspaceFactGrid columns={clauseColumns}>
+                                <WorkspaceFactItem
+                                    label="付款条件"
+                                    value={header.paymentTermLabel}
+                                    span={isLongPayment ? "full" : 1}
+                                />
+                                <WorkspaceFactItem
+                                    label="采购类型"
+                                    value={
+                                        PURCHASE_TYPE_LABEL[header.purchaseType]
+                                    }
+                                />
+                                <WorkspaceFactItem
+                                    label="履约责任"
+                                    value={
+                                        FULFILLMENT_RESPONSIBILITY_LABEL[
+                                            header.fulfillmentResponsibility
+                                        ]
+                                    }
+                                />
+                                {header.targetWarehouseName ? (
+                                    <WorkspaceFactItem
+                                        label="目标仓"
+                                        value={header.targetWarehouseName}
+                                        span={isLongWarehouse ? "full" : 1}
+                                    />
+                                ) : null}
+                            </WorkspaceFactGrid>
+                        )
+                    })()}
                 </CollapsibleContent>
             </Collapsible>
         </div>

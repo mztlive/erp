@@ -13,6 +13,7 @@ import {
     ChevronRightIcon,
     CircleQuestionMarkIcon,
     MapPinIcon,
+    MessageSquareTextIcon,
     PaperclipIcon,
     TriangleAlertIcon,
     XIcon,
@@ -24,12 +25,11 @@ import {
     MoneyValue,
     QuantityValue,
     RateValue,
-    WorkspaceFactGrid,
-    WorkspaceFactGroup,
     WorkspaceFactItem,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -278,39 +278,19 @@ export function WorkspaceSalesApproval({
         .filter(Boolean)
         .join(" · ")
 
-    const commercialFacts = [
-        {
-            label: "客户",
-            value:
-                displayName(submission.customer_name) ??
-                displayName(query.data.display.source.customer) ??
-                "未记录客户名称",
-        },
-        {
-            label: "结算主体",
-            value: displayName(submission.settlement_party_name),
-        },
-        { label: "项目", value: displayName(submission.project_name) },
-        {
-            label: "合同",
-            value: displayName(submission.contract_no),
-            numeric: true,
-            selectable: true,
-        },
-        {
-            label: "申请人",
-            value: displayName(
-                query.data.display.source.submitter_name,
-                submission.submitted_by,
-            ),
-        },
-        {
-            label: "提交时间",
-            value: displayUnixSeconds(submission.submitted_at)?.label,
-            numeric: true,
-        },
-        { label: "业务备注", value: submission.business_remark?.trim() },
-    ].filter(({ value }) => Boolean(value && value !== "—"))
+    const customerName =
+        displayName(submission.customer_name) ||
+        displayName(query.data.display.source.customer) ||
+        "未记录客户名称"
+    const projectName = displayName(submission.project_name)
+    const settlementPartyName = displayName(submission.settlement_party_name)
+    const contractNo = displayName(submission.contract_no)
+    const submitterName = displayName(
+        query.data.display.source.submitter_name,
+        submission.submitted_by,
+    )
+    const submittedAtLabel = displayUnixSeconds(submission.submitted_at)?.label
+    const businessRemark = submission.business_remark?.trim()
     const inlineDeliverySectionId = `${prefix}-delivery-inline-section`
     const canOpenMaterials = Boolean(onOpenMaterials || !hideEmbeddedMaterials)
     const showAttachmentShortcut = attachments.length > 0 && canOpenMaterials
@@ -438,11 +418,15 @@ export function WorkspaceSalesApproval({
                 onOpenDelivery={(trigger) => openDelivery(null, trigger)}
             />
 
-            <WorkspaceFactGroup
-                ariaLabel="销售单商业信息"
-                className="pt-3.5 pb-1"
-                actions={
-                    showAttachmentShortcut ? (
+            <section
+                aria-label="销售单商业信息"
+                className="space-y-3 border-b border-border/60 py-3.5"
+            >
+                {showAttachmentShortcut ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-xs font-medium text-muted-foreground">
+                            单据与商业信息
+                        </h3>
                         <Button
                             id={`${prefix}-kpi-open-materials`}
                             type="button"
@@ -460,31 +444,71 @@ export function WorkspaceSalesApproval({
                             />
                             附件（{attachments.length} 份）
                         </Button>
-                    ) : undefined
-                }
-            >
-                <WorkspaceFactGrid columns={3}>
-                    {commercialFacts.map(
-                        ({ label, value, numeric, selectable }) => {
-                            const text = value ?? ""
-                            const isLong =
-                                text.length > 30 ||
-                                text.includes("\n") ||
-                                /(?:说明|备注|地址)/.test(label)
-                            return (
-                                <WorkspaceFactItem
-                                    key={label}
-                                    label={label}
-                                    value={text}
-                                    numeric={numeric}
-                                    selectable={selectable}
-                                    span={isLong ? "full" : 1}
-                                />
-                            )
-                        },
-                    )}
-                </WorkspaceFactGrid>
-            </WorkspaceFactGroup>
+                    </div>
+                ) : null}
+                <dl
+                    aria-label="单据与商业信息"
+                    className="grid grid-cols-1 gap-x-6 gap-y-3 @[480px]/sales-lines:grid-cols-2 @[840px]/sales-lines:grid-cols-4"
+                >
+                    <WorkspaceFactItem label="客户">
+                        <div className="space-y-0.5">
+                            <div>{customerName}</div>
+                            {projectName ? (
+                                <p className="text-xs font-normal text-muted-foreground">
+                                    项目：{projectName}
+                                </p>
+                            ) : null}
+                        </div>
+                    </WorkspaceFactItem>
+                    <WorkspaceFactItem
+                        label="结算主体"
+                        value={settlementPartyName}
+                        tone={settlementPartyName ? "default" : "muted"}
+                    />
+                    <WorkspaceFactItem
+                        label="合同"
+                        numeric={Boolean(contractNo)}
+                        selectable={Boolean(contractNo)}
+                    >
+                        {contractNo ? (
+                            contractNo
+                        ) : (
+                            <Badge variant="neutral">无合同</Badge>
+                        )}
+                    </WorkspaceFactItem>
+                    <WorkspaceFactItem
+                        label="提交信息"
+                        tone={submitterName ? "default" : "muted"}
+                    >
+                        {submitterName ||
+                        (submittedAtLabel && submittedAtLabel !== "—") ? (
+                            <div className="space-y-0.5">
+                                <div>{submitterName || "—"}</div>
+                                {submittedAtLabel &&
+                                submittedAtLabel !== "—" ? (
+                                    <p className="num text-xs font-normal text-muted-foreground">
+                                        {submittedAtLabel}
+                                    </p>
+                                ) : null}
+                            </div>
+                        ) : null}
+                    </WorkspaceFactItem>
+                </dl>
+                {businessRemark ? (
+                    <div className="flex items-start gap-2 rounded-r-md border-l-2 border-info bg-info-soft/30 px-2.5 py-1.5 text-xs">
+                        <MessageSquareTextIcon
+                            aria-hidden="true"
+                            className="mt-0.5 size-3.5 shrink-0 text-info-soft-foreground"
+                        />
+                        <p className="min-w-0 whitespace-pre-wrap wrap-anywhere text-foreground/90">
+                            <span className="font-medium text-info-soft-foreground">
+                                业务备注：
+                            </span>
+                            {businessRemark}
+                        </p>
+                    </div>
+                ) : null}
+            </section>
 
             <WorkspaceSalesComparisonTable
                 rows={rows}

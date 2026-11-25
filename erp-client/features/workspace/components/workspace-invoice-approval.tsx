@@ -25,12 +25,14 @@ import {
     WorkspaceFactItem,
     detailWorkspaceStyles,
 } from "@/components/business"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
 import { displayUnixSeconds } from "@/features/approval-workflow/display"
 import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
 import { toAutomationIdSegment } from "@/lib/automation-id"
+import { displayName } from "@/lib/display-name"
 import { cn } from "@/lib/utils"
 import type { InvoiceApprovalReview } from "../api/invoice-review"
 import { useInvoiceApprovalReview } from "../hooks/use-invoice-review"
@@ -143,7 +145,12 @@ export function WorkspaceInvoiceApproval({
                     source.revision_id !== currentBasis.source.revision_id,
             )),
     )
-    const primarySource = submittedSales[0] ?? currentBasis?.source
+    const isSubmittedSource = submittedSales.length > 0
+    const linkedSources = isSubmittedSource
+        ? submittedSales
+        : currentBasis
+          ? [currentBasis.source]
+          : []
     const submittedFiles = materials.data?.attachments
     const currentFiles =
         currentBasis && (showCurrent || !submittedFiles?.length)
@@ -291,7 +298,11 @@ export function WorkspaceInvoiceApproval({
             <WorkspaceFactGroup
                 title="开票申请与票税要素"
                 ariaLabel="开票申请信息"
-                className="pt-1"
+                className={cn(
+                    "pt-1",
+                    linkedSources.length === 0 &&
+                        "border-b border-border/60 pb-3.5",
+                )}
                 actions={
                     <>
                         {readAt ? (
@@ -399,39 +410,100 @@ export function WorkspaceInvoiceApproval({
                             span="full"
                         />
                     ) : null}
-                    {primarySource ? (
-                        <WorkspaceFactItem label="来源销售单" span="full">
-                            <Button
-                                id={`${prefix}-primary-source-preview-${toAutomationIdSegment(primarySource.revision_id)}`}
-                                type="button"
-                                size="xs"
-                                variant="ghost"
-                                className={cn(
-                                    detailWorkspaceStyles.inlineLinkButton,
-                                    "-ml-1.5 h-auto max-w-full px-1.5 text-left text-body-compact whitespace-normal wrap-anywhere",
-                                )}
-                                onClick={() =>
-                                    preview(
-                                        submittedSales.length
-                                            ? "source-sales"
-                                            : "current-source-sales",
-                                        primarySource.revision_id,
-                                    )
-                                }
-                            >
-                                <FileTextIcon aria-hidden="true" />
-                                <span>
-                                    预览销售单{" "}
-                                    <span className="num">
-                                        {invoiceSourceNumber(primarySource)} · V
-                                        {primarySource.revision_no}
-                                    </span>
-                                </span>
-                            </Button>
-                        </WorkspaceFactItem>
-                    ) : null}
                 </WorkspaceFactGrid>
             </WorkspaceFactGroup>
+
+            {linkedSources.length > 0 ? (
+                <section
+                    aria-label="来源销售单"
+                    className="space-y-2 border-y border-border/60 py-3"
+                >
+                    <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-xs font-medium text-muted-foreground">
+                            来源销售单
+                        </h3>
+                        {linkedSources.length > 1 ? (
+                            <span className="num text-xs text-muted-foreground">
+                                共 {linkedSources.length} 笔
+                            </span>
+                        ) : null}
+                    </div>
+                    <ul className="divide-y divide-border/50 text-body-compact font-normal">
+                        {linkedSources.map((source, index) => {
+                            const customerName = displayName(
+                                source.source.customer,
+                            )
+                            const sourceAmount = source.source.amount_label
+                            return (
+                                <li
+                                    key={source.revision_id}
+                                    className="flex flex-col gap-2 py-2 first:pt-0 last:pb-0 @[640px]/invoice-approval:flex-row @[640px]/invoice-approval:items-start @[640px]/invoice-approval:justify-between @[640px]/invoice-approval:gap-4"
+                                >
+                                    <div className="min-w-0 flex-1 space-y-0.5">
+                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                            <span className="num select-all text-body-compact font-semibold text-foreground">
+                                                {invoiceSourceNumber(source)}
+                                            </span>
+                                            <span className="num text-xs text-muted-foreground">
+                                                V{source.revision_no}
+                                            </span>
+                                            {customerName ? (
+                                                <>
+                                                    <span
+                                                        aria-hidden="true"
+                                                        className="text-xs text-muted-foreground/60"
+                                                    >
+                                                        ·
+                                                    </span>
+                                                    <span className="text-body-compact font-medium text-foreground">
+                                                        {customerName}
+                                                    </span>
+                                                </>
+                                            ) : null}
+                                            {!isSubmittedSource ? (
+                                                <Badge variant="neutral">
+                                                    当前生效版本
+                                                </Badge>
+                                            ) : null}
+                                        </div>
+                                        {sourceAmount ? (
+                                            <p className="num text-xs text-muted-foreground">
+                                                含税总额 {sourceAmount}
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                                        <Button
+                                            id={
+                                                index === 0
+                                                    ? `${prefix}-primary-source-preview-${toAutomationIdSegment(source.revision_id)}`
+                                                    : `${prefix}-source-preview-${toAutomationIdSegment(source.revision_id)}`
+                                            }
+                                            type="button"
+                                            size="xs"
+                                            variant="ghost"
+                                            className={
+                                                detailWorkspaceStyles.subtleButton
+                                            }
+                                            onClick={() =>
+                                                preview(
+                                                    isSubmittedSource
+                                                        ? "source-sales"
+                                                        : "current-source-sales",
+                                                    source.revision_id,
+                                                )
+                                            }
+                                        >
+                                            <FileTextIcon aria-hidden="true" />
+                                            预览销售单
+                                        </Button>
+                                    </div>
+                                </li>
+                            )
+                        })}
+                    </ul>
+                </section>
+            ) : null}
 
             <section aria-label="开票核对依据" className="min-w-0 space-y-3">
                 <h2 className="sr-only">开票核对依据</h2>

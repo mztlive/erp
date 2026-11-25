@@ -359,41 +359,76 @@ export function ReturnFinanceSummary({
             {targetGross !== undefined ||
             refundPlan.length > 0 ||
             returnNumbers.length > 0 ||
-            Boolean(confirmation) ? (
-                <WorkspaceFactGrid columns={3} ariaLabel="退货方案与单据依据">
-                    {targetGross !== undefined ? (
-                        <WorkspaceFactItem label="退货后采购含税目标额" numeric>
-                            <FinanceMoney value={targetGross} />
-                        </WorkspaceFactItem>
-                    ) : null}
-                    {refundPlan.map(({ label, value }) => (
-                        <WorkspaceFactItem key={label} label={label} numeric>
-                            <FinanceMoney value={value} />
-                        </WorkspaceFactItem>
-                    ))}
-                    {returnNumbers.length > 0 ? (
-                        <WorkspaceFactItem
-                            label="退货单"
-                            value={returnNumbers.join("、")}
-                            numeric
-                            selectable
-                            span={returnNumbers.length > 2 ? "full" : 1}
-                        />
-                    ) : null}
-                    {confirmation ? (
-                        <WorkspaceFactItem
-                            label="供应商确认"
-                            value={confirmation}
-                            span={
-                                confirmation.length > 30 ||
-                                confirmation.includes("\n")
-                                    ? "full"
-                                    : 1
-                            }
-                        />
-                    ) : null}
-                </WorkspaceFactGrid>
-            ) : null}
+            Boolean(confirmation)
+                ? (() => {
+                      const shortCount =
+                          (targetGross !== undefined ? 1 : 0) +
+                          refundPlan.length +
+                          (returnNumbers.length > 0 && returnNumbers.length <= 2
+                              ? 1
+                              : 0) +
+                          (confirmation &&
+                          !(
+                              confirmation.length > 30 ||
+                              confirmation.includes("\n")
+                          )
+                              ? 1
+                              : 0)
+                      return (
+                          <div className="border-b border-border/60 pb-3.5">
+                              <WorkspaceFactGrid
+                                  columns={
+                                      shortCount > 0 && shortCount <= 2 ? 2 : 3
+                                  }
+                                  ariaLabel="退货方案与单据依据"
+                              >
+                                  {targetGross !== undefined ? (
+                                      <WorkspaceFactItem
+                                          label="退货后采购含税目标额"
+                                          numeric
+                                      >
+                                          <FinanceMoney value={targetGross} />
+                                      </WorkspaceFactItem>
+                                  ) : null}
+                                  {refundPlan.map(({ label, value }) => (
+                                      <WorkspaceFactItem
+                                          key={label}
+                                          label={label}
+                                          numeric
+                                      >
+                                          <FinanceMoney value={value} />
+                                      </WorkspaceFactItem>
+                                  ))}
+                                  {returnNumbers.length > 0 ? (
+                                      <WorkspaceFactItem
+                                          label="退货单"
+                                          value={returnNumbers.join("、")}
+                                          numeric
+                                          selectable
+                                          span={
+                                              returnNumbers.length > 2
+                                                  ? "full"
+                                                  : 1
+                                          }
+                                      />
+                                  ) : null}
+                                  {confirmation ? (
+                                      <WorkspaceFactItem
+                                          label="供应商确认"
+                                          value={confirmation}
+                                          span={
+                                              confirmation.length > 30 ||
+                                              confirmation.includes("\n")
+                                                  ? "full"
+                                                  : 1
+                                          }
+                                      />
+                                  ) : null}
+                              </WorkspaceFactGrid>
+                          </div>
+                      )
+                  })()
+                : null}
         </section>
     )
 }

@@ -9,6 +9,7 @@ import {
     MoneyValue,
     WorkspaceFactGrid,
     WorkspaceFactItem,
+    detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -74,6 +75,9 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                     </span>
                     <span className="num text-body-compact text-muted-foreground">
                         {lines.length} 项商品 · {pending} 项待发
+                        {mode === "供应商直发" && value("履约批次")
+                            ? ` · 批次 ${value("履约批次")}`
+                            : ""}
                     </span>
                     {workspaceFulfillmentDescriptor(item)?.role ===
                     "procurement" ? (
@@ -82,9 +86,6 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                         />
                     ) : null}
                 </div>
-                <p className="num mt-2 text-xs text-muted-foreground">
-                    发货批次：{value("履约批次") ?? "未提供"}
-                </p>
                 <WorkspaceFactGrid columns={3} className="mt-3">
                     <WorkspaceFactItem
                         label={mode === "供应商直发" ? "供应商" : "发货仓库"}
@@ -93,6 +94,15 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
                         )}
                         emptyText="未提供"
                     />
+                    {mode !== "供应商直发" ? (
+                        <WorkspaceFactItem
+                            label="发货批次"
+                            value={value("履约批次")}
+                            numeric
+                            selectable
+                            emptyText="未提供"
+                        />
+                    ) : null}
                     <WorkspaceFactItem
                         label="履约责任人"
                         value={item.ownerUserLabel}
@@ -251,41 +261,60 @@ export function WorkspaceDeliveryBrief({ item }: { item: WorkspaceWorkItem }) {
             ) : null}
             <section className={sectionClass} aria-label="关联单据">
                 <h4 className="text-body-compact font-semibold">关联单据</h4>
-                <WorkspaceFactGrid columns={3} className="mt-2">
-                    {links.map((field) => {
-                        const isSales = field.label === "来源销售单"
-                        const canLink =
-                            Boolean(field.objectId) &&
-                            (isSales ? canViewSales : canViewPurchase)
-                        return (
-                            <WorkspaceFactItem
-                                key={field.label}
-                                label={field.label}
-                                numeric
-                                selectable
-                                emptyText="未提供"
-                            >
-                                {canLink && field.objectId ? (
-                                    <Link
-                                        id={`workspace-delivery-${identity}-${isSales ? "sales" : "purchase"}`}
-                                        href={`/${isSales ? "sales" : "procurement"}/orders/${encodeURIComponent(field.objectId)}`}
-                                        className="text-primary underline underline-offset-4"
-                                    >
-                                        {field.value}
-                                    </Link>
-                                ) : (
-                                    field.value
-                                )}
-                            </WorkspaceFactItem>
-                        )
-                    })}
-                    <WorkspaceFactItem
-                        label="来源销售单金额"
-                        value={value("来源销售单金额")}
-                        numeric
-                        emptyText="未提供"
-                    />
-                </WorkspaceFactGrid>
+                {links.length > 0 ? (
+                    <ul className="mt-2 divide-y divide-border/50">
+                        {links.map((field) => {
+                            const isSales = field.label === "来源销售单"
+                            const canLink =
+                                Boolean(field.objectId) &&
+                                (isSales ? canViewSales : canViewPurchase)
+                            const salesAmount = isSales
+                                ? value("来源销售单金额")
+                                : undefined
+                            return (
+                                <li
+                                    key={field.label}
+                                    className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0"
+                                >
+                                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                        <span className="text-xs font-medium text-muted-foreground">
+                                            {field.label}
+                                        </span>
+                                        <span className="num select-all text-body-compact font-medium text-foreground">
+                                            {field.value || "未提供"}
+                                        </span>
+                                        {salesAmount ? (
+                                            <span className="num text-xs text-muted-foreground">
+                                                · 含税 {salesAmount}
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                    {canLink && field.objectId ? (
+                                        <Link
+                                            id={`workspace-delivery-${identity}-${isSales ? "sales" : "purchase"}`}
+                                            href={`/${isSales ? "sales" : "procurement"}/orders/${encodeURIComponent(field.objectId)}`}
+                                            className={cn(
+                                                "inline-flex shrink-0 items-center rounded-md px-2 py-1 text-xs font-medium",
+                                                detailWorkspaceStyles.inlineLinkButton,
+                                            )}
+                                        >
+                                            查看单据
+                                        </Link>
+                                    ) : null}
+                                </li>
+                            )
+                        })}
+                    </ul>
+                ) : (
+                    <WorkspaceFactGrid columns={2} className="mt-2">
+                        <WorkspaceFactItem
+                            label="来源销售单金额"
+                            value={value("来源销售单金额")}
+                            numeric
+                            emptyText="未提供"
+                        />
+                    </WorkspaceFactGrid>
+                )}
             </section>
         </>
     )

@@ -1394,7 +1394,7 @@ export function PaymentRequestTaskReview({
                 title={bank ? "付款与收款账户" : "付款与预存款账户"}
             >
                 <WorkspaceFactGrid
-                    columns={3}
+                    columns={bank ? 3 : 2}
                     ariaLabel={bank ? "付款与收款账户" : "付款与预存款账户"}
                 >
                     <WorkspaceFactItem
@@ -1424,32 +1424,33 @@ export function PaymentRequestTaskReview({
                             />
                             <WorkspaceFactItem
                                 label="开户行"
-                                value={bankDisplay}
                                 tone={
                                     bankDisplay === "未记录"
                                         ? "destructive"
                                         : "default"
                                 }
-                            />
+                            >
+                                <div className="space-y-0.5">
+                                    <div>{bankDisplay}</div>
+                                    {revealedRecipient ? (
+                                        <p
+                                            className={cn(
+                                                "num text-xs font-normal",
+                                                revealedRecipient.bank_routing_number
+                                                    ? "select-all text-muted-foreground"
+                                                    : "font-medium text-warning-soft-foreground",
+                                            )}
+                                        >
+                                            联行号：
+                                            {revealedRecipient.bank_routing_number ||
+                                                "未填写"}
+                                        </p>
+                                    ) : null}
+                                </div>
+                            </WorkspaceFactItem>
                             <WorkspaceFactItem label="收款账号" numeric>
                                 {account}
                             </WorkspaceFactItem>
-                            {revealedRecipient ? (
-                                <WorkspaceFactItem
-                                    label="联行号"
-                                    value={
-                                        revealedRecipient.bank_routing_number ||
-                                        "未填写"
-                                    }
-                                    numeric
-                                    selectable
-                                    tone={
-                                        !revealedRecipient.bank_routing_number
-                                            ? "warning"
-                                            : "default"
-                                    }
-                                />
-                            ) : null}
                         </>
                     ) : (
                         <WorkspaceFactItem
@@ -1466,7 +1467,11 @@ export function PaymentRequestTaskReview({
                 </WorkspaceFactGrid>
             </WorkspaceFactGroup>
 
-            <WorkspaceFactGroup divider title="申请信息">
+            <WorkspaceFactGroup
+                divider
+                title="申请信息"
+                className="border-b border-border/60 pb-4"
+            >
                 <WorkspaceFactGrid columns={3} ariaLabel="申请信息">
                     <WorkspaceFactItem
                         label="供应商"
