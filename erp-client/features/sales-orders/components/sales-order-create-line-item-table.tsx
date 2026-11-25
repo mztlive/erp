@@ -17,12 +17,12 @@ import {
 
 import {
     BusinessFailureState,
+    DetailHint,
     DetailInlineTable,
     EditableLineItemTable,
     ValidationSummary,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { DetailHint } from "@/components/business/detail-presentation"
 import { toFieldErrors } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { NativeCheckbox } from "@/components/ui/checkbox"

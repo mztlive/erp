@@ -204,6 +204,9 @@ export function ListWorkspaceFilterField({
     )
 }
 
+/**
+ * @deprecated 旧版内联筛选行过渡包装；新列表页请改用 `ListWorkspaceFilterBar` 的 `primaryFilters` 与托盘内 `ListWorkspaceFilterField`（见 `docs/list-table-design-system.md`）。
+ */
 export function ListWorkspaceInlineFilter({
     htmlFor,
     label,
@@ -233,6 +236,9 @@ export function ListWorkspaceInlineFilter({
     )
 }
 
+/**
+ * @deprecated 过渡辅助文案；列表结果总数已由 `DataTable` / `ListDataTable` 表格工具栏自动承接，新页面无需手动拼接 `resultStatus`。
+ */
 export function listWorkspaceFilterStatusText({
     loading,
     failed,

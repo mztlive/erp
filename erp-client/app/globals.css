@@ -738,38 +738,6 @@
     > [data-section-width="form"] {
     max-width: none;
 }
-.erp-detail-workspace-page [data-slot="approval-surface"] {
-    border-width: 0;
-    border-radius: 0;
-    background-color: transparent;
-    box-shadow: none;
-    --tw-ring-shadow: 0 0 #0000;
-}
-.erp-detail-workspace-page [data-slot="approval-surface"][data-blocked="true"] {
-    border-width: 1px;
-    border-radius: var(--radius-lg);
-    background-color: color-mix(in oklab, var(--destructive) 5%, transparent);
-}
-.erp-detail-workspace-page
-    [data-slot="approval-surface"]:not([data-blocked="true"])
-    > [data-slot="card-header"],
-.erp-detail-workspace-page
-    [data-slot="approval-surface"]:not([data-blocked="true"])
-    > [data-slot="card-content"] {
-    padding-inline: 0;
-}
-.erp-detail-workspace-page
-    [data-slot="approval-surface"]:not([data-blocked="true"])
-    > [data-slot="card-header"] {
-    padding-top: 0;
-    padding-bottom: 0.5rem;
-    border-bottom-width: 0;
-}
-.erp-detail-workspace-page
-    [data-slot="approval-surface"]:not([data-blocked="true"])
-    > [data-slot="card-content"] {
-    padding-bottom: 0;
-}
 [data-slot="toast-viewport"] {
     transition: bottom 150ms ease;
 }
@@ -781,153 +749,6 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     [data-slot="detail-workspace-sub-tabs"]
     + [data-slot="detail-workspace-section"] {
     padding-top: 1rem;
-}
-.erp-detail-workspace-page
-    [data-slot="detail-form-grid"]
-    :is(
-        [data-slot="input"],
-        [data-slot="textarea"],
-        [data-slot="input-group"],
-        [data-slot="popover-trigger"]:has(> [data-slot="date-picker-value"])
-    ):not(:disabled):not([data-disabled]):not([aria-invalid="true"]):not(
-        :has([aria-invalid="true"])
-    ):not(:has(> input:disabled)):not(:has(> textarea:disabled)):not(
-        [data-slot="input-group-control"]
-    ) {
-    border-color: color-mix(in oklab, var(--border) 95%, transparent);
-    background-color: color-mix(in oklab, var(--muted) 26%, transparent);
-}
-.erp-detail-workspace-page
-    [data-slot="detail-form-grid"]
-    :is(
-        [data-slot="input"],
-        [data-slot="textarea"],
-        [data-slot="input-group"],
-        [data-slot="popover-trigger"]:has(> [data-slot="date-picker-value"])
-    ):not(:disabled):not([data-disabled]):not([aria-invalid="true"]):not(
-        :has([aria-invalid="true"])
-    ):not(:has(> input:disabled)):not(:has(> textarea:disabled)):not(
-        [data-slot="input-group-control"]
-    ):hover {
-    border-color: color-mix(in oklab, var(--primary) 42%, transparent);
-    background-color: color-mix(in oklab, var(--muted) 42%, transparent);
-}
-.erp-detail-workspace-page
-    [data-slot="detail-form-grid"]
-    :is(
-        [data-slot="input"]:focus-visible,
-        [data-slot="textarea"]:focus-visible,
-        [data-slot="input-group"]:focus-within,
-        [data-slot="popover-trigger"]:has(
-                > [data-slot="date-picker-value"]
-            ):focus-visible,
-        [data-slot="popover-trigger"]:has(
-                > [data-slot="date-picker-value"]
-            )[aria-expanded="true"]
-    ):not([aria-invalid="true"]):not(:has([aria-invalid="true"])):not(
-        [data-slot="input-group-control"]
-    ) {
-    border-color: var(--primary);
-    background-color: var(--card);
-}
-/* 详情页内嵌可编辑表格（如 SKU 矩阵、销售明细）：纯白表头、无四周边框、单元格内控件静止无框柔底，聚焦亮蓝 */
-.erp-detail-workspace-page [data-slot="detail-inline-table"] {
-    --table-header: var(--card);
-}
-.erp-detail-workspace-page
-    [data-slot="detail-inline-table"]
-    [data-slot="editable-line-item-table"]
-    > .erp-raised-surface {
-    border-width: 0;
-    background-color: transparent;
-}
-.erp-detail-workspace-page
-    [data-slot="detail-inline-table"]
-    [data-slot="table-header"]
-    tr {
-    border-bottom-color: color-mix(in oklab, var(--border) 80%, transparent);
-}
-.erp-detail-workspace-page
-    [data-slot="detail-inline-table"]
-    [data-slot="table-head"]:hover {
-    background-color: transparent;
-    color: color-mix(in oklab, var(--foreground) 65%, transparent);
-}
-.erp-detail-workspace-page
-    [data-slot="detail-inline-table"]
-    [data-slot="table-body"]
-    [data-slot="table-row"] {
-    border-bottom-color: color-mix(in oklab, var(--grid) 75%, transparent);
-}
-.erp-detail-workspace-page
-    [data-slot="detail-inline-table"]:where(:not([data-inset-cells]))
-    :is([data-slot="table-head"], [data-slot="table-cell"]):first-child {
-    padding-inline-start: 0;
-}
-.erp-detail-workspace-page
-    [data-slot="detail-inline-table"]:where(:not([data-inset-cells]))
-    :is([data-slot="table-head"], [data-slot="table-cell"]):last-child {
-    padding-inline-end: 0;
-}
-.erp-detail-workspace-page
-    [data-slot="detail-inline-table"]
-    [data-slot="table-body"]
-    :is(
-        [data-slot="input"],
-        [data-slot="textarea"],
-        [data-slot="input-group"],
-        [data-slot="popover-trigger"]:has(> [data-slot="date-picker-value"])
-    ):not(:disabled):not([data-disabled]):not([aria-invalid="true"]):not(
-        :has([aria-invalid="true"])
-    ):not(:has(> input:disabled)):not(:has(> textarea:disabled)):not(
-        [data-slot="input-group-control"]
-    ) {
-    border-color: transparent;
-    background-color: color-mix(in oklab, var(--muted) 52%, transparent);
-}
-.erp-detail-workspace-page
-    [data-slot="detail-inline-table"]
-    [data-slot="table-body"]
-    :is(
-        [data-slot="input"],
-        [data-slot="textarea"],
-        [data-slot="input-group"],
-        [data-slot="popover-trigger"]:has(> [data-slot="date-picker-value"])
-    ):not(:disabled):not([data-disabled]):not([aria-invalid="true"]):not(
-        :has([aria-invalid="true"])
-    ):not(:has(> input:disabled)):not(:has(> textarea:disabled)):not(
-        [data-slot="input-group-control"]
-    ):hover {
-    background-color: color-mix(in oklab, var(--muted) 85%, transparent);
-}
-.erp-detail-workspace-page
-    [data-slot="detail-inline-table"]
-    [data-slot="table-body"]
-    :is(
-        [data-slot="input"]:focus-visible,
-        [data-slot="textarea"]:focus-visible,
-        [data-slot="input-group"]:focus-within,
-        [data-slot="popover-trigger"]:has(
-                > [data-slot="date-picker-value"]
-            ):focus-visible,
-        [data-slot="popover-trigger"]:has(
-                > [data-slot="date-picker-value"]
-            )[aria-expanded="true"]
-    ):not([aria-invalid="true"]):not(:has([aria-invalid="true"])):not(
-        [data-slot="input-group-control"]
-    ) {
-    border-color: color-mix(in oklab, var(--primary) 65%, transparent);
-    background-color: var(--card);
-    box-shadow: 0 0 0 3px var(--ring);
-}
-.erp-detail-workspace-page
-    [data-slot="detail-inline-table"]
-    [data-slot="table-body"]
-    :is([data-slot="input"], [data-slot="textarea"]):not(
-        [data-slot="input-group-control"]
-    ):disabled {
-    border-color: transparent;
-    background-color: transparent;
 }
 [data-slot="page-scaffold"].erp-embedded-scaffold {
     --scaffold-px: 0px;
@@ -1007,29 +828,6 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     border-radius: 0;
     box-shadow: none;
 }
-[data-slot="page-scaffold"].erp-list-workspace-page
-    > [data-slot="list-work-surface"]
-    :is(
-        [data-slot="list-workspace-views"],
-        [data-slot="list-workspace-toolbar"],
-        [data-slot="list-work-surface-applied-chips"],
-        [data-slot="list-filter-tray"],
-        [data-slot="table-toolbar-wrapper"],
-        [data-slot="data-table-pagination"]
-    ),
-[data-slot="page-scaffold"].erp-list-workspace-page
-    [data-slot="workspace-split-queue"]
-    [data-slot="list-work-surface"]
-    :is(
-        [data-slot="list-workspace-views"],
-        [data-slot="list-workspace-toolbar"],
-        [data-slot="list-work-surface-applied-chips"],
-        [data-slot="list-filter-tray"],
-        [data-slot="table-toolbar-wrapper"],
-        [data-slot="data-table-pagination"]
-    ) {
-    padding-inline: var(--scaffold-px);
-}
 
 /* 通栏纯白工作面内的无框表格（方案 A）：去掉四周边框与圆角，表头改纯白以消除与左侧浅灰导航的粘连，
    全表以水平细线建立秩序，首尾列外沿与页头/筛选栏严格对齐 --scaffold-px。 */
@@ -1049,17 +847,6 @@ body:has([data-slot="detail-save-dock"][data-open="true"])
     [data-slot="table-toolbar-wrapper"] {
     padding-top: 0.625rem;
     border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
-}
-[data-slot="page-scaffold"].erp-list-workspace-page
-    > [data-slot="list-work-surface"]
-    [data-slot="data-table-surface"],
-[data-slot="page-scaffold"].erp-list-workspace-page
-    [data-slot="workspace-split-queue"]
-    [data-slot="list-work-surface"]
-    [data-slot="data-table-surface"] {
-    margin-inline: 0;
-    border: 0;
-    border-radius: 0;
 }
 [data-slot="page-scaffold"].erp-list-workspace-page
     > [data-slot="list-work-surface"]

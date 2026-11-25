@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 
 import {
     BusinessFailureState,
+    DetailHint,
     DetailInlineTable,
     DetailWorkspaceMetricItem,
     DetailWorkspaceMetrics,
@@ -12,7 +13,6 @@ import {
     QuickPreviewSheet,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { DetailHint } from "@/components/business/detail-presentation"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import {

@@ -360,7 +360,7 @@ function PageScaffold({
 const standaloneSurfaceClassName =
     "erp-raised-surface min-w-0 rounded-lg border border-border/90 bg-card shadow-2xs"
 
-/** 嵌入已有表面时去掉卡片壳，只保留分区线。 */
+/** 嵌入已有表面时去掉卡片壳，只保留分区线（仅由 surfaceClassName(true) 内部使用）。 */
 const surfaceFlatClassName =
     "rounded-none border-0 border-b border-grid bg-transparent shadow-none ring-0 last:border-b-0"
 
@@ -417,7 +417,6 @@ export {
     PageActions,
     PageScaffold,
     surfaceClassName,
-    surfaceFlatClassName,
     surfaceInsetClassName,
     workspaceEmbeddedScaffoldClassName,
     workspaceTaskSurfaceClassName,

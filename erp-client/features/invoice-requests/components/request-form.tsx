@@ -15,6 +15,7 @@ import {
 
 import {
     DetailFormGrid,
+    DetailHint,
     DetailInlineTable,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
@@ -28,7 +29,6 @@ import {
     type DetailWorkspaceBackLink,
 } from "@/components/business"
 import { useWorkspaceDirtyState } from "@/lib/workspace-form-guard"
-import { DetailHint } from "@/components/business/detail-presentation"
 import { useAppForm, withForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"

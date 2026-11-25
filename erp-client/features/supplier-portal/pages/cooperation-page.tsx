@@ -1,9 +1,11 @@
 "use client"
 import { useRef, useState } from "react"
+import { detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { z } from "zod"
 import { paymentTermLabel } from "@/lib/business-options"
+import { cn } from "@/lib/utils"
 import { useAppForm } from "@/components/form"
 import {
     PERIODIC_SETTLEMENTS,
@@ -197,12 +199,12 @@ export function PortalCooperationEditor({
         actor?.role !== "maintainer" || mutation.isPending || !!intent.current
     return (
         <form
-            className={
+            className={cn(
                 draft
                     ? "flex flex-col gap-4"
-                    : "space-y-4 rounded-lg border p-5"
-            }
-            data-slot={draft ? "detail-form-grid" : undefined}
+                    : "space-y-4 rounded-lg border p-5",
+                draft && detailWorkspaceStyles.formGridSurface,
+            )}
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()

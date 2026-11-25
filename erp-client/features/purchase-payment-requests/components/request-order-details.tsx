@@ -159,12 +159,14 @@ export function RequestOrderDetails({
                     : "展开采购单，核对提交时依据与当前付款、履约进度。"}
             </p>
             <div
-                data-slot={detailWorkspace ? "detail-inline-table" : undefined}
-                className={
+                className={cn(
                     detailWorkspace
-                        ? detailWorkspaceStyles.inlineTableWrapper
-                        : "overflow-hidden rounded-lg border border-border"
-                }
+                        ? [
+                              detailWorkspaceStyles.inlineTableWrapper,
+                              detailWorkspaceStyles.inlineTableSurface,
+                          ]
+                        : "overflow-hidden rounded-lg border border-border",
+                )}
             >
                 <Table
                     className={cn(

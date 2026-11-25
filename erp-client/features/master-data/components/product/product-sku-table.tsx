@@ -2,8 +2,11 @@
 
 import { CircleHelpIcon } from "lucide-react"
 
-import { DetailInlineTable, MoneyValue } from "@/components/business"
-import { DetailHint } from "@/components/business/detail-presentation"
+import {
+    DetailHint,
+    DetailInlineTable,
+    MoneyValue,
+} from "@/components/business"
 import { MoneyInput } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

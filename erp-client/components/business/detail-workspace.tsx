@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowLeftIcon } from "lucide-react"
+import { ArrowLeftIcon, InfoIcon } from "lucide-react"
 
 import { detailWorkspaceStyles } from "@/components/business/detail-workspace-styles"
 import type {
@@ -17,6 +17,11 @@ import {
     LoadingButton,
     type LoadingButtonProps,
 } from "@/components/ui/loading-button"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toAutomationIdSegment } from "@/lib/automation-id"
@@ -1359,5 +1364,38 @@ export function DetailWorkspacePage({
         <PageScaffold density="compact" className={cn(styles.page, className)}>
             {children}
         </PageScaffold>
+    )
+}
+
+/** 业务口径按需查看；支持鼠标、键盘和触屏。 */
+export function DetailHint({
+    id,
+    label,
+    icon,
+    children,
+}: {
+    id: string
+    label: string
+    /** 缺省为信息图标；表头帮助可传问号图标。 */
+    icon?: React.ReactNode
+    children: React.ReactNode
+}) {
+    return (
+        <Popover>
+            <PopoverTrigger
+                id={id}
+                aria-label={`${label}说明`}
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+                {icon ?? <InfoIcon className="size-3.5" aria-hidden="true" />}
+            </PopoverTrigger>
+            <PopoverContent
+                className="max-w-[calc(100vw-2rem)] rounded-lg text-xs"
+                side="bottom"
+                align="start"
+            >
+                {children}
+            </PopoverContent>
+        </Popover>
     )
 }

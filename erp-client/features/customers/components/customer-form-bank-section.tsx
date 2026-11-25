@@ -274,16 +274,13 @@ export function BankAccountRowsSection({
                                         </div>
 
                                         <FieldGroup
-                                            data-slot={
-                                                grouped
-                                                    ? "detail-form-grid"
-                                                    : "field-group"
-                                            }
-                                            className={
+                                            className={cn(
                                                 grouped
                                                     ? "grid gap-x-4 gap-y-3 sm:grid-cols-12"
-                                                    : "grid gap-2 sm:grid-cols-2"
-                                            }
+                                                    : "grid gap-2 sm:grid-cols-2",
+                                                grouped &&
+                                                    detailWorkspaceStyles.formGridSurface,
+                                            )}
                                         >
                                             <form.AppField
                                                 name={`bankAccounts[${index}].accountName`}

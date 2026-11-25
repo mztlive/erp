@@ -1,12 +1,16 @@
 import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import * as React from "react"
-import { DetailWorkspaceSection } from "@/components/business"
+import {
+    DetailWorkspaceSection,
+    detailWorkspaceStyles,
+} from "@/components/business"
 import { ChevronDownIcon, InfoIcon } from "lucide-react"
 import type { ResponsibilityStatus } from "@/components/business/workflow-actions"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
 
 import { ReplacementWorkItemSearchCombobox } from "../../components/replacement-work-item-search-combobox"
 import type { TerminalConfirm } from "../../components/terminal-action-dialog"
@@ -157,8 +161,11 @@ export function IntegrationActionZone({
 
             {hasTaskActions || canClose || direct ? (
                 <div
-                    data-slot={detailWorkspace ? "detail-form-grid" : undefined}
-                    className="max-w-2xl space-y-2"
+                    className={cn(
+                        "max-w-2xl space-y-2",
+                        detailWorkspace &&
+                            detailWorkspaceStyles.formGridSurface,
+                    )}
                 >
                     <Label htmlFor="integration-action-comment">
                         处理说明（可选）

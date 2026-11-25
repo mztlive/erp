@@ -3,12 +3,12 @@
 import type { ReactNode } from "react"
 
 import {
+    DetailHint,
     DetailWorkspaceMetricItem,
     DetailWorkspaceMetrics,
     DetailWorkspaceSection,
     MoneyValue,
 } from "@/components/business"
-import { DetailHint } from "@/components/business/detail-presentation"
 import { Button } from "@/components/ui/button"
 import { sumFixed } from "@/lib/fixed-decimal"
 import type { useInvoiceRequestAvailability } from "../hooks/queries"

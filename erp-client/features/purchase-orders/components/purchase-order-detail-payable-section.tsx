@@ -6,12 +6,12 @@ import Link from "next/link"
 import {
     BusinessFailureState,
     BusinessStatusBadge,
+    DetailHint,
     MoneyValue,
     WorkspaceFactGrid,
     WorkspaceFactItem,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { DetailHint } from "@/components/business/detail-presentation"
 import { Button } from "@/components/ui/button"
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge"
 import { useAccountProfileQuery } from "@/features/auth/queries"

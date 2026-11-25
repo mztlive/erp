@@ -21,6 +21,7 @@ export const listWorkspaceStyles = {
         "flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1.5 [&_[data-slot=button]]:h-control [&_[data-slot=button]]:px-3",
     quietButton:
         "text-body-compact font-normal text-muted-foreground shadow-none hover:bg-muted/80 hover:text-foreground",
+    /** @deprecated 请改用 `ListWorkspacePage` 的 `actions`（`tier: "quiet"`）或 `listWorkspaceStyles.quietButton`。 */
     exportButton: "text-body-compact shadow-none",
     workSurface:
         "flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border/75 bg-card",

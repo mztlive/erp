@@ -60,6 +60,9 @@ interface DocumentSummaryProps extends Omit<
     columns?: DocumentSummaryColumns
 }
 
+/**
+ * @deprecated 过渡旧摘要组件；请改用 `DetailWorkspaceFacts` + `DetailWorkspaceFact`（只读事实栅格）或 `DetailWorkspaceMetrics`（KPI 摘要带）。
+ */
 function DocumentSummary({
     items,
     columns = "two",
@@ -109,6 +112,9 @@ interface DocumentSectionProps extends Omit<
     defaultOpen?: boolean
 }
 
+/**
+ * @deprecated 过渡旧分区组件；请改用 `DetailWorkspaceSection`（见 `docs/detail-page-design-system.md`）。
+ */
 function DocumentSection({
     title,
     description,

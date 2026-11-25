@@ -1,7 +1,9 @@
 "use client"
 import { useRef, useState } from "react"
 import { z } from "zod"
+import { detailWorkspaceStyles } from "@/components/business"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { useAppForm } from "@/components/form"
 import { portalSaveApplication } from "../api"
@@ -159,12 +161,12 @@ export function PortalTermsForm({
         offering?.writable === false
     return (
         <form
-            className={
+            className={cn(
                 sku
                     ? "space-y-5 rounded-lg border bg-card p-5"
-                    : "flex flex-col gap-5"
-            }
-            data-slot={sku ? undefined : "detail-form-grid"}
+                    : "flex flex-col gap-5",
+                !sku && detailWorkspaceStyles.formGridSurface,
+            )}
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit()

@@ -33,7 +33,11 @@ import {
     valuesFromTerms,
 } from "../lib/forms"
 import { PortalCommandConflict } from "../components/command-conflict"
-import { BusinessFailureState } from "@/components/business"
+import {
+    BusinessFailureState,
+    detailWorkspaceStyles,
+} from "@/components/business"
+import { cn } from "@/lib/utils"
 import { PortalError, PortalSurface } from "../components/surface"
 import { usePortalProfile } from "../components/portal-session"
 import { PortalCategorySuggestion } from "../components/category-suggestion"
@@ -387,12 +391,12 @@ export function PortalNewProductEditor({
             .map((row) => ({ value: row.id, label: row.path ?? row.name }))
     return (
         <form
-            className={
+            className={cn(
                 inDetailWorkspace
                     ? "flex flex-col gap-6"
-                    : "space-y-6 rounded-lg border bg-card p-5"
-            }
-            data-slot={inDetailWorkspace ? "detail-form-grid" : undefined}
+                    : "space-y-6 rounded-lg border bg-card p-5",
+                inDetailWorkspace && detailWorkspaceStyles.formGridSurface,
+            )}
             onSubmit={(event) => {
                 event.preventDefault()
                 void form.handleSubmit().catch(setError)

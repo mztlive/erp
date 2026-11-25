@@ -3,11 +3,11 @@
 import { CircleHelpIcon } from "lucide-react"
 
 import {
+    DetailHint,
     MoneyValue,
     taxAmountToneClass,
     type EditableLineItemColumn,
 } from "@/components/business"
-import { DetailHint } from "@/components/business/detail-presentation"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { SalesOrderCreateLinePriceEditor } from "@/features/sales-orders/components/sales-order-create-line-price-editor"
 import { SalesOrderCreateLineSkuEditor } from "@/features/sales-orders/components/sales-order-create-line-sku-editor"

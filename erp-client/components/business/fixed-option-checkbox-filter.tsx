@@ -29,6 +29,8 @@ export type FixedOptionCheckboxFilterProps<Value extends string = string> = {
  * 固定枚举多选筛选。
  *
  * 选项横向铺开，每个选项是独立复选框，适用于需要同时命中多个固定枚举值的筛选条件。
+ *
+ * @deprecated 过渡旧筛选组件；新列表页请改用 `MultiOptionCombobox`（可搜索多选筛选控件，见 `docs/list-table-design-system.md`）。
  */
 export function FixedOptionCheckboxFilter<Value extends string>({
     label,

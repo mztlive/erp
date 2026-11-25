@@ -4,20 +4,14 @@ import * as React from "react"
 import {
     CircleCheckIcon,
     Clock3Icon,
-    EyeIcon,
     FilterIcon,
     ListChecksIcon,
-    RotateCcwIcon,
-    SaveIcon,
     ShieldAlertIcon,
     ShieldCheckIcon,
     TriangleAlertIcon,
-    UserRoundIcon,
 } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
-import { LoadingButton } from "@/components/ui/loading-button"
 import {
     Card,
     CardContent,
@@ -25,19 +19,7 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
-import {
-    Dialog,
-    DialogClose,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/ui/status-badge"
-import { useControllableDialog } from "@/components/business/workflow-actions"
-import type { ControllableDialogProps } from "@/components/business/workflow-actions"
 
 export type BatchImpactPreviewProps = Omit<
     React.ComponentProps<typeof Card>,
@@ -200,204 +182,7 @@ function BatchImpactPreview({
     )
 }
 
-export type ConflictAction = "reload" | "save-copy" | "compare"
-
-export type ConflictResolutionDialogProps = ControllableDialogProps & {
-    trigger?: React.ReactElement
-    title?: string
-    description?: React.ReactNode
-    currentVersion: React.ReactNode
-    localBaseline: React.ReactNode
-    actor: React.ReactNode
-    changedAt?: React.ReactNode
-    diff: React.ReactNode
-    pendingAction?: ConflictAction
-    onReload: () => void
-    onSaveCopy: () => void
-    onCompare: () => void
-    id?: string
-    idPrefix?: string
-}
-
-/** 并发版本冲突的差异查看与安全处理入口。 */
-function ConflictResolutionDialog({
-    trigger,
-    title = "数据已更新",
-    description = "当前数据已经更新，你输入的内容不能直接覆盖。",
-    currentVersion,
-    localBaseline,
-    actor,
-    changedAt,
-    diff,
-    pendingAction,
-    onReload,
-    onSaveCopy,
-    onCompare,
-    id,
-    idPrefix,
-    open,
-    defaultOpen,
-    onOpenChange,
-}: ConflictResolutionDialogProps) {
-    const baseId = idPrefix ?? id ?? "workflow-conflict-dialog"
-    const [resolvedOpen, setOpen] = useControllableDialog({
-        open,
-        defaultOpen,
-        onOpenChange,
-    })
-    const isPending = pendingAction != null
-
-    return (
-        <Dialog
-            open={resolvedOpen}
-            onOpenChange={(next) => {
-                if (!isPending) setOpen(next)
-            }}
-        >
-            {trigger ? <DialogTrigger render={trigger} /> : null}
-            <DialogContent
-                size="lg"
-                closeButtonId={`${baseId}-close`}
-                showCloseButton={!isPending}
-            >
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                        <TriangleAlertIcon
-                            aria-hidden="true"
-                            className="size-4 text-destructive"
-                        />
-                        {title}
-                    </DialogTitle>
-                    <DialogDescription>{description}</DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-4">
-                    <dl className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-lg border border-border bg-muted p-4">
-                            <dt className="text-xs font-medium text-muted-foreground">
-                                当前系统版本
-                            </dt>
-                            <dd className="mt-2 flex flex-wrap items-center gap-2">
-                                <StatusBadge
-                                    tone="success"
-                                    icon={CircleCheckIcon}
-                                    label="当前有效"
-                                />
-                                <span className="num font-medium text-foreground">
-                                    {currentVersion}
-                                </span>
-                            </dd>
-                        </div>
-                        <div className="rounded-lg border border-border bg-muted p-4">
-                            <dt className="text-xs font-medium text-muted-foreground">
-                                你输入的内容版本
-                            </dt>
-                            <dd className="mt-2 flex flex-wrap items-center gap-2">
-                                <StatusBadge
-                                    tone="warning"
-                                    icon={Clock3Icon}
-                                    label="数据已过期"
-                                />
-                                <span className="num font-medium text-foreground">
-                                    {localBaseline}
-                                </span>
-                            </dd>
-                        </div>
-                    </dl>
-
-                    <Alert>
-                        <UserRoundIcon aria-hidden="true" />
-                        <AlertTitle>当前版本的最近变更</AlertTitle>
-                        <AlertDescription>
-                            <span className="font-medium text-foreground">
-                                {actor}
-                            </span>
-                            {changedAt != null ? (
-                                <span className="num ml-2">{changedAt}</span>
-                            ) : null}
-                        </AlertDescription>
-                    </Alert>
-
-                    <section aria-labelledby="conflict-diff-title">
-                        <h3
-                            id="conflict-diff-title"
-                            className="flex items-center gap-2 text-body-compact font-medium text-foreground"
-                        >
-                            <ListChecksIcon
-                                aria-hidden="true"
-                                className="size-4"
-                            />
-                            版本差异
-                        </h3>
-                        <div className="mt-2 rounded-lg border border-border bg-card p-4">
-                            {diff}
-                        </div>
-                    </section>
-                </div>
-
-                <DialogFooter>
-                    <DialogClose
-                        id={`${baseId}-cancel`}
-                        render={
-                            <Button variant="outline" disabled={isPending} />
-                        }
-                    >
-                        取消
-                    </DialogClose>
-                    <LoadingButton
-                        id={`${baseId}-compare`}
-                        type="button"
-                        loading={pendingAction === "compare"}
-                        variant="outline"
-                        disabled={isPending}
-                        onClick={onCompare}
-                    >
-                        {!(pendingAction === "compare") ? (
-                            <EyeIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                        ) : null}
-                        查看差异
-                    </LoadingButton>
-                    <LoadingButton
-                        id={`${baseId}-save-copy`}
-                        type="button"
-                        loading={pendingAction === "save-copy"}
-                        variant="secondary"
-                        disabled={isPending}
-                        onClick={onSaveCopy}
-                    >
-                        {!(pendingAction === "save-copy") ? (
-                            <SaveIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                        ) : null}
-                        保留为新草稿
-                    </LoadingButton>
-                    <LoadingButton
-                        id={`${baseId}-reload`}
-                        type="button"
-                        loading={pendingAction === "reload"}
-                        disabled={isPending}
-                        onClick={onReload}
-                    >
-                        {!(pendingAction === "reload") ? (
-                            <RotateCcwIcon
-                                data-icon="inline-start"
-                                aria-hidden="true"
-                            />
-                        ) : null}
-                        重新加载
-                    </LoadingButton>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    )
-}
-
-export { BatchImpactPreview, ConflictResolutionDialog }
+export { BatchImpactPreview }
 
 export {
     FormalActionConfirmDialog,

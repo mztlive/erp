@@ -160,6 +160,8 @@ interface BusinessTableFrameProps extends Omit<
  * 列表工作面：工具条与结果区沿同一基线排列，以分隔线划分区域。
  * showHeader 时展示结果标题与说明，分页保持表格既有位置。
  * 页头标题由 PageHeader 承担，这里的 title 仅作辅助标题。
+ *
+ * @deprecated 过渡旧列表容器；请改用纯白通栏的 `ListWorkSurface` / `ListWorkspacePage`（见 `docs/list-table-design-system.md`）。
  */
 function BusinessTableFrame({
     title,
