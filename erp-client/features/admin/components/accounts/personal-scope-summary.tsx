@@ -86,7 +86,7 @@ export function ProposedScopeSummary({
                             ? "全部可配置操作"
                             : group.actions.map(actionLabel).join("、")}
                     </p>
-                    <p className="text-body-compact leading-6 wrap-anywhere">
+                    <p className="text-body-compact wrap-anywhere">
                         {group.description}
                     </p>
                 </div>

@@ -1,7 +1,6 @@
 "use client"
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangleIcon, ChevronRightIcon } from "lucide-react"
 
 import {
     APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
@@ -12,8 +11,8 @@ import {
     PurchaseProfitValue,
     QuantityValue,
     RateValue,
+    TaskRiskSummaryBar,
 } from "@/components/business"
-import { Button } from "@/components/ui/button"
 import {
     Table,
     TableBody,
@@ -158,45 +157,27 @@ export function CopyPurchaseLines({
                     {fulfillmentSummary ? ` · ${fulfillmentSummary}` : null}
                 </span>
             </div>
-            {riskCount > 0 ? (
-                <div
-                    role="region"
-                    aria-label="采购明细风险提示"
-                    className={cn(
-                        "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-r-md border-l-2 px-3 py-2 text-xs",
-                        hasHighRisk
-                            ? "border-l-destructive bg-destructive-soft/65 text-destructive-soft-foreground"
-                            : "border-l-warning bg-warning-soft/75 text-warning-soft-foreground",
-                    )}
-                >
-                    <span className="inline-flex items-center gap-1.5 font-medium">
-                        <AlertTriangleIcon
-                            aria-hidden="true"
-                            className="size-3.5 shrink-0"
-                        />
-                        <span>
-                            存在 <span className="num">{riskCount}</span>{" "}
-                            项采购风险明细
-                        </span>
+            <TaskRiskSummaryBar
+                riskCount={riskCount}
+                severity={hasHighRisk ? "destructive" : "warning"}
+                aria-label="采购明细风险提示"
+                leadLabel={null}
+                summary={
+                    <span className="font-medium">
+                        存在 <span className="num">{riskCount}</span>{" "}
+                        项采购风险明细
                     </span>
-                    <Button
-                        id={`${idPrefix}-locate-risks`}
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        className={cn(
-                            "h-control-xs text-xs font-medium",
-                            hasHighRisk
-                                ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
-                        )}
-                        onClick={locateRisks}
-                    >
-                        仅看风险项（<span className="num">{riskCount}</span>）
-                        <ChevronRightIcon aria-hidden="true" />
-                    </Button>
-                </div>
-            ) : null}
+                }
+                actions={[
+                    {
+                        id: "locate-risks",
+                        buttonId: `${idPrefix}-locate-risks`,
+                        label: "仅看风险项",
+                        count: riskCount,
+                        onClick: locateRisks,
+                    },
+                ]}
+            />
             {showFilters ? (
                 <ApprovalLineFilterBar
                     idPrefix={idPrefix}

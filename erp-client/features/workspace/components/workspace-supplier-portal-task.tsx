@@ -2,7 +2,10 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { PanelRightCloseIcon, PanelRightOpenIcon } from "lucide-react"
-import { DetailWorkspaceMeta } from "@/components/business"
+import {
+    DetailWorkspaceMeta,
+    WorkspaceProcessingPane,
+} from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
     PortalReviewEvidence,
@@ -16,7 +19,6 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { subscribeWorkspaceHotkeyAction } from "@/lib/workspace-hotkeys"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import type { WorkspaceWorkItem } from "../types"
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 const useIsomorphicLayoutEffect =

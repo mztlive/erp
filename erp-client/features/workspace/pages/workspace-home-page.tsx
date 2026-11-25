@@ -28,7 +28,7 @@ import {
     WorkspaceHotkeyCheatSheetButton,
     dispatchWorkspaceHotkeyAction,
     useWorkspaceHotkeys,
-} from "../hooks/use-workspace-hotkeys"
+} from "@/hooks/use-workspace-hotkeys"
 import { deriveWorkItemsFreshness } from "../lib/freshness"
 import { usePaymentExport } from "../hooks/use-payment-export"
 import {

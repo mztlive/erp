@@ -69,7 +69,7 @@ export function InboxPopover() {
             >
                 <InboxIcon className="size-4" aria-hidden="true" />
                 {unread ? (
-                    <span className="num pointer-events-none absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-tiny font-semibold leading-none text-destructive-foreground ring-2 ring-card">
+                    <span className="num pointer-events-none absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-tiny font-semibold text-destructive-foreground ring-2 ring-card">
                         {unread > 99 ? "99+" : unread}
                     </span>
                 ) : null}
@@ -154,7 +154,7 @@ export function InboxPopover() {
                                     }
                                     onClick={() => void openMessage(message)}
                                     className={cn(
-                                        "w-full rounded-xl p-3 text-left transition-colors hover:bg-muted focus-visible:outline-ring disabled:opacity-60",
+                                        "w-full rounded-lg p-3 text-left transition-colors hover:bg-muted focus-visible:outline-ring disabled:opacity-60",
                                         message.read_at == null &&
                                             "bg-muted/60",
                                     )}
@@ -170,7 +170,7 @@ export function InboxPopover() {
                                             />
                                         ) : null}
                                     </div>
-                                    <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">
+                                    <p className="mt-1 whitespace-pre-wrap break-words text-xs text-muted-foreground">
                                         {message.body}
                                     </p>
                                     <time className="num mt-2 block text-xs text-muted-foreground">

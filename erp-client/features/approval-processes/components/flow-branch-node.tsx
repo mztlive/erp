@@ -138,7 +138,7 @@ export function FlowBranchNode({
     return (
         <div
             className={cn(
-                "relative h-full rounded-xl border border-info-border bg-info-soft/40 shadow-sm",
+                "relative h-full rounded-lg border border-info-border bg-info-soft/40 shadow-sm",
                 selected && "ring-2 ring-info/20",
             )}
         >

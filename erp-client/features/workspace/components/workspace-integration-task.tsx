@@ -1,5 +1,9 @@
 "use client"
 
+import {
+    WorkspaceProcessingPane,
+    WorkspaceCompactTaskHeader,
+} from "@/components/business"
 import { useWorkspaceInspectorMode } from "@/components/business/workspace-task-pane"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { IntegrationErrorsPage } from "@/features/integration-errors/pages/integration-errors-page"
@@ -7,14 +11,10 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { displayName } from "@/lib/display-name"
 import { dispatchWorkspaceHotkeyAction } from "@/lib/workspace-hotkeys"
 
-import { useWorkspaceHotkeys } from "../hooks/use-workspace-hotkeys"
+import { useWorkspaceHotkeys } from "@/hooks/use-workspace-hotkeys"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import type { WorkspaceWorkItem } from "../types"
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
-import {
-    WorkspaceCompactTaskHeader,
-    WorkspaceTaskIdentityHeader,
-} from "./workspace-task-identity-header"
+import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 export function WorkspaceIntegrationTask({
     item,

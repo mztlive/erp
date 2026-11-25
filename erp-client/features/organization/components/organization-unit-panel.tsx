@@ -223,7 +223,7 @@ export function OrganizationUnitPanel({
                         ) : null}
                     </div>
                     {node.members.length === 0 ? (
-                        <p className="rounded-lg bg-muted/30 px-4 py-8 text-center text-body-compact leading-6 text-muted-foreground">
+                        <p className="rounded-lg bg-muted/30 px-4 py-8 text-center text-body-compact text-muted-foreground">
                             当前部门还没有成员，请点击「添加成员」选择已有账号。
                         </p>
                     ) : (

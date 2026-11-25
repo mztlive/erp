@@ -1,6 +1,6 @@
 "use client"
 
-import { MetricItem, MetricStrip } from "@/components/business"
+import { DecisionKpiBar, DecisionKpiCell } from "@/components/business"
 import type { IntegrationQueueView } from "../../types"
 
 export function IntegrationErrorMetricStrip({
@@ -9,24 +9,27 @@ export function IntegrationErrorMetricStrip({
     metrics: IntegrationQueueView["metrics"]
 }) {
     return (
-        <MetricStrip columns={5}>
-            <MetricItem
+        <DecisionKpiBar
+            ariaLabel="异常队列指标"
+            gridClassName="grid-cols-2 @[640px]/decision-kpi:grid-cols-3 @[960px]/decision-kpi:grid-cols-5"
+        >
+            <DecisionKpiCell
                 id="integration-metrics-result-unknown"
                 label="结果未知"
                 value={metrics.resultUnknown}
             />
-            <MetricItem label="待人工" value={metrics.manualRequired} />
-            <MetricItem
+            <DecisionKpiCell label="待人工" value={metrics.manualRequired} />
+            <DecisionKpiCell
                 id="integration-metrics-security-faults"
                 label="安全故障"
                 value={metrics.securityFaults}
             />
-            <MetricItem
+            <DecisionKpiCell
                 id="integration-metrics-open-differences"
                 label="未解决差异"
                 value={metrics.openDifferences}
             />
-            <MetricItem label="最长滞留" value={metrics.longestAgeLabel} />
-        </MetricStrip>
+            <DecisionKpiCell label="最长滞留" value={metrics.longestAgeLabel} />
+        </DecisionKpiBar>
     )
 }

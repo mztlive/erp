@@ -227,13 +227,14 @@ export function SalesDeliveryViews({
                         />
                         <Input
                             id={`${idPrefix}-search`}
+                            size="sm"
                             aria-label="搜索地址、收货人或商品"
                             placeholder="搜索地址、收货人或商品"
                             value={search}
                             onChange={(event) =>
                                 setSearch(event.currentTarget.value)
                             }
-                            className="h-control-sm pr-8 pl-8 text-xs"
+                            className="pr-8 pl-8"
                         />
                         {search ? (
                             <Button

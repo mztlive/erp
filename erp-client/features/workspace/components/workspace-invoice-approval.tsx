@@ -7,19 +7,15 @@ import {
     type ReactNode,
     type RefObject,
 } from "react"
-import {
-    ChevronRightIcon,
-    FileTextIcon,
-    PaperclipIcon,
-    RefreshCwIcon,
-    TriangleAlertIcon,
-} from "lucide-react"
+import { FileTextIcon, PaperclipIcon, RefreshCwIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
     DetailWorkspaceSection,
     MoneyValue,
     RateValue,
+    TaskRiskSummaryBar,
+    WorkspaceApprovalResubmissionBanner,
     WorkspaceFactGrid,
     WorkspaceFactGroup,
     WorkspaceFactItem,
@@ -37,7 +33,6 @@ import { cn } from "@/lib/utils"
 import type { InvoiceApprovalReview } from "../api/invoice-review"
 import { useInvoiceApprovalReview } from "../hooks/use-invoice-review"
 import type { WorkspaceWorkItem } from "../types"
-import { WorkspaceApprovalResubmissionBanner } from "./workspace-approval-resubmission-banner"
 import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
 import {
     InvoiceHistoryEvidence,
@@ -221,61 +216,54 @@ export function WorkspaceInvoiceApproval({
             ) : null}
 
             {!hideTopBanners && (shortage || sourceWarnings.length) ? (
-                <div
-                    role="alert"
-                    data-slot="invoice-approval-risk-strip"
-                    className={cn(
-                        "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border-l-2 px-3 py-1.5 text-xs",
+                <TaskRiskSummaryBar
+                    dataSlot="invoice-approval-risk-strip"
+                    severity={shortage ? "destructive" : "warning"}
+                    leadLabel={null}
+                    summary={
+                        <>
+                            {shortage ? (
+                                <span className="font-medium">
+                                    开票占用超额{" "}
+                                    <MoneyValue
+                                        value={shortage}
+                                        display="exact"
+                                        inheritColor
+                                    />
+                                </span>
+                            ) : null}
+                            {shortage && sourceWarnings.length ? (
+                                <span
+                                    aria-hidden="true"
+                                    className="mx-1.5 opacity-60"
+                                >
+                                    ·
+                                </span>
+                            ) : null}
+                            {sourceWarnings.length ? (
+                                <span>需核对 {sourceWarnings.length} 项</span>
+                            ) : null}
+                        </>
+                    }
+                    actions={[
                         shortage
-                            ? "border-l-destructive bg-destructive-soft/65 text-destructive-soft-foreground"
-                            : "border-l-warning bg-warning-soft/75 text-warning-soft-foreground",
-                    )}
-                >
-                    <p className="num flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                        <TriangleAlertIcon
-                            aria-hidden="true"
-                            className="size-3.5 shrink-0"
-                        />
-                        {shortage ? (
-                            <span className="font-medium">
-                                开票占用超额{" "}
-                                <MoneyValue
-                                    value={shortage}
-                                    display="exact"
-                                    inheritColor
-                                />
-                            </span>
-                        ) : null}
-                        {shortage && sourceWarnings.length ? (
-                            <span aria-hidden="true" className="opacity-60">
-                                ·
-                            </span>
-                        ) : null}
-                        {sourceWarnings.length ? (
-                            <span>需核对 {sourceWarnings.length} 项</span>
-                        ) : null}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-1">
-                        {shortage ? (
-                            <RiskJumpButton
-                                id={`${prefix}-locate-quota`}
-                                severe
-                                onClick={() => locateRisk("quota-evidence")}
-                            >
-                                定位超额说明
-                            </RiskJumpButton>
-                        ) : null}
-                        {sourceWarnings.length ? (
-                            <RiskJumpButton
-                                id={`${prefix}-locate-warnings`}
-                                severe={Boolean(shortage)}
-                                onClick={() => locateRisk("source-warnings")}
-                            >
-                                查看异常依据
-                            </RiskJumpButton>
-                        ) : null}
-                    </div>
-                </div>
+                            ? {
+                                  id: "locate-quota",
+                                  buttonId: `${prefix}-locate-quota`,
+                                  label: "定位超额说明",
+                                  onClick: () => locateRisk("quota-evidence"),
+                              }
+                            : null,
+                        sourceWarnings.length
+                            ? {
+                                  id: "locate-warnings",
+                                  buttonId: `${prefix}-locate-warnings`,
+                                  label: "查看异常依据",
+                                  onClick: () => locateRisk("source-warnings"),
+                              }
+                            : null,
+                    ]}
+                />
             ) : null}
 
             <InvoiceApprovalKpis
@@ -707,37 +695,6 @@ export function WorkspaceInvoiceApproval({
                 </DetailWorkspaceSection>
             ) : null}
         </div>
-    )
-}
-
-function RiskJumpButton({
-    id,
-    severe,
-    onClick,
-    children,
-}: {
-    id: string
-    severe: boolean
-    onClick: () => void
-    children: ReactNode
-}) {
-    return (
-        <Button
-            id={id}
-            type="button"
-            variant="ghost"
-            size="xs"
-            className={cn(
-                "h-control-xs gap-0.5 px-1.5 text-xs font-medium shadow-none",
-                severe
-                    ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                    : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
-            )}
-            onClick={onClick}
-        >
-            {children}
-            <ChevronRightIcon aria-hidden="true" />
-        </Button>
     )
 }
 

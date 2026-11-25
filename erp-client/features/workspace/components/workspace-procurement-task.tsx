@@ -6,6 +6,7 @@ import {
     BusinessFailureState,
     DetailWorkspaceMeta,
     PaperDocumentViewport,
+    WorkspaceProcessingPane,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -21,7 +22,6 @@ import { toAutomationIdSegment } from "@/lib/automation-id"
 import { TASK_TYPE_CANONICAL_LABELS } from "@/lib/task-status-dictionary"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import type { WorkspaceWorkItem } from "../types"
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 /**

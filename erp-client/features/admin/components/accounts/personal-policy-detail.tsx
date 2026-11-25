@@ -117,14 +117,14 @@ export function PersonalPolicyDetail({
                                             </Badge>
                                         ))}
                                     </div>
-                                    <p className="leading-relaxed font-medium text-foreground wrap-anywhere">
+                                    <p className="font-medium text-foreground wrap-anywhere">
                                         {group.description}
                                     </p>
                                 </li>
                             ))}
                         </ul>
                     ) : (
-                        <p className="leading-relaxed font-medium text-foreground wrap-anywhere">
+                        <p className="font-medium text-foreground wrap-anywhere">
                             {summary}
                         </p>
                     )}
@@ -227,7 +227,7 @@ export function PersonalPolicyDetail({
                             />
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                            <div className="space-y-2 pb-4 text-body-compact leading-relaxed text-muted-foreground">
+                            <div className="space-y-2 pb-4 text-body-compact text-muted-foreground">
                                 <p>{business.policy_description}</p>
                                 {otherActions.length > 0 ? (
                                     <p className="text-xs">

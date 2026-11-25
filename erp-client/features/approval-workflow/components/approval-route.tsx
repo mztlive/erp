@@ -95,7 +95,7 @@ export function ApprovalRoute({
                         </span>
                         <span
                             className={cn(
-                                "text-body-compact leading-5 wrap-anywhere",
+                                "text-body-compact wrap-anywhere",
                                 current ? "font-semibold" : "font-medium",
                             )}
                         >

@@ -18,17 +18,10 @@ import {
     UsersIcon,
 } from "lucide-react"
 import { z } from "zod"
-import { detailWorkspaceStyles } from "@/components/business"
+import { detailWorkspaceStyles, OptionCombobox } from "@/components/business"
 import { useAppFilterForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -172,8 +165,17 @@ export function RoleWorkbenchHeader({
                     {template.name}
                 </h1>
                 {workbenches.length > 1 && (
-                    <Select
+                    <OptionCombobox
+                        id="role-workbench-switch"
+                        size="sm"
+                        aria-label="切换岗位"
                         value={template.id}
+                        allowClear={false}
+                        options={workbenches.map((item) => ({
+                            value: item.id,
+                            label: item.name,
+                        }))}
+                        inputClassName="w-36 border-transparent bg-muted/65 text-foreground/85 hover:bg-muted"
                         onValueChange={(value) => {
                             if (value && value !== template.id) {
                                 router.push(
@@ -181,34 +183,7 @@ export function RoleWorkbenchHeader({
                                 )
                             }
                         }}
-                    >
-                        <SelectTrigger
-                            id="role-workbench-switch"
-                            size="sm"
-                            aria-label="切换岗位"
-                            className="border-transparent bg-muted/65 text-foreground/85 hover:bg-muted"
-                        >
-                            <SelectValue>
-                                {workbenches.find(
-                                    (item) => item.id === template.id,
-                                )?.name ?? template.name}
-                            </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent
-                            align="start"
-                            alignItemWithTrigger={false}
-                        >
-                            {workbenches.map((item) => (
-                                <SelectItem
-                                    key={item.id}
-                                    value={item.id}
-                                    idPrefix="role-workbench-switch"
-                                >
-                                    {item.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    />
                 )}
             </div>
             <div className={detailWorkspaceStyles.headerActions}>
@@ -409,7 +384,7 @@ export function RoleWorkbenchHeader({
                 >
                     待我处理
                     {urgentCount > 0 ? (
-                        <span className="num rounded-full bg-destructive-soft px-1.5 text-tiny font-semibold leading-4 text-destructive-soft-foreground">
+                        <span className="num rounded-full bg-destructive-soft px-1.5 text-tiny font-semibold text-destructive-soft-foreground">
                             {urgentCount}
                         </span>
                     ) : null}
@@ -558,8 +533,15 @@ export function RoleWorkbenchPeriod({
                 <label htmlFor="role-workbench-period">
                     {isManagement ? "经营统计期间" : "新增单据期间"}
                 </label>
-                <Select
+                <OptionCombobox
+                    id="role-workbench-period"
+                    size="sm"
+                    aria-label={isManagement ? "经营统计期间" : "新增单据期间"}
+                    aria-describedby={`${prefix}-workbench-period-description`}
                     value={custom ? "custom" : overview.preset}
+                    allowClear={false}
+                    options={PERIOD_OPTIONS}
+                    inputClassName="w-28 border-transparent bg-muted/65 text-foreground/85 hover:bg-muted"
                     onValueChange={(value) => {
                         if (!value) return
                         if (value === "custom") {
@@ -571,33 +553,7 @@ export function RoleWorkbenchPeriod({
                             )
                         }
                     }}
-                >
-                    <SelectTrigger
-                        id="role-workbench-period"
-                        size="sm"
-                        aria-describedby={`${prefix}-workbench-period-description`}
-                        className="border-transparent bg-muted/65 text-foreground/85 hover:bg-muted"
-                    >
-                        <SelectValue>
-                            {PERIOD_OPTIONS.find(
-                                (option) =>
-                                    option.value ===
-                                    (custom ? "custom" : overview.preset),
-                            )?.label ?? "本月迄今"}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent align="end" alignItemWithTrigger={false}>
-                        {PERIOD_OPTIONS.map((option) => (
-                            <SelectItem
-                                key={option.value}
-                                value={option.value}
-                                idPrefix="role-workbench-period"
-                            >
-                                {option.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                />
                 <Popover
                     open={open}
                     onOpenChange={(next) => {

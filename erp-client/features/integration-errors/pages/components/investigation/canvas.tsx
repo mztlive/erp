@@ -1,24 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import Link from "next/link"
-import {
-    ChevronRightIcon,
-    CircleHelpIcon,
-    TriangleAlertIcon,
-} from "lucide-react"
+import { ChevronRightIcon } from "lucide-react"
 
 import {
+    DecisionKpiBar,
+    type DecisionKpiItem,
     MoneyValue,
+    TaskRiskSummaryBar,
     WorkspaceFactGrid,
     WorkspaceFactItem,
 } from "@/components/business"
 import { useUnifiedTaskWorkbenchRail } from "@/components/business/unified-task-workbench"
-import { Button, buttonVariants } from "@/components/ui/button"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
+import { buttonVariants } from "@/components/ui/button"
 import { formatDateTime } from "@/lib/datetime"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
@@ -35,29 +28,7 @@ import {
 
 export type InvestigationAmount = { label: string; value: string }
 
-function Kpi({
-    label,
-    children,
-    detail,
-}: {
-    label: ReactNode
-    children: ReactNode
-    detail?: ReactNode
-}) {
-    return (
-        <div className="min-w-0 space-y-1 wrap-anywhere">
-            <dt className="flex items-center gap-1 text-xs text-muted-foreground">
-                {label}
-            </dt>
-            <dd className="text-body-compact font-medium">{children}</dd>
-            {detail ? (
-                <dd className="text-tiny text-muted-foreground">{detail}</dd>
-            ) : null}
-        </div>
-    )
-}
-
-function ImpactKpi({
+function buildImpactKpiItem({
     amount,
     idPrefix,
     difference,
@@ -67,7 +38,7 @@ function ImpactKpi({
     idPrefix: string
     difference: boolean
     impactLabel: string
-}) {
+}): DecisionKpiItem {
     const amountMatch = amount?.value
         .trim()
         .match(/^(-?)[¥￥]?((?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,4})?)$/u)
@@ -79,72 +50,49 @@ function ImpactKpi({
         difference && Boolean(amount && /差额|差异金额/u.test(amount.label))
     const sign = isDifferenceAmount && value ? compareDecimal(value, "0", 4) : 0
     const direction = sign > 0 ? "正差" : sign < 0 ? "负差" : "无差额"
-    return (
-        <Kpi
-            label={
-                <>
-                    {value && amount
-                        ? amount.label
-                        : difference
-                          ? "差异金额"
-                          : "资金影响"}
-                    <Tooltip>
-                        <TooltipTrigger
-                            id={`${idPrefix}-amount-basis`}
-                            render={
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-xs"
-                                    aria-label={
-                                        difference
-                                            ? "查看对账金额口径"
-                                            : "查看资金影响口径"
-                                    }
-                                    className="rounded-full text-muted-foreground"
-                                />
-                            }
-                        >
-                            <CircleHelpIcon aria-hidden="true" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            {difference
-                                ? isDifferenceAmount && value
-                                    ? "取待办记录的差异金额，正负沿用来源记录口径。"
-                                    : "差异详情提供两侧凭证名称。金额须按原始凭证核对。"
-                                : "反映本条外部同步异常是否涉及收付款或结算资金变动，具体金额以关联凭证为准。"}
-                        </TooltipContent>
-                    </Tooltip>
-                </>
-            }
-            detail={value || difference ? impactLabel : undefined}
-        >
-            {value ? (
-                <span
-                    className={cn(
-                        "num inline-flex flex-wrap items-baseline gap-x-1.5",
-                        sign > 0 && "text-warning-soft-foreground",
-                        sign < 0 && "text-destructive",
-                    )}
-                >
-                    {isDifferenceAmount ? (
-                        <span className="text-body-compact">{direction}</span>
-                    ) : null}
-                    <MoneyValue
-                        display="exact"
-                        size="section"
-                        value={value}
-                        inheritColor={isDifferenceAmount}
-                        className="[&_[data-slot=money-value-number]]:wrap-anywhere [&_[data-slot=money-value-number]]:whitespace-normal"
-                    />
-                </span>
-            ) : difference ? (
-                "待核实"
-            ) : (
-                impactLabel
-            )}
-        </Kpi>
-    )
+    return {
+        id: "impact",
+        label:
+            value && amount
+                ? amount.label
+                : difference
+                  ? "差异金额"
+                  : "资金影响",
+        emphasis: value ? "primary" : "terms",
+        formulaTooltipId: `${idPrefix}-amount-basis`,
+        formulaTooltipLabel: difference
+            ? "查看对账金额口径"
+            : "查看资金影响口径",
+        formulaTooltip: difference
+            ? isDifferenceAmount && value
+                ? "取待办记录的差异金额，正负沿用来源记录口径。"
+                : "差异详情提供两侧凭证名称。金额须按原始凭证核对。"
+            : "反映本条外部同步异常是否涉及收付款或结算资金变动，具体金额以关联凭证为准。",
+        footnote: value || difference ? impactLabel : undefined,
+        value: value ? (
+            <span
+                className={cn(
+                    "num inline-flex flex-wrap items-baseline gap-x-1.5",
+                    sign > 0 && "text-warning-soft-foreground",
+                    sign < 0 && "text-destructive",
+                )}
+            >
+                {isDifferenceAmount ? (
+                    <span className="text-body-compact">{direction}</span>
+                ) : null}
+                <MoneyValue
+                    display="exact"
+                    size="section"
+                    value={value}
+                    inheritColor={isDifferenceAmount}
+                />
+            </span>
+        ) : difference ? (
+            "待核实"
+        ) : (
+            impactLabel
+        ),
+    }
 }
 
 function DateValue({ date }: { date: string }) {
@@ -236,171 +184,129 @@ export function InvestigationCanvas({
     return (
         <div className="@container/integration-task min-w-0 space-y-3.5 bg-card py-3.5">
             {!terminal ? (
-                <section
-                    role="alert"
+                <TaskRiskSummaryBar
+                    severity={severe ? "destructive" : "warning"}
                     aria-label="异常诊断"
-                    className={cn(
-                        "flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-r-md border-l-2 px-3 py-2.5",
-                        severe
-                            ? "border-l-destructive bg-destructive-soft/65 text-destructive-soft-foreground"
-                            : "border-l-warning bg-warning-soft/75 text-warning-soft-foreground",
-                    )}
-                >
-                    <div className="flex min-w-0 flex-[1_1_12rem] items-start gap-2">
-                        <TriangleAlertIcon
-                            aria-hidden="true"
-                            className="mt-0.5 size-3.5 shrink-0"
-                        />
-                        <div className="min-w-0 flex-1 space-y-1 wrap-anywhere">
-                            <p className="text-body-compact font-semibold">
-                                {rootSummary}
-                            </p>
-                            <p className="text-xs opacity-90">
-                                异常代码{" "}
-                                <code className="num select-all">
-                                    {item.classification.code}
-                                </code>
-                                {" · "}
-                                {safeNextStep(item, canQuery)}
-                            </p>
-                        </div>
-                    </div>
-                    <Button
-                        id={`${idPrefix}-focus-diagnostics`}
-                        type="button"
-                        size="xs"
-                        variant="ghost"
-                        className={cn(
-                            "shrink-0 font-medium shadow-none",
-                            severe
-                                ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
-                        )}
-                        onClick={() => {
-                            if (difference && fieldHeading.current) {
-                                onFieldViewChange({ filter: "", page: 0 })
-                                setHighlightFields(true)
-                                if (highlightTimer.current !== null) {
-                                    window.clearTimeout(highlightTimer.current)
+                    leadLabel={rootSummary}
+                    summary={
+                        <>
+                            异常代码{" "}
+                            <code className="num select-all">
+                                {item.classification.code}
+                            </code>
+                            {" · "}
+                            {safeNextStep(item, canQuery)}
+                        </>
+                    }
+                    actions={[
+                        {
+                            id: "focus-diagnostics",
+                            buttonId: `${idPrefix}-focus-diagnostics`,
+                            label: difference ? "查看差异明细" : "查看诊断载荷",
+                            onClick: () => {
+                                if (difference && fieldHeading.current) {
+                                    onFieldViewChange({ filter: "", page: 0 })
+                                    setHighlightFields(true)
+                                    if (highlightTimer.current !== null) {
+                                        window.clearTimeout(
+                                            highlightTimer.current,
+                                        )
+                                    }
+                                    highlightTimer.current = window.setTimeout(
+                                        () => setHighlightFields(false),
+                                        2200,
+                                    )
+                                    const reduceMotion = window.matchMedia(
+                                        "(prefers-reduced-motion: reduce)",
+                                    ).matches
+                                    fieldHeading.current.focus({
+                                        preventScroll: true,
+                                    })
+                                    fieldHeading.current.scrollIntoView({
+                                        block: "center",
+                                        behavior: reduceMotion
+                                            ? "auto"
+                                            : "smooth",
+                                    })
+                                } else {
+                                    rail?.expand()
+                                    onFocusPayload()
                                 }
-                                highlightTimer.current = window.setTimeout(
-                                    () => setHighlightFields(false),
-                                    2200,
-                                )
-                                const reduceMotion = window.matchMedia(
-                                    "(prefers-reduced-motion: reduce)",
-                                ).matches
-                                fieldHeading.current.focus({
-                                    preventScroll: true,
-                                })
-                                fieldHeading.current.scrollIntoView({
-                                    block: "center",
-                                    behavior: reduceMotion ? "auto" : "smooth",
-                                })
-                            } else {
-                                rail?.expand()
-                                onFocusPayload()
-                            }
-                        }}
-                    >
-                        {difference ? "查看差异明细" : "查看诊断载荷"}
-                        <ChevronRightIcon aria-hidden="true" />
-                    </Button>
-                </section>
+                            },
+                        },
+                    ]}
+                />
             ) : null}
             {feedback}
-            <TooltipProvider>
-                <dl
-                    aria-label="调查指标"
-                    className="grid grid-cols-1 gap-x-5 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/integration-task:grid-cols-2 @[840px]/integration-task:grid-cols-4"
-                >
-                    <ImpactKpi
-                        idPrefix={idPrefix}
-                        amount={amount}
-                        difference={Boolean(difference)}
-                        impactLabel={item.fundsImpactLabel}
-                    />
-                    <Kpi
-                        label={
-                            <>
-                                执行尝试
-                                <Tooltip>
-                                    <TooltipTrigger
-                                        id={`${idPrefix}-attempt-basis`}
-                                        render={
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="icon-xs"
-                                                aria-label="查看执行尝试统计口径"
-                                                className="rounded-full text-muted-foreground"
-                                            />
-                                        }
-                                    >
-                                        <CircleHelpIcon aria-hidden="true" />
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        统计该异常记录的历史执行、查询与重放累计尝试次数。
-                                    </TooltipContent>
-                                </Tooltip>
-                            </>
-                        }
-                    >
-                        {attemptCount != null ? (
-                            <span className="num text-value-compact">
-                                {attemptCount}
-                            </span>
-                        ) : (
-                            "暂无记录"
-                        )}
-                    </Kpi>
-                    <Kpi
-                        label={classificationInHeader ? "异常等级" : "异常分类"}
-                        detail={
-                            <>
-                                {deadline ? (
-                                    <>
-                                        截止{" "}
-                                        <time
-                                            className="num"
-                                            dateTime={deadline.date}
-                                        >
-                                            {deadline.label ||
-                                                formatDateTime(
-                                                    deadline.date,
-                                                    "default",
-                                                )}
-                                        </time>
-                                        {" · "}
-                                    </>
-                                ) : null}
-                                {occurredAt ? (
-                                    <>
-                                        发生于 <DateValue date={occurredAt} />
-                                    </>
-                                ) : null}
-                            </>
-                        }
-                    >
-                        {classificationInHeader
+            <DecisionKpiBar
+                columns={4}
+                ariaLabel="调查指标"
+                items={[
+                    buildImpactKpiItem({
+                        idPrefix,
+                        amount,
+                        difference: Boolean(difference),
+                        impactLabel: item.fundsImpactLabel,
+                    }),
+                    {
+                        id: "attempt",
+                        label: "执行尝试",
+                        emphasis: attemptCount != null ? "secondary" : "terms",
+                        formulaTooltipId: `${idPrefix}-attempt-basis`,
+                        formulaTooltipLabel: "查看执行尝试统计口径",
+                        formulaTooltip:
+                            "统计该异常记录的历史执行、查询与重放累计尝试次数。",
+                        value: attemptCount != null ? attemptCount : "暂无记录",
+                    },
+                    {
+                        id: "classification",
+                        label: classificationInHeader ? "异常等级" : "异常分类",
+                        emphasis: "terms",
+                        value: classificationInHeader
                             ? item.classification.severityLabel
-                            : `${item.classification.label} · ${item.classification.severityLabel}`}
-                    </Kpi>
-                    <Kpi
-                        label={titleInHeader ? "完成条件" : "受影响对象"}
-                        detail={
-                            !titleInHeader
-                                ? condition || "核对关联凭证"
-                                : reviewerRequirement
-                        }
-                    >
-                        {titleInHeader
+                            : `${item.classification.label} · ${item.classification.severityLabel}`,
+                        footnote:
+                            deadline || occurredAt ? (
+                                <>
+                                    {deadline ? (
+                                        <>
+                                            截止{" "}
+                                            <time
+                                                className="num"
+                                                dateTime={deadline.date}
+                                            >
+                                                {deadline.label ||
+                                                    formatDateTime(
+                                                        deadline.date,
+                                                        "default",
+                                                    )}
+                                            </time>
+                                            {" · "}
+                                        </>
+                                    ) : null}
+                                    {occurredAt ? (
+                                        <>
+                                            发生于{" "}
+                                            <DateValue date={occurredAt} />
+                                        </>
+                                    ) : null}
+                                </>
+                            ) : undefined,
+                    },
+                    {
+                        id: "target",
+                        label: titleInHeader ? "完成条件" : "受影响对象",
+                        emphasis: "terms",
+                        value: titleInHeader
                             ? condition ||
                               (terminal ? item.status.label : "核对关联凭证")
-                            : item.businessObject.title}
-                    </Kpi>
-                </dl>
-            </TooltipProvider>
+                            : item.businessObject.title,
+                        footnote: !titleInHeader
+                            ? condition || "核对关联凭证"
+                            : reviewerRequirement,
+                    },
+                ]}
+            />
             {failure?.operation ||
             failure?.jobNumber ||
             item.environment ||

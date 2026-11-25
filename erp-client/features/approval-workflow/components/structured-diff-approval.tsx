@@ -6,7 +6,6 @@ import {
     useMemo,
     useRef,
     useState,
-    type ReactNode,
     type RefObject,
 } from "react"
 import {
@@ -18,19 +17,20 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
     SearchIcon,
-    TriangleAlertIcon,
     XIcon,
 } from "lucide-react"
 
 import {
+    DecisionKpiBar,
     detailWorkspaceStyles,
     MoneyValue,
+    OptionCombobox,
+    TaskRiskSummaryBar,
     WorkspaceFactGrid,
     WorkspaceFactGroup,
     WorkspaceFactItem,
 } from "@/components/business"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Collapsible,
@@ -38,13 +38,7 @@ import {
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { Input } from "@/components/ui/input"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -54,12 +48,6 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     compareDecimal,
@@ -752,93 +740,72 @@ function StructuredDiffReview({
             className="@container/structured-diff min-w-0 space-y-4 pt-3 pb-5"
         >
             {!hideRiskStrip && showRisk ? (
-                <div
-                    role="alert"
-                    data-slot="structured-diff-risk-strip"
-                    className={cn(
-                        "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border-l-2 px-3 py-1.5 text-xs",
-                        severe
-                            ? "border-l-destructive bg-destructive-soft/65 text-destructive-soft-foreground"
-                            : "border-l-warning bg-warning-soft/75 text-warning-soft-foreground",
-                    )}
-                >
-                    <div className="flex min-w-0 flex-1 items-start gap-2">
-                        <TriangleAlertIcon
-                            aria-hidden="true"
-                            className="mt-0.5 size-3.5 shrink-0"
-                        />
-                        <div className="min-w-0 wrap-anywhere">
-                            <p className="num font-medium">
+                <TaskRiskSummaryBar
+                    dataSlot="structured-diff-risk-strip"
+                    severity={severe ? "destructive" : "warning"}
+                    leadLabel={null}
+                    summary={
+                        <>
+                            <span className="font-medium">
                                 表头变更 {changed.length} 项 · 明细变更{" "}
-                                {lineCountLabel} 行{" · "}金额净变{" "}
+                                {lineCountLabel} 行 · 金额净变{" "}
                                 {delta?.signed ?? "—"}
-                            </p>
+                            </span>
                             {impactSummary?.trim() ? (
-                                <p>{impactSummary}</p>
+                                <span className="block">{impactSummary}</span>
                             ) : null}
-                        </div>
-                    </div>
-                    {visibleChanged > 0 ? (
-                        <Button
-                            id={`${idPrefix}-locate-changes`}
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            aria-controls={linesId}
-                            className={cn(
-                                "h-control-xs shrink-0 gap-0.5 px-1.5 text-xs font-medium",
-                                severe
-                                    ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                    : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
-                            )}
-                            onClick={locateChanges}
-                        >
-                            仅看变更行（{visibleChanged}）
-                            <ChevronRightIcon aria-hidden="true" />
-                        </Button>
-                    ) : null}
-                </div>
+                        </>
+                    }
+                    actions={
+                        visibleChanged > 0
+                            ? [
+                                  {
+                                      id: "locate-changes",
+                                      buttonId: `${idPrefix}-locate-changes`,
+                                      label: "仅看变更行",
+                                      count: visibleChanged,
+                                      onClick: locateChanges,
+                                  },
+                              ]
+                            : undefined
+                    }
+                />
             ) : null}
 
-            <TooltipProvider>
-                <section
-                    aria-label="变更审批关键决策指标"
-                    className="grid grid-cols-1 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/structured-diff:grid-cols-2 @[840px]/structured-diff:grid-cols-4"
-                >
-                    <DiffKpi
-                        label={stock ? "库存调整影响" : "变更后金额"}
-                        basis={
-                            showStockCount
-                                ? "调整明细"
-                                : amountBasis === GROSS_AMOUNT_LABEL
-                                  ? "含税"
-                                  : (amountBasis ?? "提交摘要")
-                        }
-                        primary
-                        value={
-                            showStockCount ? (
-                                `${total} 行`
-                            ) : afterDecimal != null ? (
-                                <MoneyValue
-                                    display="exact"
-                                    value={afterDecimal}
-                                    className="max-w-full font-semibold [&_[data-slot=money-value-number]]:whitespace-normal"
-                                />
-                            ) : (
-                                (after ?? "—")
-                            )
-                        }
-                        tooltipId={`${idPrefix}-kpi-primary-info`}
-                        tooltip={
-                            showStockCount
-                                ? "调整行数 = 本次库存调整单的明细总行数。审批资料提供调整方向和数量，未提供调整前后的库存余额。"
-                                : `变更前 ${before ?? "未记录"} → 变更后 ${after ?? "未记录"}`
-                        }
-                    />
-                    <DiffKpi
-                        label="金额净变化"
-                        basis={delta ? "变更后 − 变更前" : "提交对照"}
-                        value={
+            <DecisionKpiBar
+                columns={4}
+                ariaLabel="变更审批关键决策指标"
+                items={[
+                    {
+                        id: "primary",
+                        label: stock ? "库存调整影响" : "变更后金额",
+                        basis: showStockCount
+                            ? "调整明细"
+                            : amountBasis === GROSS_AMOUNT_LABEL
+                              ? "含税"
+                              : (amountBasis ?? "提交摘要"),
+                        emphasis: "primary",
+                        value: showStockCount ? (
+                            `${total} 行`
+                        ) : afterDecimal != null ? (
+                            <MoneyValue
+                                display="exact"
+                                value={afterDecimal}
+                                inheritColor
+                            />
+                        ) : (
+                            (after ?? "—")
+                        ),
+                        formulaTooltipId: `${idPrefix}-kpi-primary-info`,
+                        formulaTooltip: showStockCount
+                            ? "调整行数 = 本次库存调整单的明细总行数。审批资料提供调整方向和数量，未提供调整前后的库存余额。"
+                            : `变更前 ${before ?? "未记录"} → 变更后 ${after ?? "未记录"}`,
+                    },
+                    {
+                        id: "delta",
+                        label: "金额净变化",
+                        basis: delta ? "变更后 − 变更前" : "提交对照",
+                        value: (
                             <span
                                 className={cn(
                                     "inline-flex flex-wrap items-center gap-x-1",
@@ -858,54 +825,49 @@ function StructuredDiffReview({
                                 ) : null}
                                 {delta?.value ?? "—"}
                             </span>
-                        }
-                        detail={
+                        ),
+                        footnote:
                             delta?.percent ??
                             (delta
                                 ? "变更前金额为零"
                                 : stock
                                   ? "未提供金额对照"
-                                  : "缺少金额前后值")
-                        }
-                        tooltipId={
-                            delta ? `${idPrefix}-kpi-delta-info` : undefined
-                        }
-                        tooltip={
-                            delta ? (
-                                <>
-                                    <div className="num">
-                                        {after} − ({before}) = {delta.signed}
-                                    </div>
-                                    <div>
-                                        变化率 = 净变化 ÷ 变更前金额绝对值
-                                    </div>
-                                </>
-                            ) : undefined
-                        }
-                    />
-                    <DiffKpi
-                        label="表头变更项"
-                        basis="表头对比"
-                        value={`${changed.length} / ${comparisons.length}`}
-                        detail={
+                                  : "缺少金额前后值"),
+                        formulaTooltipId: delta
+                            ? `${idPrefix}-kpi-delta-info`
+                            : undefined,
+                        formulaTooltip: delta ? (
+                            <>
+                                <div className="num">
+                                    {after} − ({before}) = {delta.signed}
+                                </div>
+                                <div>变化率 = 净变化 ÷ 变更前金额绝对值</div>
+                            </>
+                        ) : undefined,
+                    },
+                    {
+                        id: "headers",
+                        label: "表头变更项",
+                        basis: "表头对比",
+                        value: `${changed.length} / ${comparisons.length}`,
+                        footnote:
                             comparisons.length > 0
                                 ? "变更项 / 对照总项"
-                                : "未提供表头对照"
-                        }
-                        tooltipId={`${idPrefix}-kpi-headers-info`}
-                        tooltip="对比本次提交与冻结基准的表头字段，未变更字段默认折叠收起。"
-                    />
-                    <DiffKpi
-                        label="明细差异"
-                        basis={stock ? "按调整行" : "按明细行"}
-                        value={`${lineCountLabel} 行`}
-                        tooltipId={`${idPrefix}-kpi-lines-info`}
-                        tooltip={
-                            stock
-                                ? "统计本次库存调整单中发生增加、减少或调整的明细行数。"
-                                : "统计本次变更单中新增、删除或修改的明细行数。"
-                        }
-                        detail={
+                                : "未提供表头对照",
+                        formulaTooltipId: `${idPrefix}-kpi-headers-info`,
+                        formulaTooltip:
+                            "对比本次提交与冻结基准的表头字段，未变更字段默认折叠收起。",
+                    },
+                    {
+                        id: "lines",
+                        label: "明细差异",
+                        basis: stock ? "按调整行" : "按明细行",
+                        value: `${lineCountLabel} 行`,
+                        formulaTooltipId: `${idPrefix}-kpi-lines-info`,
+                        formulaTooltip: stock
+                            ? "统计本次库存调整单中发生增加、减少或调整的明细行数。"
+                            : "统计本次变更单中新增、删除或修改的明细行数。",
+                        extra:
                             rows.length > 0 ? (
                                 <div className="space-y-1">
                                     <div
@@ -924,16 +886,15 @@ function StructuredDiffReview({
                                             }}
                                         />
                                     </div>
-                                    <p className="num">
+                                    <p className="num text-xs text-muted-foreground">
                                         {summaryTruncated ? "已展示 " : ""}
                                         {visibleChanged} / {rows.length} 行变更
                                     </p>
                                 </div>
-                            ) : undefined
-                        }
-                    />
-                </section>
-            </TooltipProvider>
+                            ) : undefined,
+                    },
+                ]}
+            />
 
             {comparisons.length > 0 ? (
                 <section
@@ -1129,10 +1090,11 @@ function StructuredDiffReview({
                             />
                             <Input
                                 id={`${idPrefix}-search`}
+                                size="sm"
                                 value={search}
                                 aria-label="搜索明细"
                                 placeholder="搜索商品、规格或变更内容"
-                                className="h-control-sm pr-8 pl-8 text-xs"
+                                className="pr-8 pl-8"
                                 onChange={(event) =>
                                     updateFilter(
                                         changedOnly,
@@ -1268,69 +1230,6 @@ function StructuredDiffReview({
     )
 }
 
-function DiffKpi({
-    label,
-    basis,
-    primary = false,
-    value,
-    detail,
-    tooltipId,
-    tooltip,
-}: {
-    label: string
-    basis?: string
-    primary?: boolean
-    value: ReactNode
-    detail?: ReactNode
-    tooltipId?: string
-    tooltip?: ReactNode
-}) {
-    return (
-        <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-                <span>{label}</span>
-                {basis ? (
-                    <span className="text-tiny text-muted-foreground/80">
-                        {basis}
-                    </span>
-                ) : null}
-                {tooltipId && tooltip ? (
-                    <Tooltip>
-                        <TooltipTrigger
-                            render={
-                                <button
-                                    id={tooltipId}
-                                    type="button"
-                                    aria-label={`${label}计算口径`}
-                                    className="inline-flex size-4 cursor-help items-center justify-center rounded-full border border-border text-tiny hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-                                />
-                            }
-                        >
-                            <span aria-hidden="true">?</span>
-                        </TooltipTrigger>
-                        <TooltipContent className="block">
-                            {tooltip}
-                        </TooltipContent>
-                    </Tooltip>
-                ) : null}
-            </div>
-            <div
-                className={cn(
-                    "num mt-1 wrap-anywhere font-semibold tracking-tight text-foreground",
-                    primary ? "text-value-section" : "text-value-compact",
-                )}
-            >
-                {value}
-            </div>
-            {detail ? (
-                <div className="num mt-1 text-xs text-muted-foreground">
-                    {detail}
-                </div>
-            ) : null}
-        </div>
-    )
-}
-
 function isLongFact(label: string, value: string) {
     return (
         value.length > 30 ||
@@ -1412,9 +1311,11 @@ function DiffLineRows({
                             {row.name}
                         </span>
                         {tone ? (
-                            <Badge variant={tone.variant} className="text-tiny">
-                                {row.badgeLabel}
-                            </Badge>
+                            <StatusBadge
+                                tone={tone.variant}
+                                label={row.badgeLabel}
+                                className="text-tiny"
+                            />
                         ) : null}
                     </div>
                 </TableCell>
@@ -1483,30 +1384,26 @@ function DiffPagination({
             className="flex flex-wrap items-center justify-between gap-2"
         >
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Select
+                <OptionCombobox
+                    id={`${idPrefix}-page-size`}
+                    size="sm"
+                    aria-label="每页明细行数"
                     value={String(pageSize)}
-                    onValueChange={(value) =>
-                        onPageSizeChange(
-                            value === "50" ? 50 : DEFAULT_PAGE_SIZE,
-                        )
-                    }
-                >
-                    <SelectTrigger
-                        id={`${idPrefix}-page-size`}
-                        size="sm"
-                        aria-label="每页明细行数"
-                    >
-                        <SelectValue>每页 {pageSize} 行</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent alignItemWithTrigger={false}>
-                        <SelectItem id={`${idPrefix}-page-size-20`} value="20">
-                            每页 20 行
-                        </SelectItem>
-                        <SelectItem id={`${idPrefix}-page-size-50`} value="50">
-                            每页 50 行
-                        </SelectItem>
-                    </SelectContent>
-                </Select>
+                    allowClear={false}
+                    className="w-28"
+                    options={[
+                        { value: "20", label: "每页 20 行" },
+                        { value: "50", label: "每页 50 行" },
+                    ]}
+                    getOptionId={(value) => `${idPrefix}-page-size-${value}`}
+                    onValueChange={(value) => {
+                        if (value) {
+                            onPageSizeChange(
+                                value === "50" ? 50 : DEFAULT_PAGE_SIZE,
+                            )
+                        }
+                    }}
+                />
                 <span className="num" aria-live="polite">
                     第 {page} / {pageCount} 页
                 </span>

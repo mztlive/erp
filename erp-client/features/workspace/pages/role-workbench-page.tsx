@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "next/navigation"
 import {
     BusinessFailureState,
-    PageScaffold,
+    DetailWorkspacePage,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -54,10 +54,7 @@ export function RoleWorkbenchPage({ id }: { id: string }) {
             }))
     if (invalid)
         return (
-            <PageScaffold
-                density="compact"
-                className={`${detailWorkspaceStyles.page} min-h-0 overflow-auto`}
-            >
+            <DetailWorkspacePage className="min-h-0 overflow-auto">
                 <header className="flex min-h-12 shrink-0 items-center justify-between gap-3 border-b border-border/60 bg-card py-2">
                     <h1 className={detailWorkspaceStyles.title}>
                         统计期间无效
@@ -76,37 +73,28 @@ export function RoleWorkbenchPage({ id }: { id: string }) {
                         清除期间筛选
                     </Button>
                 </div>
-            </PageScaffold>
+            </DetailWorkspacePage>
         )
     if (query.isError)
         return (
-            <PageScaffold
-                density="compact"
-                className={`${detailWorkspaceStyles.page} min-h-0 overflow-auto`}
-            >
+            <DetailWorkspacePage className="min-h-0 overflow-auto">
                 <BusinessFailureState
                     error={query.error}
                     onRetry={() => void query.refetch()}
                 />
-            </PageScaffold>
+            </DetailWorkspacePage>
         )
     if (!query.data)
         return (
-            <PageScaffold
-                density="compact"
-                className={`${detailWorkspaceStyles.page} min-h-0 overflow-auto`}
-            >
+            <DetailWorkspacePage className="min-h-0 overflow-auto">
                 <p role="status" className="py-6 text-xs text-muted-foreground">
                     正在读取岗位配置…
                 </p>
-            </PageScaffold>
+            </DetailWorkspacePage>
         )
     if (!roleWorkbench(id) || !query.data.workbenches?.includes(id))
         return (
-            <PageScaffold
-                density="compact"
-                className={`${detailWorkspaceStyles.page} min-h-0 overflow-auto`}
-            >
+            <DetailWorkspacePage className="min-h-0 overflow-auto">
                 <BusinessFailureState
                     kind="permission"
                     title="无权访问此工作台"
@@ -122,7 +110,7 @@ export function RoleWorkbenchPage({ id }: { id: string }) {
                         </Button>
                     }
                 />
-            </PageScaffold>
+            </DetailWorkspacePage>
         )
     return (
         <RoleWorkbenchContent
@@ -213,10 +201,7 @@ function RoleWorkbenchContent({
     const hasPeriodSelector = id === "WB-01" || id === "WB-05"
 
     return (
-        <PageScaffold
-            density="compact"
-            className={`${detailWorkspaceStyles.page} min-h-0 overflow-auto`}
-        >
+        <DetailWorkspacePage className="min-h-0 overflow-auto">
             <RoleWorkbenchHeader
                 template={role.template}
                 profile={profile}
@@ -289,6 +274,6 @@ function RoleWorkbenchContent({
                 onSelect={select}
             />
             {detail}
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }

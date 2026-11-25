@@ -363,13 +363,14 @@ export function WorkspacePurchaseDeliveryDialog({
                                         />
                                         <Input
                                             id={`${idPrefix}-search`}
+                                            size="sm"
                                             value={search}
                                             onChange={(event) =>
                                                 setSearch(event.target.value)
                                             }
                                             placeholder="搜索收货人、电话、地址或商品"
                                             aria-label="搜索收货人、电话、地址或商品"
-                                            className="h-control-sm pr-8 pl-8 text-xs"
+                                            className="pr-8 pl-8"
                                         />
                                         {search ? (
                                             <Button
@@ -522,7 +523,7 @@ function AddressGroupRow({
                             {group.phone}
                         </span>
                     </div>
-                    <p className="text-xs leading-5 wrap-anywhere text-foreground/80">
+                    <p className="text-xs wrap-anywhere text-foreground/80">
                         <AddressText
                             regionCode={group.regionCode}
                             regionName={group.regionName}

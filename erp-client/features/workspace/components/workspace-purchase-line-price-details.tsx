@@ -1,7 +1,10 @@
-import { MoneyValue, RateValue } from "@/components/business"
+import {
+    MoneyValue,
+    RateValue,
+    PurchaseProfitValue,
+} from "@/components/business"
 import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/materials"
 import { multiplyFixed } from "@/lib/fixed-decimal"
-import { PurchaseProfitValue } from "./workspace-purchase-amount-details"
 import type { PurchaseComparison } from "./workspace-purchase-comparison-model"
 
 export function PurchaseLinePriceDetails({

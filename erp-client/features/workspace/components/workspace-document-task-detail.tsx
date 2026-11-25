@@ -15,6 +15,11 @@ import {
     taxAmountToneClass,
     useWorkspaceTaskPage,
     type MaterialFileItem,
+    WorkspaceApprovalResubmissionBanner,
+    WorkspaceDocumentBadge,
+    WorkspaceProcessingPane,
+    WorkspaceReworkCommandCard,
+    WorkspaceCompactTaskHeader,
 } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -98,10 +103,8 @@ import {
     WorkspaceApprovalContextRail,
     type ApprovalContextRailTab,
 } from "./workspace-approval-context-rail"
-import { WorkspaceApprovalResubmissionBanner } from "./workspace-approval-resubmission-banner"
 import { WorkspaceApprovalReworkActions } from "./workspace-approval-rework"
 import { WorkspaceDeliveryBrief } from "./workspace-delivery-brief"
-import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 import {
     WorkspaceDocumentPaperDialog,
     type WorkspacePaperTarget,
@@ -113,7 +116,6 @@ import {
 } from "./workspace-invoice-approval"
 import { buildInvoiceDynamicRejectPhrases } from "./workspace-invoice-approval-model"
 import { WorkspaceMoney } from "./workspace-money"
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import {
     WorkspacePurchaseApproval,
     purchaseApprovalRiskReasons,
@@ -135,7 +137,6 @@ import {
     WorkspaceRejectionNotice,
     useWorkspaceRejectionInfo,
 } from "./workspace-rejection-notice"
-import { WorkspaceReworkCommandCard } from "./workspace-rework-command-card"
 import {
     WorkspaceSalesApproval,
     type WorkspaceSalesApprovalHandle,
@@ -143,7 +144,6 @@ import {
 } from "./workspace-sales-approval"
 import { buildSalesDynamicRejectPhrases } from "../lib/sales-approval-model"
 import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
-import { WorkspaceCompactTaskHeader } from "./workspace-task-identity-header"
 import { WorkspaceTaskResponsibilityActions } from "./workspace-task-responsibility-actions"
 
 const APPROVAL_RAIL_WIDTH_STORAGE_KEY = "erp.workspace.approvalRailWidth"

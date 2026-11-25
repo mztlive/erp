@@ -1,3 +1,4 @@
+import type { ResubmissionFieldDiff } from "@/components/business"
 import type {
     ApprovalMaterials,
     ApprovalPurchaseLine,
@@ -13,7 +14,6 @@ import {
 } from "@/lib/fixed-decimal"
 import { salesLinePriceComparison } from "@/lib/sales-line-prices"
 import type { WorkspaceWorkItem } from "../types"
-import type { ResubmissionFieldDiff } from "./workspace-approval-resubmission-banner"
 import type {
     PurchaseLineSourceInsight,
     PurchaseSourceComparisonModel,

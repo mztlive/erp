@@ -13,7 +13,9 @@ import {
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
 import {
+    DecisionKpiBar,
     MoneyValue,
+    OptionCombobox,
     WorkspaceFactGrid,
     WorkspaceFactItem,
 } from "@/components/business"
@@ -22,7 +24,6 @@ import {
     TableToolbarScope,
 } from "@/components/business/table-toolbar"
 import { useUnifiedTaskWorkbenchRail } from "@/components/business/unified-task-workbench"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Collapsible,
@@ -30,13 +31,7 @@ import {
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { Input } from "@/components/ui/input"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -46,12 +41,6 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import {
     compareDecimal,
@@ -256,61 +245,23 @@ function SummaryMetrics({
 }) {
     if (!metrics.length) return null
     return (
-        <TooltipProvider>
-            <dl
-                aria-label="审批关键指标"
-                className={cn(
-                    "grid gap-x-5 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5",
-                    metrics.length > 1 &&
-                        "@[480px]/submitted-summary:grid-cols-2",
-                    metrics.length === 3 &&
-                        "@[480px]/submitted-summary:[&>*:last-child]:col-span-2 @[840px]/submitted-summary:grid-cols-3 @[840px]/submitted-summary:[&>*:last-child]:col-span-1",
-                    metrics.length === 4 &&
-                        "@[840px]/submitted-summary:grid-cols-4",
-                )}
-            >
-                {metrics.map((metric) => (
-                    <div key={metric.key} className="min-w-0">
-                        <dt className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-                            <span>{metric.label}</span>
-                            <span className="text-tiny">{metric.basis}</span>
-                            <Tooltip>
-                                <TooltipTrigger
-                                    render={
-                                        <button
-                                            id={`${id}-metric-${metric.key}-help`}
-                                            type="button"
-                                            aria-label={`${metric.label}口径`}
-                                            className="inline-flex size-4 cursor-help items-center justify-center rounded-sm text-tiny font-semibold hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                                        />
-                                    }
-                                >
-                                    <span aria-hidden="true">?</span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    {metric.formula}
-                                </TooltipContent>
-                            </Tooltip>
-                        </dt>
-                        <dd
-                            className={cn(
-                                "num mt-1 wrap-anywhere font-semibold tracking-tight",
-                                metric.key === "amount" && !nested
-                                    ? "text-value-section"
-                                    : "text-value-compact",
-                            )}
-                        >
-                            {metric.value}
-                        </dd>
-                        {metric.note && (
-                            <dd className="mt-1 text-xs text-muted-foreground">
-                                {metric.note}
-                            </dd>
-                        )}
-                    </div>
-                ))}
-            </dl>
-        </TooltipProvider>
+        <DecisionKpiBar
+            ariaLabel="审批关键指标"
+            items={metrics.map((metric) => ({
+                id: metric.key,
+                label: metric.label,
+                basis: metric.basis,
+                emphasis:
+                    metric.key === "amount" && !nested
+                        ? "primary"
+                        : "secondary",
+                value: metric.value,
+                formulaTooltipId: `${id}-metric-${metric.key}-help`,
+                formulaTooltipLabel: `${metric.label}口径`,
+                formulaTooltip: metric.formula,
+                footnote: metric.note,
+            }))}
+        />
     )
 }
 
@@ -513,9 +464,10 @@ function TitleSegment({ value }: { value: string }) {
           : null
     return status ? (
         <span className="inline-flex items-center gap-1.5">
-            <Badge variant={status === "新增" ? "success" : "destructive"}>
-                {status}
-            </Badge>
+            <StatusBadge
+                tone={status === "新增" ? "success" : "destructive"}
+                label={status}
+            />
             <span className="num">{value.slice(status.length + 1)}</span>
         </span>
     ) : (
@@ -685,10 +637,11 @@ function SummaryLines({
                         actions={
                             <Input
                                 id={`${id}-search`}
+                                size="sm"
                                 value={search}
                                 placeholder="搜索明细项目或摘要"
                                 aria-label="搜索明细"
-                                className="h-control-sm w-52 max-w-full text-xs"
+                                className="w-52 max-w-full"
                                 onChange={(event) =>
                                     updateFilters({
                                         search: event.target.value,
@@ -841,8 +794,18 @@ function SummaryLines({
                 >
                     <div className="flex items-center gap-2">
                         <span id={`${id}-page-size-label`}>每页</span>
-                        <Select
+                        <OptionCombobox
+                            id={`${id}-page-size`}
+                            size="sm"
+                            aria-label="每页显示数量"
                             value={String(pageSize)}
+                            allowClear={false}
+                            className="w-24"
+                            options={[
+                                { value: "20", label: "20 项" },
+                                { value: "50", label: "50 项" },
+                            ]}
+                            getOptionId={(value) => `${id}-page-size-${value}`}
                             onValueChange={(value) => {
                                 if (value)
                                     updateFilters({
@@ -852,32 +815,7 @@ function SummaryLines({
                                                 : DEFAULT_PAGE_SIZE,
                                     })
                             }}
-                        >
-                            <SelectTrigger
-                                id={`${id}-page-size`}
-                                size="sm"
-                                aria-labelledby={`${id}-page-size-label`}
-                            >
-                                <SelectValue>{pageSize} 项</SelectValue>
-                            </SelectTrigger>
-                            <SelectContent
-                                align="start"
-                                alignItemWithTrigger={false}
-                            >
-                                <SelectItem
-                                    id={`${id}-page-size-20`}
-                                    value="20"
-                                >
-                                    20 项
-                                </SelectItem>
-                                <SelectItem
-                                    id={`${id}-page-size-50`}
-                                    value="50"
-                                >
-                                    50 项
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
+                        />
                         <span className="num" aria-live="polite">
                             第 {currentPage} / {pageCount} 页
                         </span>
@@ -1045,12 +983,7 @@ export function ApprovalSubmittedSummary({
     const renderMetricMoney = (raw: string): ReactNode => {
         const decimal = currencyDecimal(raw)
         return decimal != null ? (
-            <MoneyValue
-                display="exact"
-                value={decimal}
-                inheritColor
-                className="font-semibold [&_[data-slot=money-value-number]]:wrap-anywhere [&_[data-slot=money-value-number]]:whitespace-normal"
-            />
+            <MoneyValue display="exact" value={decimal} inheritColor />
         ) : (
             raw
         )

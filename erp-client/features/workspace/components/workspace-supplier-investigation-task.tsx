@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
-import { DetailWorkspaceMeta } from "@/components/business"
+import {
+    DetailWorkspaceMeta,
+    WorkspaceProcessingPane,
+    WorkspaceCompactTaskHeader,
+} from "@/components/business"
 import {
     useWorkspaceInspectorMode,
     useWorkspaceTaskPage,
@@ -16,13 +20,9 @@ import {
     subscribeWorkspaceHotkeyAction,
 } from "@/lib/workspace-hotkeys"
 
-import { useWorkspaceHotkeys } from "../hooks/use-workspace-hotkeys"
+import { useWorkspaceHotkeys } from "@/hooks/use-workspace-hotkeys"
 import type { WorkspaceWorkItem } from "../types"
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
-import {
-    WorkspaceCompactTaskHeader,
-    WorkspaceTaskIdentityHeader,
-} from "./workspace-task-identity-header"
+import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 type InvestigationProps = {
     item: WorkspaceWorkItem

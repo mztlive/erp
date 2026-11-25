@@ -14,6 +14,7 @@ import {
     BusinessFailureState,
     DetailWorkspaceMeta,
     PaperDocumentViewport,
+    WorkspaceProcessingPane,
 } from "@/components/business"
 import {
     useWorkspaceInspectorMode,
@@ -33,7 +34,6 @@ import { TASK_TYPE_CANONICAL_LABELS } from "@/lib/task-status-dictionary"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceDocumentPaperDialog } from "./workspace-document-paper-dialog"
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 /** 采购依据更新只在服务端确认任务完成后推进队列。 */

@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import type { ApprovalMaterials } from "@/features/approval-workflow/api/materials"
 
 /** 评价来自最新登记档案，与提交时冻结的供应商名称分别标注。 */
@@ -12,7 +12,7 @@ export function WorkspaceSupplierRating({
 }) {
     if (!rating) {
         return compact ? (
-            <Badge variant="neutral">评估暂不可用</Badge>
+            <StatusBadge tone="neutral" label="评估暂不可用" />
         ) : (
             <p className="text-xs text-muted-foreground">
                 供应商评估资料暂不可用，请刷新后重试。
@@ -21,14 +21,15 @@ export function WorkspaceSupplierRating({
     }
 
     if (compact) {
-        const ratingVariant = rating.rating_label ? "info" : "neutral"
+        const ratingTone = rating.rating_label ? "info" : "neutral"
 
         return (
             <div data-slot="supplier-rating-compact" className="space-y-0.5">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <Badge variant={ratingVariant}>
-                        评级：{rating.rating_label ?? "未评级"}
-                    </Badge>
+                    <StatusBadge
+                        tone={ratingTone}
+                        label={`评级：${rating.rating_label ?? "未评级"}`}
+                    />
                     {rating.current_score != null ? (
                         <>
                             <span className="num text-body-compact font-medium text-foreground">

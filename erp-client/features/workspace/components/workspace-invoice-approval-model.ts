@@ -1,3 +1,4 @@
+import type { WorkspaceApprovalResubmissionBannerProps } from "@/components/business"
 import type { ApprovalMaterials } from "@/features/approval-workflow/api/materials"
 import { approvalSalesTaxPoint } from "@/features/approval-workflow/display"
 import { resolveInvoiceRequestLines } from "@/features/invoice-requests/components/request-details"
@@ -16,7 +17,6 @@ import {
 } from "@/lib/fixed-decimal"
 import type { InvoiceApprovalReview } from "../api/invoice-review"
 import type { WorkspaceWorkItem } from "../types"
-import type { WorkspaceApprovalResubmissionBannerProps } from "./workspace-approval-resubmission-banner"
 
 export type InvoiceSource = NonNullable<
     ApprovalMaterials["display"]["source_sales"]

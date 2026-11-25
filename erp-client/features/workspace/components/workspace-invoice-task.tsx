@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import {
     ArrowUpRightIcon,
-    CircleHelpIcon,
     CopyIcon,
     FileTextIcon,
     PanelRightCloseIcon,
@@ -13,6 +12,7 @@ import {
 
 import {
     BusinessFailureState,
+    DecisionKpiBar,
     DetailWorkspaceMeta,
     MoneyValue,
     PaperDocumentViewport,
@@ -20,6 +20,7 @@ import {
     WorkspaceFactGrid,
     WorkspaceFactGroup,
     WorkspaceFactItem,
+    WorkspaceProcessingPane,
     detailWorkspaceStyles,
     useWorkspaceInspectorMode,
 } from "@/components/business"
@@ -36,11 +37,6 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { toast } from "@/components/ui/toast"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useCustomerAccountsDetailQuery } from "@/features/customer-receivables/hooks/queries"
 import type { InvoiceRequest } from "@/features/invoice-requests/api"
@@ -79,7 +75,6 @@ import {
     useWorkspaceInvoiceRegistration,
     WorkspaceInvoiceUpload,
 } from "./workspace-invoice-upload"
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 type WorkspaceInvoiceTaskProps = Readonly<{
@@ -665,77 +660,65 @@ function InvoiceKpiBand({
             : null
 
     return (
-        <dl
-            aria-label="本申请开票指标"
-            className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/invoice-task:grid-cols-2"
-        >
-            <div className="min-w-0">
-                <dt className="flex items-center gap-1 text-xs text-muted-foreground">
-                    待开票余额
-                    <Tooltip>
-                        <TooltipTrigger
-                            render={
-                                <Button
-                                    id={`${idPrefix}-balance-formula`}
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-xs"
-                                    aria-label="待开票余额计算公式"
-                                />
-                            }
-                        >
-                            <CircleHelpIcon aria-hidden="true" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            批复开票总额 − 已登记开票金额
-                        </TooltipContent>
-                    </Tooltip>
-                </dt>
-                <dd className="mt-0.5">
-                    <MoneyValue
-                        value={amount}
-                        display="exact"
-                        className={`text-value-section font-semibold tracking-tight ${wrapMoney}`}
-                    />
-                </dd>
-                <dd className="text-tiny text-muted-foreground">
-                    本申请 · 含税
-                </dd>
-            </div>
-            <div className="min-w-0">
-                <dt className="text-xs text-muted-foreground">批复总额</dt>
-                <dd className="mt-0.5">
-                    <MoneyValue
-                        value={request.data.amount}
-                        display="exact"
-                        className={`text-value-compact font-semibold ${wrapMoney}`}
-                    />
-                </dd>
-                <dd className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-tiny text-muted-foreground">
-                    已登记
-                    <MoneyValue
-                        value={request.invoiced_amount}
-                        display="exact"
-                        inheritColor
-                        className={wrapMoney}
-                    />
-                    {ratioPercent !== null ? (
-                        <span className="num">（{ratioPercent}%）</span>
-                    ) : null}
-                </dd>
-                {ratio !== null ? (
-                    <dd
-                        aria-hidden="true"
-                        className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-border"
-                    >
-                        <div
-                            className="h-full rounded-full bg-primary"
-                            style={{ width: `calc(${ratio} * 100%)` }}
+        <DecisionKpiBar
+            columns={2}
+            ariaLabel="本申请开票指标"
+            items={[
+                {
+                    id: "balance",
+                    label: "待开票余额",
+                    emphasis: "primary",
+                    formulaTooltipId: `${idPrefix}-balance-formula`,
+                    formulaTooltipLabel: "待开票余额计算公式",
+                    formulaTooltip: "批复开票总额 − 已登记开票金额",
+                    value: (
+                        <MoneyValue
+                            value={amount}
+                            display="exact"
+                            inheritColor
                         />
-                    </dd>
-                ) : null}
-            </div>
-        </dl>
+                    ),
+                    footnote: "本申请 · 含税",
+                },
+                {
+                    id: "approved-total",
+                    label: "批复总额",
+                    emphasis: "secondary",
+                    value: (
+                        <MoneyValue
+                            value={request.data.amount}
+                            display="exact"
+                            inheritColor
+                        />
+                    ),
+                    footnote: (
+                        <>
+                            已登记
+                            <MoneyValue
+                                value={request.invoiced_amount}
+                                display="exact"
+                                inheritColor
+                            />
+                            {ratioPercent !== null ? (
+                                <span className="num">（{ratioPercent}%）</span>
+                            ) : null}
+                        </>
+                    ),
+                    extra:
+                        ratio !== null ? (
+                            <div
+                                aria-hidden="true"
+                                className="h-1.5 overflow-hidden rounded-full bg-border"
+                            >
+                                <div
+                                    className="h-full rounded-full bg-primary"
+                                    style={{ width: `calc(${ratio} * 100%)` }}
+                                />
+                            </div>
+                        ) : undefined,
+                },
+            ]}
+        />
     )
 }
 
@@ -928,11 +911,11 @@ function InvoiceCommercialDetails({
                                         {lines.length} 项
                                     </span>
                                 </TableCell>
-                                <TableCell className="px-1 text-right">
+                                <TableCell className="px-1 text-right font-semibold">
                                     <MoneyValue
                                         value={lineTotal}
                                         display="exact"
-                                        className={`font-semibold ${wrapMoney}`}
+                                        className={wrapMoney}
                                     />
                                 </TableCell>
                             </TableRow>

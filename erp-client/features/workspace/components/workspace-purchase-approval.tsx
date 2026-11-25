@@ -10,7 +10,6 @@ import {
     type RefObject,
 } from "react"
 import {
-    ChevronRightIcon,
     Columns2Icon,
     FileCheck2Icon,
     FileTextIcon,
@@ -18,13 +17,17 @@ import {
     MapPinIcon,
     MessageSquareTextIcon,
     PaperclipIcon,
-    TriangleAlertIcon,
 } from "lucide-react"
 
 import {
     BusinessFailureState,
+    DecisionKpiBar,
+    DecisionKpiCell,
     DetailWorkspaceSection,
     MoneyValue,
+    PurchaseProfitValue,
+    TaskRiskSummaryBar,
+    WorkspaceApprovalResubmissionBanner,
     WorkspaceFactItem,
     detailWorkspaceStyles,
 } from "@/components/business"
@@ -32,12 +35,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
 import type { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
 import {
@@ -49,9 +48,7 @@ import { displayBusinessText, displayName } from "@/lib/display-name"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import type { WorkspaceWorkItem } from "../types"
-import { WorkspaceApprovalResubmissionBanner } from "./workspace-approval-resubmission-banner"
 import type { WorkspacePaperTarget } from "./workspace-document-paper-dialog"
-import { PurchaseProfitValue } from "./workspace-purchase-amount-details"
 import {
     buildPurchaseApprovalMetrics,
     evaluatePurchaseLines,
@@ -185,16 +182,15 @@ export function WorkspacePurchaseApprovalSources({
                                         )
                                     ) : null}
                                     {orderRiskChecks.map((check) => (
-                                        <Badge
+                                        <StatusBadge
                                             key={check.id}
-                                            variant={
+                                            tone={
                                                 check.status === "severe"
                                                     ? "destructive"
                                                     : "warning"
                                             }
-                                        >
-                                            {check.badge}
-                                        </Badge>
+                                            label={check.badge}
+                                        />
                                     ))}
                                     {contractNotices.map((field) => (
                                         <span
@@ -637,103 +633,46 @@ export function WorkspacePurchaseApproval({
                             />
                         ) : null}
 
-                        {riskReasons.length > 0 ? (
-                            <div
-                                role="alert"
-                                data-slot="purchase-approval-risk-strip"
-                                title={riskReasons.join("；")}
-                                className={cn(
-                                    "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border-l-2 px-3 py-1.5 text-xs",
-                                    isSevereRisk
-                                        ? "border-l-destructive bg-destructive-soft/65 text-destructive-soft-foreground"
-                                        : "border-l-warning bg-warning-soft/75 text-warning-soft-foreground",
-                                )}
-                            >
-                                <div className="flex min-w-0 flex-1 items-center gap-2">
-                                    <TriangleAlertIcon
-                                        aria-hidden="true"
-                                        className="size-3.5 shrink-0"
-                                    />
-                                    <p className="min-w-0 truncate">
-                                        <span className="font-medium">
-                                            {isSevereRisk
-                                                ? "高危复核"
-                                                : "需复核"}
-                                        </span>
-                                        <span
-                                            aria-hidden="true"
-                                            className="mx-1.5 opacity-60"
-                                        >
-                                            ·
-                                        </span>
-                                        <span>
-                                            {riskChipsSummary ||
-                                                riskReasons.join("；")}
-                                        </span>
-                                    </p>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-1">
-                                    {metrics.actionableRiskLineCount > 0 &&
-                                    !riskOnly ? (
-                                        <Button
-                                            id={`${prefix}-alert-filter-risk`}
-                                            type="button"
-                                            variant="ghost"
-                                            size="xs"
-                                            className={cn(
-                                                "h-control-xs shrink-0 gap-0.5 px-1.5 text-xs font-medium shadow-none",
-                                                isSevereRisk
-                                                    ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                                    : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
-                                            )}
-                                            onClick={handleFilterToRisks}
-                                        >
-                                            仅看风险项（
-                                            {metrics.actionableRiskLineCount}）
-                                            <ChevronRightIcon aria-hidden="true" />
-                                        </Button>
-                                    ) : null}
-                                    {hasCommercialRisk && onCompareSource ? (
-                                        <Button
-                                            id={`${prefix}-alert-compare-source`}
-                                            type="button"
-                                            variant="ghost"
-                                            size="xs"
-                                            className={cn(
-                                                "h-control-xs shrink-0 gap-0.5 px-1.5 text-xs font-medium shadow-none",
-                                                isSevereRisk
-                                                    ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                                    : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
-                                            )}
-                                            onClick={() =>
-                                                onCompareSource({
-                                                    revisionId:
-                                                        firstCommercialRiskOrder?.revisionId ??
-                                                        sourceComparison
-                                                            ?.orders[0]
-                                                            ?.revisionId,
-                                                })
-                                            }
-                                        >
-                                            采销对照
-                                            <ChevronRightIcon aria-hidden="true" />
-                                        </Button>
-                                    ) : null}
-                                </div>
-                            </div>
-                        ) : null}
+                        <TaskRiskSummaryBar
+                            dataSlot="purchase-approval-risk-strip"
+                            riskCount={riskReasons.length}
+                            severity={isSevereRisk ? "destructive" : "warning"}
+                            tooltipTitle={riskReasons.join("；")}
+                            summary={riskChipsSummary || riskReasons.join("；")}
+                            actions={[
+                                metrics.actionableRiskLineCount > 0 && !riskOnly
+                                    ? {
+                                          id: "filter-risk",
+                                          buttonId: `${prefix}-alert-filter-risk`,
+                                          label: "仅看风险项",
+                                          count: metrics.actionableRiskLineCount,
+                                          onClick: handleFilterToRisks,
+                                      }
+                                    : null,
+                                hasCommercialRisk && onCompareSource
+                                    ? {
+                                          id: "compare-source",
+                                          buttonId: `${prefix}-alert-compare-source`,
+                                          label: "采销对照",
+                                          onClick: () =>
+                                              onCompareSource({
+                                                  revisionId:
+                                                      firstCommercialRiskOrder?.revisionId ??
+                                                      sourceComparison
+                                                          ?.orders[0]
+                                                          ?.revisionId,
+                                              }),
+                                      }
+                                    : null,
+                            ]}
+                        />
                     </div>
                 ) : null}
 
-                <div
-                    role="region"
-                    aria-label="采购审批关键决策指标"
-                    className={cn(
-                        "mt-3 grid grid-cols-1 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/purchase-lines:grid-cols-2",
-                        isPureExpenseOrder
-                            ? "@[720px]/purchase-lines:grid-cols-3"
-                            : "@[840px]/purchase-lines:grid-cols-4",
-                    )}
+                <DecisionKpiBar
+                    columns={isPureExpenseOrder ? 3 : 4}
+                    ariaLabel="采购审批关键决策指标"
+                    className="mt-3"
                 >
                     <PurchaseKpiCell
                         label="实际采购总额"
@@ -1252,9 +1191,10 @@ export function WorkspacePurchaseApproval({
                                                 </span>
                                             ) : null}
                                             {overallTaxInverted ? (
-                                                <Badge variant="destructive">
-                                                    税后倒挂
-                                                </Badge>
+                                                <StatusBadge
+                                                    tone="destructive"
+                                                    label="税后倒挂"
+                                                />
                                             ) : null}
                                         </span>
                                     ) : (
@@ -1357,29 +1297,31 @@ export function WorkspacePurchaseApproval({
                             <span className="inline-flex flex-wrap items-center gap-1.5 text-body-compact font-semibold text-foreground">
                                 <span>{metrics.paymentTermLabel ?? "—"}</span>
                                 {metrics.isPrepayGate ? (
-                                    <Badge variant="warning">先款门禁</Badge>
+                                    <StatusBadge
+                                        tone="warning"
+                                        label="先款门禁"
+                                    />
                                 ) : null}
                                 {singlePaymentCheck &&
                                 (singlePaymentCheck.status === "warning" ||
                                     singlePaymentCheck.status === "severe") ? (
-                                    <Badge
-                                        variant={
+                                    <StatusBadge
+                                        tone={
                                             singlePaymentCheck.status ===
                                             "severe"
                                                 ? "destructive"
                                                 : "warning"
                                         }
-                                    >
-                                        {singlePaymentCheck.badge}
-                                    </Badge>
+                                        label={singlePaymentCheck.badge}
+                                    />
                                 ) : (sourceComparison?.orders.length ?? 0) >
                                       1 &&
                                   summary &&
                                   summary.paymentRiskChecks.length > 0 ? (
-                                    <Badge variant="warning">
-                                        {summary.paymentRiskChecks.length}{" "}
-                                        单资金风险
-                                    </Badge>
+                                    <StatusBadge
+                                        tone="warning"
+                                        label={`${summary.paymentRiskChecks.length} 单资金风险`}
+                                    />
                                 ) : null}
                             </span>
                         }
@@ -1502,7 +1444,7 @@ export function WorkspacePurchaseApproval({
                             </>
                         }
                     />
-                </div>
+                </DecisionKpiBar>
 
                 {submission ? (
                     <section
@@ -1648,7 +1590,6 @@ export function WorkspacePurchaseApproval({
                                                 extraCost.occurred_gross_total
                                             }
                                             inheritColor
-                                            className="font-medium"
                                         />
                                         {" · 待发生 "}
                                         <MoneyValue
@@ -1657,7 +1598,6 @@ export function WorkspacePurchaseApproval({
                                                 extraCost.pending_gross_total
                                             }
                                             inheritColor
-                                            className="font-medium"
                                         />
                                     </span>
                                 </div>
@@ -1776,49 +1716,21 @@ function PurchaseKpiCell({
     tooltipContent?: ReactNode
 }) {
     return (
-        <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-                <span>{label}</span>
-                {basis ? (
-                    <span className="text-tiny text-muted-foreground/80">
-                        {basis}
-                    </span>
-                ) : null}
-                {tooltipContent && tooltipId ? (
-                    <Tooltip>
-                        <TooltipTrigger
-                            render={
-                                <button
-                                    id={tooltipId}
-                                    type="button"
-                                    aria-label={tooltipLabel ?? `${label}说明`}
-                                    className="inline-flex size-4 cursor-help items-center justify-center rounded-sm text-muted-foreground/80 transition-colors hover:text-foreground"
-                                />
-                            }
-                        >
-                            <InfoIcon aria-hidden="true" className="size-3" />
-                        </TooltipTrigger>
-                        <TooltipContent className="block">
-                            {tooltipContent}
-                        </TooltipContent>
-                    </Tooltip>
-                ) : null}
-            </div>
-            <div
-                className={cn(
-                    "num mt-1 max-w-full wrap-anywhere font-semibold tracking-tight text-foreground",
-                    emphasis === "primary"
-                        ? "text-value-section"
-                        : "text-value-compact",
-                )}
-            >
-                {value}
-            </div>
-            {detail ? (
-                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                    {detail}
-                </div>
-            ) : null}
-        </div>
+        <DecisionKpiCell
+            label={label}
+            basis={basis}
+            emphasis={emphasis === "primary" ? "primary" : "secondary"}
+            value={value}
+            formulaTooltipId={tooltipId}
+            formulaTooltipLabel={tooltipLabel ?? `${label}说明`}
+            formulaTooltip={tooltipContent}
+            extra={
+                detail ? (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                        {detail}
+                    </div>
+                ) : undefined
+            }
+        />
     )
 }

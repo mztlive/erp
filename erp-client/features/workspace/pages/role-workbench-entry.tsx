@@ -6,7 +6,7 @@ import { ArrowUpRightIcon } from "lucide-react"
 
 import {
     BusinessFailureState,
-    PageScaffold,
+    DetailWorkspacePage,
     detailWorkspaceStyles,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
@@ -82,15 +82,12 @@ export function RoleWorkbenchEntry({
 
     if (query.isError)
         return (
-            <PageScaffold
-                density="compact"
-                className={`${detailWorkspaceStyles.page} min-h-0 overflow-auto`}
-            >
+            <DetailWorkspacePage className="min-h-0 overflow-auto">
                 <BusinessFailureState
                     error={query.error}
                     onRetry={() => void query.refetch()}
                 />
-            </PageScaffold>
+            </DetailWorkspacePage>
         )
 
     const availableWorkbenches = ROLE_WORKBENCHES.filter((item) =>
@@ -101,10 +98,7 @@ export function RoleWorkbenchEntry({
         : undefined
 
     return (
-        <PageScaffold
-            density="compact"
-            className={`${detailWorkspaceStyles.page} min-h-0 overflow-auto`}
-        >
+        <DetailWorkspacePage className="min-h-0 overflow-auto">
             <header className="sticky top-0 z-20 flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-card py-2">
                 <div className="flex min-w-0 items-baseline gap-2.5">
                     <h1 className={detailWorkspaceStyles.title}>
@@ -192,6 +186,6 @@ export function RoleWorkbenchEntry({
                     </p>
                 )}
             </section>
-        </PageScaffold>
+        </DetailWorkspacePage>
     )
 }

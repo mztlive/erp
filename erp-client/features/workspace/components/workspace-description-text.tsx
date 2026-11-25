@@ -19,7 +19,7 @@ export function WorkspaceDescriptionText({
     return (
         <div
             className={cn(
-                "min-w-0 space-y-2 text-body-compact leading-6 wrap-anywhere",
+                "min-w-0 space-y-2 text-body-compact wrap-anywhere",
                 className,
             )}
         >

@@ -205,9 +205,11 @@ export function AccessCheckResult({
                         {input.object_id ? "已选择具体单据" : "仅检查权限配置"}
                     </Badge>
                     {reviews.length > 0 ? (
-                        <Badge variant="warning" className="num">
-                            {reviews.length} 项待核对
-                        </Badge>
+                        <StatusBadge
+                            tone="warning"
+                            label={`${reviews.length} 项待核对`}
+                            className="num"
+                        />
                     ) : null}
                     <span className="text-xs text-muted-foreground">
                         {resourceLabel(input.resource)} ·{" "}
@@ -227,7 +229,7 @@ export function AccessCheckResult({
                 <AlertDescription>{summary.description}</AlertDescription>
             </Alert>
 
-            <div className="rounded-lg border border-border/70 bg-surface-sunken/70 px-4 py-3 text-body-compact leading-relaxed">
+            <div className="rounded-lg border border-border/70 bg-surface-sunken/70 px-4 py-3 text-body-compact">
                 <span className="font-medium text-foreground">
                     {summary.variant === "success" ? "适用范围：" : "下一步："}
                 </span>

@@ -2,7 +2,10 @@
 
 import * as React from "react"
 
-import { DetailWorkspaceMeta } from "@/components/business"
+import {
+    DetailWorkspaceMeta,
+    WorkspaceProcessingPane,
+} from "@/components/business"
 import { useWorkspaceInspectorMode } from "@/components/business/workspace-task-pane"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { SettlementCenter } from "@/features/supplier-settlements/components/settlement-center"
@@ -14,7 +17,6 @@ import { buildWorkspaceDetailHref } from "@/lib/workspace-detail-href"
 
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import type { WorkspaceWorkItem } from "../types"
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 /** W01 供应商结算复核：以本地页签状态承载 W27 正式作业，不污染工作台 URL。 */

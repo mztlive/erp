@@ -168,7 +168,7 @@ export function IntegrationItemSummary({
                             </time>
                         ) : null}
                     </div>
-                    <p className="break-words text-body-compact leading-relaxed">
+                    <p className="break-words text-body-compact">
                         {failureMessage ||
                             "原始失败摘要暂不可用，请打开接口设置查看检查与同步记录。"}
                     </p>

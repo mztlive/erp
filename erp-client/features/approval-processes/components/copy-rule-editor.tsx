@@ -8,17 +8,9 @@ import {
     Trash2Icon,
     XIcon,
 } from "lucide-react"
+import { OptionCombobox } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectLabel,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
 import {
     Sheet,
     SheetContent,
@@ -332,49 +324,23 @@ function CopyRuleList({
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor={`${id}-trigger`}>触发时机</Label>
-                        <Select
+                        <OptionCombobox
+                            id={`${id}-trigger`}
+                            aria-label="触发时机"
                             value={pendingKey}
                             onValueChange={setPendingKey}
                             disabled={disabled}
-                        >
-                            <SelectTrigger
-                                id={`${id}-trigger`}
-                                className="w-full min-w-0"
-                            >
-                                <SelectValue placeholder="选择抄送时机">
-                                    {pending?.label}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent alignItemWithTrigger={false}>
-                                {[false, true].map((nodeEvent) => (
-                                    <SelectGroup key={String(nodeEvent)}>
-                                        <SelectLabel>
-                                            {nodeEvent
-                                                ? "按具体审批步骤触发"
-                                                : "按整体审批结果触发"}
-                                        </SelectLabel>
-                                        {available
-                                            .filter(
-                                                (slot) =>
-                                                    Boolean(
-                                                        slot.nodeClientId,
-                                                    ) === nodeEvent,
-                                            )
-                                            .map((slot) => (
-                                                <SelectItem
-                                                    key={ruleKey(slot)}
-                                                    idPrefix={`${id}-trigger`}
-                                                    value={ruleKey(slot)}
-                                                >
-                                                    <span className="whitespace-normal break-words">
-                                                        {slot.label}
-                                                    </span>
-                                                </SelectItem>
-                                            ))}
-                                    </SelectGroup>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                            allowClear={false}
+                            placeholder="选择抄送时机"
+                            options={available.map((slot) => ({
+                                value: ruleKey(slot),
+                                label: slot.label,
+                                keywords: slot.nodeClientId
+                                    ? "按具体审批步骤触发 节点"
+                                    : "按整体审批结果触发 流程",
+                            }))}
+                            inputClassName="w-full min-w-0"
+                        />
                     </div>
                     {pending && (
                         <div className="space-y-2">

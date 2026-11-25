@@ -14,6 +14,7 @@ import {
     PaperDocumentViewport,
     useWorkspaceInspectorMode,
     useWorkspaceTaskPage,
+    WorkspaceProcessingPane,
 } from "@/components/business"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -28,7 +29,6 @@ import { subscribeWorkspaceHotkeyAction } from "@/lib/workspace-hotkeys"
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceDocumentPaperDialog } from "./workspace-document-paper-dialog"
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 type Props = {

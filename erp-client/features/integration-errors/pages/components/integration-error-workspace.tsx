@@ -186,7 +186,7 @@ export function IntegrationErrorWorkspace({
                 className={cn(
                     "flex min-w-0 flex-col gap-6 p-5 sm:p-6",
                     !embedded &&
-                        "rounded-xl border border-border/60 bg-card shadow-xs",
+                        "rounded-lg border border-border/60 bg-card shadow-xs",
                 )}
             >
                 {content}

@@ -11,7 +11,14 @@ import {
 } from "react"
 import { MapPinIcon, TriangleAlertIcon } from "lucide-react"
 
-import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
+import {
+    MoneyValue,
+    QuantityValue,
+    RateValue,
+    APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
+    ApprovalLineFilterBar,
+    ApprovalLinePagination,
+} from "@/components/business"
 import {
     Table,
     TableBody,
@@ -34,11 +41,6 @@ import type {
     SalesApprovalMetrics,
     VoucherDiscountSummary,
 } from "../lib/sales-approval-model"
-import {
-    APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
-    ApprovalLineFilterBar,
-    ApprovalLinePagination,
-} from "./workspace-approval-table-controls"
 
 export type SalesComparisonTableHandle = {
     filterToRisks: () => void

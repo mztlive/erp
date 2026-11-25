@@ -104,7 +104,7 @@ export function FlowCanvasNode({
     return (
         <div
             className={cn(
-                "relative rounded-xl border shadow-sm",
+                "relative rounded-lg border shadow-sm",
                 node
                     ? "border-info-border bg-info-soft/40"
                     : "border-border/70 bg-muted/30 text-muted-foreground shadow-none",

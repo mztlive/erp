@@ -39,7 +39,7 @@ import {
     WorkspaceHotkeyCheatSheetButton,
     dispatchWorkspaceHotkeyAction,
     useWorkspaceHotkeys,
-} from "../hooks/use-workspace-hotkeys"
+} from "@/hooks/use-workspace-hotkeys"
 import {
     parseWorkspaceSearchParams,
     restrictWorkspaceFilters,

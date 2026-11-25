@@ -4,13 +4,16 @@ import { useState, type ReactNode } from "react"
 import { FileTextIcon } from "lucide-react"
 
 import {
+    APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
+    ApprovalLineFilterBar,
+    ApprovalLinePagination,
     MoneyValue,
     WorkspaceFactGrid,
     WorkspaceFactItem,
     detailWorkspaceStyles,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -36,11 +39,6 @@ import { displayName } from "@/lib/display-name"
 import { formatFixedDisplay } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import type { InvoiceApprovalReview } from "../api/invoice-review"
-import {
-    APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
-    ApprovalLineFilterBar,
-    ApprovalLinePagination,
-} from "./workspace-approval-table-controls"
 import {
     invoiceApprovalQuota,
     invoiceSourceNumber,
@@ -336,9 +334,10 @@ export function InvoiceSourceEvidence({
                         </span>
                     </span>
                 </Button>
-                <Badge variant={frozen ? "neutral" : "info"}>
-                    {frozen ? "提交时版本" : "当前生效版本"}
-                </Badge>
+                <StatusBadge
+                    tone={frozen ? "neutral" : "info"}
+                    label={frozen ? "提交时版本" : "当前生效版本"}
+                />
             </div>
             <WorkspaceFactGrid
                 columns={3}
@@ -521,7 +520,7 @@ export function InvoiceHistoryEvidence({
                             >
                                 <span className="num">{row.request_no}</span>
                                 {row.is_current ? (
-                                    <Badge variant="info">本次申请</Badge>
+                                    <StatusBadge tone="info" label="本次申请" />
                                 ) : null}
                             </span>,
                             row.status,

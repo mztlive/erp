@@ -1,9 +1,15 @@
 import { useState } from "react"
 import { ArrowDownIcon, ArrowUpIcon, MapPinIcon } from "lucide-react"
 
-import { MoneyValue, QuantityValue, RateValue } from "@/components/business"
+import {
+    MoneyValue,
+    PurchaseProfitValue,
+    QuantityValue,
+    RateValue,
+} from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { TableCell, TableRow } from "@/components/ui/table"
 import {
     Tooltip,
@@ -14,7 +20,6 @@ import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/mate
 import { inputTaxRatePercent } from "@/features/purchase-orders/lib/input-tax-rate"
 import { displayName } from "@/lib/display-name"
 import { cn } from "@/lib/utils"
-import { PurchaseProfitValue } from "./workspace-purchase-amount-details"
 import {
     purchaseSpecification,
     type PurchaseComparison,
@@ -108,18 +113,21 @@ export function PurchaseComparisonRow({
                             <Badge variant="neutral">费用</Badge>
                         ) : null}
                         {taxInverted ? (
-                            <Badge variant="destructive">税后倒挂</Badge>
+                            <StatusBadge tone="destructive" label="税后倒挂" />
                         ) : null}
                         {comparison.quantityExcess ? (
-                            <Badge variant="destructive">超需求</Badge>
+                            <StatusBadge tone="destructive" label="超需求" />
                         ) : splitMergedExcess ? (
-                            <Badge variant="destructive">拆笔超需求</Badge>
+                            <StatusBadge
+                                tone="destructive"
+                                label="拆笔超需求"
+                            />
                         ) : null}
                         {comparison.mismatchedProduct ? (
-                            <Badge variant="destructive">品规差异</Badge>
+                            <StatusBadge tone="destructive" label="品规差异" />
                         ) : null}
                         {comparison.unitMismatch ? (
-                            <Badge variant="destructive">单位差异</Badge>
+                            <StatusBadge tone="destructive" label="单位差异" />
                         ) : null}
                     </div>
                     {spec || !comparison.fee ? (

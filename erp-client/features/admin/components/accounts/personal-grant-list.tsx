@@ -120,7 +120,7 @@ export function PersonalGrantList({
                             >
                                 <div className="flex items-start justify-between gap-2 p-3">
                                     <div className="min-w-0 space-y-1 pt-1">
-                                        <p className="font-medium leading-5 wrap-anywhere">
+                                        <p className="font-medium wrap-anywhere">
                                             {description}
                                         </p>
                                         {!expanded && editable && (

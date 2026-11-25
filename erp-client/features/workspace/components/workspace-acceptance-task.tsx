@@ -10,6 +10,7 @@ import {
     PaperDocumentViewport,
     useWorkspaceInspectorMode,
     useWorkspaceTaskPage,
+    WorkspaceProcessingPane,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -31,7 +32,6 @@ import {
     workspaceAcceptanceTaskIdentity,
 } from "../lib/workspace-acceptance"
 import type { WorkspaceWorkItem } from "../types"
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 export function WorkspaceAcceptanceTask(props: {

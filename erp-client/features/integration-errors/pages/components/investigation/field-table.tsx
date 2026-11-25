@@ -121,7 +121,7 @@ export function InvestigationFieldTable({
                     }
                 />
             ) : null}
-            <Table className="w-full table-fixed text-left text-xs wrap-anywhere">
+            <Table className="w-full table-fixed text-left wrap-anywhere">
                 <TableHeader className="bg-transparent [&_tr]:border-b-0">
                     <TableRow>
                         <TableHead

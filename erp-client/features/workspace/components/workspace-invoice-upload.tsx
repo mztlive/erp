@@ -350,11 +350,11 @@ export function WorkspaceInvoiceUpload({
         <dl className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
                 <dt className="text-muted-foreground">本次开票金额</dt>
-                <dd>
+                <dd className="font-semibold">
                     <MoneyValue
                         value={normalized}
                         display="exact"
-                        className={`font-semibold ${wrapMoney}`}
+                        className={wrapMoney}
                     />
                 </dd>
             </div>
@@ -451,6 +451,7 @@ export function WorkspaceInvoiceUpload({
                             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                                 <Input
                                     id={amountId}
+                                    size="sm"
                                     type="text"
                                     inputMode="decimal"
                                     autoComplete="off"
@@ -459,7 +460,7 @@ export function WorkspaceInvoiceUpload({
                                     aria-describedby={
                                         error ? amountErrorId : undefined
                                     }
-                                    className="num h-control-sm w-32 max-w-full border-transparent bg-surface-sunken text-body-compact shadow-none hover:bg-card focus-visible:bg-card"
+                                    className="num w-32 max-w-full border-transparent bg-surface-sunken shadow-none hover:bg-card focus-visible:bg-card"
                                     value={value}
                                     disabled={locked}
                                     onChange={(event) => {
@@ -489,7 +490,7 @@ export function WorkspaceInvoiceUpload({
                                 <MoneyValue
                                     value={amount}
                                     display="exact"
-                                    className={`text-body-compact ${wrapMoney}`}
+                                    className={wrapMoney}
                                 />
                                 {amountError && amount !== null && !locked ? (
                                     <Button

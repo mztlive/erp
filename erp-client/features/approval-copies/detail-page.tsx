@@ -552,7 +552,7 @@ function CopyDetailPane({
                                           <TabsList
                                               variant="line"
                                               aria-label="抄送上下文"
-                                              className="h-control-md w-full justify-start gap-2 overflow-x-auto"
+                                              className="h-control w-full justify-start gap-2 overflow-x-auto"
                                           >
                                               <TabsTrigger
                                                   id="copy-detail-tab-history"

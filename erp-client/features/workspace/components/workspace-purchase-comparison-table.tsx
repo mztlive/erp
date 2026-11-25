@@ -2,7 +2,14 @@
 
 import { useImperativeHandle, useMemo, useState, type RefObject } from "react"
 
-import { MoneyValue, QuantityValue } from "@/components/business"
+import {
+    MoneyValue,
+    QuantityValue,
+    APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
+    ApprovalLineFilterBar,
+    ApprovalLinePagination,
+    PurchaseProfitValue,
+} from "@/components/business"
 import {
     Table,
     TableBody,
@@ -17,12 +24,6 @@ import type { ApprovalPurchaseLine } from "@/features/approval-workflow/api/mate
 import { countLineDeliveryPoints } from "@/features/approval-workflow/purchase-fulfillment"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { cn } from "@/lib/utils"
-import {
-    APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
-    ApprovalLineFilterBar,
-    ApprovalLinePagination,
-} from "./workspace-approval-table-controls"
-import { PurchaseProfitValue } from "./workspace-purchase-amount-details"
 import {
     buildPurchaseApprovalMetrics,
     evaluatePurchaseLines,

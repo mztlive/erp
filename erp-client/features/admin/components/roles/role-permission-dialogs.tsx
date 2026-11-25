@@ -15,6 +15,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     actionLabel,
     PERMISSION_BY_CODE,
@@ -268,24 +269,18 @@ export function RolePermissionReview({
                                         </h3>
                                         <div className="flex flex-wrap gap-1.5">
                                             {workbenchDiff.added.map((id) => (
-                                                <Badge
+                                                <StatusBadge
                                                     key={`add-${id}`}
-                                                    variant="success"
-                                                >
-                                                    新增 ·{" "}
-                                                    {roleWorkbench(id)?.name ??
-                                                        id}
-                                                </Badge>
+                                                    tone="success"
+                                                    label={`新增 · ${roleWorkbench(id)?.name ?? id}`}
+                                                />
                                             ))}
                                             {workbenchDiff.removed.map((id) => (
-                                                <Badge
+                                                <StatusBadge
                                                     key={`rm-${id}`}
-                                                    variant="destructive"
-                                                >
-                                                    移除 ·{" "}
-                                                    {roleWorkbench(id)?.name ??
-                                                        id}
-                                                </Badge>
+                                                    tone="destructive"
+                                                    label={`移除 · ${roleWorkbench(id)?.name ?? id}`}
+                                                />
                                             ))}
                                         </div>
                                     </section>
@@ -367,9 +362,11 @@ export function RolePermissionReview({
                             </p>
                             <div className="flex flex-wrap gap-1.5">
                                 {preservedCodes.map((code) => (
-                                    <Badge key={code} variant="info">
-                                        {permissionLabel(code)}
-                                    </Badge>
+                                    <StatusBadge
+                                        key={code}
+                                        tone="info"
+                                        label={permissionLabel(code)}
+                                    />
                                 ))}
                             </div>
                         </section>
@@ -413,18 +410,11 @@ function PermissionChipGroups({
         <section className="space-y-3">
             <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-foreground">{title}</h3>
-                <Badge
-                    variant={
-                        tone === "success"
-                            ? "success"
-                            : tone === "destructive"
-                              ? "destructive"
-                              : "secondary"
-                    }
+                <StatusBadge
+                    tone={tone}
+                    label={`${count} 项`}
                     className="num"
-                >
-                    {count} 项
-                </Badge>
+                />
             </div>
             {groups.length === 0 ? (
                 <p className="text-xs text-muted-foreground">无</p>

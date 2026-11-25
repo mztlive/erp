@@ -180,7 +180,7 @@ export function DefinitionFlowchart({
                                                 ))}
                                             </div>
                                         ) : (
-                                            <span className="flex items-center gap-2 leading-5">
+                                            <span className="flex items-center gap-2">
                                                 <UserRoundIcon className="size-3.5 shrink-0" />
                                                 {people
                                                     .map(

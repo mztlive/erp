@@ -4,7 +4,11 @@ import { useCallback, useMemo, useState } from "react"
 import Link from "next/link"
 import { ArrowRightLeftIcon, CircleOffIcon, MailIcon } from "lucide-react"
 
-import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
+import {
+    BusinessEmptyState,
+    BusinessFailureState,
+    WorkspaceDocumentBadge,
+} from "@/components/business"
 import {
     ListSelectionBar,
     listWorkspaceEmptyStateClassName,
@@ -30,7 +34,6 @@ import { queueTypeLabel } from "../lib/queue-presentation"
 import { workspaceTaskPresentation } from "../lib/task-presentation"
 import { buildWorkspaceSearchParams } from "../lib/url-state"
 import type { TodayWorkspaceView, WorkspaceWorkItem } from "../types"
-import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 import { WorkspaceSearchPanel } from "./workspace-search-panel"
 import { WorkspaceSortMenu } from "./workspace-sort-menu"
 import { WorkspaceTaskInspector } from "./workspace-task-inspector"

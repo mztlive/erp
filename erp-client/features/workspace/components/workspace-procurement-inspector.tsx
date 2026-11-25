@@ -9,7 +9,6 @@ import {
     ChevronRightIcon,
     FileTextIcon,
     MapPinIcon,
-    PackageCheckIcon,
     RefreshCwIcon,
     TriangleAlertIcon,
     WarehouseIcon,
@@ -20,6 +19,7 @@ import {
     DetailWorkspaceFact,
     DetailWorkspaceFacts,
     DetailWorkspaceMeta,
+    FulfillmentRouteBadge,
     MoneyValue,
     QuantityValue,
 } from "@/components/business"
@@ -788,16 +788,11 @@ export function WorkspaceProcurementInspector({
                                         className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 py-2 text-body-compact"
                                     >
                                         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                                            <Badge
-                                                variant="outline"
-                                                className="h-5 px-1.5 text-tiny"
-                                            >
-                                                <PackageCheckIcon
-                                                    aria-hidden="true"
-                                                    className="size-3 shrink-0"
-                                                />
-                                                库存预留
-                                            </Badge>
+                                            <FulfillmentRouteBadge
+                                                route="stock"
+                                                label="库存预留"
+                                                size="compact"
+                                            />
                                             <span className="truncate font-medium text-foreground">
                                                 {stock.warehouseName}
                                             </span>
@@ -823,12 +818,25 @@ export function WorkspaceProcurementInspector({
                                         >
                                             <div className="min-w-0 space-y-0.5">
                                                 <div className="flex flex-wrap items-center gap-1.5">
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="h-5 px-1.5 text-tiny"
-                                                    >
-                                                        {preview.routeLabel}
-                                                    </Badge>
+                                                    <FulfillmentRouteBadge
+                                                        route={
+                                                            preview.fulfillmentResponsibility ===
+                                                            "WAREHOUSE"
+                                                                ? "warehouse"
+                                                                : preview.routeLabel.includes(
+                                                                        "集采",
+                                                                    )
+                                                                  ? "direct_bulk"
+                                                                  : preview.fulfillmentResponsibility ===
+                                                                      "SUPPLIER_DIRECT"
+                                                                    ? "direct_dropship"
+                                                                    : "other"
+                                                        }
+                                                        label={
+                                                            preview.routeLabel
+                                                        }
+                                                        size="compact"
+                                                    />
                                                     <span className="truncate font-medium text-foreground">
                                                         {preview.supplierName}
                                                     </span>
@@ -865,11 +873,12 @@ export function WorkspaceProcurementInspector({
                                                     ) : null}
                                                 </div>
                                             </div>
-                                            <MoneyValue
-                                                value={preview.totals.gross}
-                                                display="exact"
-                                                className="shrink-0 text-body-compact font-semibold"
-                                            />
+                                            <span className="shrink-0 font-semibold">
+                                                <MoneyValue
+                                                    value={preview.totals.gross}
+                                                    display="exact"
+                                                />
+                                            </span>
                                         </li>
                                     )
                                 })}
@@ -1039,12 +1048,11 @@ function SourcingInspectorProductRow({
                                 key={line.rowKey}
                                 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
                             >
-                                <Badge
-                                    variant="outline"
-                                    className="h-5 px-1.5 text-tiny"
-                                >
-                                    {sourcingRouteLabel(option)}
-                                </Badge>
+                                <FulfillmentRouteBadge
+                                    option={option}
+                                    label={sourcingRouteLabel(option)}
+                                    size="compact"
+                                />
                                 <span
                                     className="max-w-64 truncate font-medium text-foreground"
                                     title={optionDisplayName(option)}
@@ -1061,7 +1069,7 @@ function SourcingInspectorProductRow({
                                                 <MoneyValue
                                                     display="exact"
                                                     value={option.unitCostGross}
-                                                    className="inline-flex text-xs font-normal [&_[data-slot=money-value-number]]:text-muted-foreground"
+                                                    inheritColor
                                                 />
                                             </>
                                         ) : null}
@@ -1103,15 +1111,19 @@ function SourcingInspectorProductRow({
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
                         {pricing.kind === "purchase" &&
                         pricing.unitCostGross ? (
-                            <MoneyValue
-                                display="exact"
-                                value={pricing.unitCostGross}
+                            <span
                                 className={cn(
                                     "text-body-compact font-semibold",
                                     pricing.hasInvertedSource &&
                                         "text-destructive",
                                 )}
-                            />
+                            >
+                                <MoneyValue
+                                    display="exact"
+                                    value={pricing.unitCostGross}
+                                    inheritColor={pricing.hasInvertedSource}
+                                />
+                            </span>
                         ) : pricing.kind === "stock" ? (
                             <span className="text-xs font-medium text-info-soft-foreground">
                                 库存核算
@@ -1127,15 +1139,11 @@ function SourcingInspectorProductRow({
                         )}
 
                         {pricing.hasInvertedSource ? (
-                            <Badge
-                                variant="destructive"
+                            <StatusBadge
+                                tone="destructive"
+                                label={`倒挂${pricing.margin?.marginRateText ? ` ${pricing.margin.marginRateText}` : ""}`}
                                 className="h-4.5 px-1.5 text-tiny"
-                            >
-                                倒挂
-                                {pricing.margin?.marginRateText
-                                    ? ` ${pricing.margin.marginRateText}`
-                                    : ""}
-                            </Badge>
+                            />
                         ) : pricing.margin?.marginRateText ? (
                             <span className="num text-tiny font-medium text-success-soft-foreground">
                                 {pricing.margin.marginRateText}
@@ -1148,7 +1156,7 @@ function SourcingInspectorProductRow({
                             <MoneyValue
                                 display="exact"
                                 value={pricing.salesUnitPriceGross}
-                                className="text-xs font-normal [&_[data-slot=money-value-number]]:text-muted-foreground"
+                                inheritColor
                             />
                         </span>
                     ) : null}
@@ -1261,12 +1269,13 @@ function ProductExpandedDetails({
                                 >
                                     <div className="min-w-0 flex-1 space-y-0.5">
                                         <div className="flex flex-wrap items-center gap-1.5">
-                                            <Badge
-                                                variant="outline"
-                                                className="h-4.5 px-1.5 text-tiny"
-                                            >
-                                                {sourcingRouteLabel(option)}
-                                            </Badge>
+                                            <FulfillmentRouteBadge
+                                                option={option}
+                                                label={sourcingRouteLabel(
+                                                    option,
+                                                )}
+                                                size="compact"
+                                            />
                                             <span className="truncate font-medium text-foreground">
                                                 {optionDisplayName(option)}
                                             </span>
@@ -1316,15 +1325,23 @@ function ProductExpandedDetails({
                                             </span>
                                         ) : (
                                             <>
-                                                <MoneyValue
-                                                    display="exact"
-                                                    value={option.unitCostGross}
+                                                <span
                                                     className={cn(
                                                         "text-xs font-semibold",
                                                         margin?.inverted &&
                                                             "text-destructive",
                                                     )}
-                                                />
+                                                >
+                                                    <MoneyValue
+                                                        display="exact"
+                                                        value={
+                                                            option.unitCostGross
+                                                        }
+                                                        inheritColor={
+                                                            margin?.inverted
+                                                        }
+                                                    />
+                                                </span>
                                                 {margin?.marginRateText ? (
                                                     <span
                                                         className={cn(

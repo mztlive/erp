@@ -24,6 +24,8 @@ import {
 
 import {
     MoneyValue,
+    OptionCombobox,
+    PurchaseProfitValue,
     QuantityValue,
     detailWorkspaceStyles,
 } from "@/components/business"
@@ -34,13 +36,7 @@ import {
     CollapsibleContent,
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Tooltip,
     TooltipContent,
@@ -55,7 +51,6 @@ import { useProductUnitNames } from "@/hooks/use-product-unit-names"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
-import { PurchaseProfitValue } from "./workspace-purchase-amount-details"
 import { purchaseComparison } from "./workspace-purchase-comparison-model"
 import { PurchaseLinePriceDetails } from "./workspace-purchase-line-price-details"
 import {
@@ -291,8 +286,17 @@ export function WorkspacePurchaseSourceComparison({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         {model.orders.length > 1 ? (
                             <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                                <Select
+                                <OptionCombobox
+                                    id={`${idPrefix}-source-order`}
+                                    size="sm"
+                                    aria-label="切换来源销售单"
                                     value={activeOrder.revisionId}
+                                    allowClear={false}
+                                    className="min-w-0 flex-1"
+                                    options={model.orders.map((entry) => ({
+                                        value: entry.revisionId,
+                                        label: `${entry.documentNo} · ${entry.customerName} · V${entry.revisionNo}${entry.attentionCount > 0 ? `（${entry.attentionCount} 项关注）` : ""}`,
+                                    }))}
                                     onValueChange={(value) => {
                                         if (value) {
                                             onTargetChange({
@@ -300,41 +304,7 @@ export function WorkspacePurchaseSourceComparison({
                                             })
                                         }
                                     }}
-                                >
-                                    <SelectTrigger
-                                        id={`${idPrefix}-source-order`}
-                                        aria-label="切换来源销售单"
-                                        size="sm"
-                                        className="min-w-0 flex-1"
-                                    >
-                                        <SelectValue className="min-w-0">
-                                            <span className="num truncate">
-                                                {activeOrder.documentNo} · V
-                                                {activeOrder.revisionNo}
-                                            </span>
-                                        </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent
-                                        align="start"
-                                        alignItemWithTrigger={false}
-                                    >
-                                        {model.orders.map((entry) => (
-                                            <SelectItem
-                                                key={entry.revisionId}
-                                                idPrefix={`${idPrefix}-source-order`}
-                                                value={entry.revisionId}
-                                                className="num whitespace-normal"
-                                            >
-                                                {entry.documentNo} ·{" "}
-                                                {entry.customerName} · V
-                                                {entry.revisionNo}
-                                                {entry.attentionCount > 0
-                                                    ? `（${entry.attentionCount} 项关注）`
-                                                    : ""}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                />
                                 <Tooltip>
                                     <TooltipTrigger
                                         render={
@@ -672,19 +642,20 @@ function CommercialChecksSection({
                 <h3 className="text-xs font-semibold text-foreground">
                     商务风控
                 </h3>
-                <Badge
-                    variant={
+                <StatusBadge
+                    tone={
                         hasSevere
                             ? "destructive"
                             : attentionCount > 0
                               ? "warning"
                               : "success"
                     }
-                >
-                    {attentionCount > 0
-                        ? `${attentionCount} 项关注`
-                        : "条款匹配"}
-                </Badge>
+                    label={
+                        attentionCount > 0
+                            ? `${attentionCount} 项关注`
+                            : "条款匹配"
+                    }
+                />
             </div>
 
             <div className="space-y-1.5">
@@ -871,9 +842,10 @@ function CommercialCheckCard({
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1">
-                    <Badge variant={commercialBadgeVariant[check.status]}>
-                        {check.badge}
-                    </Badge>
+                    <StatusBadge
+                        tone={commercialBadgeVariant[check.status]}
+                        label={check.badge}
+                    />
                     <Tooltip>
                         <TooltipTrigger
                             render={
@@ -1036,23 +1008,24 @@ function OrderLedgerSection({
                         </Tooltip>
                     ) : null}
                 </div>
-                <Badge
-                    variant={
+                <StatusBadge
+                    tone={
                         ledger.excessCount > 0 || ledger.taxInverted
                             ? "destructive"
                             : ledger.isFullOrderCovered
                               ? "success"
                               : "info"
                     }
-                >
-                    {ledger.isExpenseOrder
-                        ? "费用采购单"
-                        : ledger.excessCount > 0
-                          ? `超需求 ${ledger.excessCount} 项`
-                          : ledger.isFullOrderCovered
-                            ? "全量覆盖"
-                            : `覆盖 ${ledger.coveredLineCount}/${ledger.totalSalesLineCount} 行`}
-                </Badge>
+                    label={
+                        ledger.isExpenseOrder
+                            ? "费用采购单"
+                            : ledger.excessCount > 0
+                              ? `超需求 ${ledger.excessCount} 项`
+                              : ledger.isFullOrderCovered
+                                ? "全量覆盖"
+                                : `覆盖 ${ledger.coveredLineCount}/${ledger.totalSalesLineCount} 行`
+                    }
+                />
             </div>
 
             <div className="space-y-3 border-y border-border/60 py-2.5 text-xs">
@@ -1165,7 +1138,6 @@ function OrderLedgerSection({
                                                 display="exact"
                                                 value={ledger.salesGrossTotal}
                                                 inheritColor
-                                                className="font-normal"
                                             />
                                         </span>
                                     ) : null}
@@ -1261,7 +1233,6 @@ function OrderLedgerSection({
                                                     ledger.purchaseMargin.supply
                                                 }
                                                 inheritColor
-                                                className="font-normal"
                                             />
                                         </p>
                                     </>
@@ -1419,7 +1390,6 @@ function OrderLedgerSection({
                                                     ledger.netMargin.absAmount
                                                 }
                                                 inheritColor
-                                                className="font-normal"
                                             />
                                         </span>
                                     ) : ledger.grossMargin ? (
@@ -1434,7 +1404,6 @@ function OrderLedgerSection({
                                                     ledger.grossMargin.absAmount
                                                 }
                                                 inheritColor
-                                                className="font-normal"
                                             />{" "}
                                             · 待补税率
                                         </span>
@@ -1456,7 +1425,6 @@ function OrderLedgerSection({
                                                 display="exact"
                                                 value={ledger.vatGap}
                                                 inheritColor
-                                                className="font-normal"
                                             />
                                         </span>
                                     ) : null}
@@ -1488,7 +1456,6 @@ function OrderLedgerSection({
                                                 ledger.unallocatedSharedFeeTotal
                                             }
                                             inheritColor
-                                            className="font-normal"
                                         />{" "}
                                         未分摊
                                     </TooltipTrigger>
@@ -1532,7 +1499,6 @@ function ExpenseOrderLedgerBody({
                             display="exact"
                             value={ledger.salesGrossTotal}
                             inheritColor
-                            className="font-normal"
                         />
                     </span>
                 </div>
@@ -1569,7 +1535,6 @@ function ExpenseOrderLedgerBody({
                                     ledger.extraCostSummary.pendingGrossTotal
                                 }
                                 inheritColor
-                                className="font-normal"
                             />
                         </p>
                     </div>
@@ -1735,7 +1700,7 @@ function SalesCoverageLineItem({
                               </Button>
                           ))
                         : null}
-                    <Badge variant={status.variant}>{status.label}</Badge>
+                    <StatusBadge tone={status.variant} label={status.label} />
                 </div>
             </div>
 
@@ -1751,7 +1716,6 @@ function SalesCoverageLineItem({
                         display="exact"
                         value={row.salesGrossAmount}
                         inheritColor
-                        className="font-normal"
                     />
                     <span>销项 {row.salesTaxRatePercent}%</span>
                     {row.salesDueDate ? (
@@ -1770,9 +1734,11 @@ function SalesCoverageLineItem({
                     {extraAttentionTags.length > 0 ? (
                         <div className="flex flex-wrap items-center gap-1">
                             {extraAttentionTags.map((tag) => (
-                                <Badge key={tag.label} variant={tag.tone}>
-                                    {tag.label}
-                                </Badge>
+                                <StatusBadge
+                                    key={tag.label}
+                                    tone={tag.tone}
+                                    label={tag.label}
+                                />
                             ))}
                         </div>
                     ) : null}
@@ -2210,7 +2176,6 @@ function SalesCoverageLineItem({
                                                             pLine.grossAmount
                                                         }
                                                         inheritColor
-                                                        className="font-normal"
                                                     />
                                                 </li>
                                             ),
@@ -2227,7 +2192,6 @@ function SalesCoverageLineItem({
                                             display="exact"
                                             value={row.originalSupplyPrice}
                                             inheritColor
-                                            className="font-normal"
                                         />
                                         （已
                                         {row.supplyAdjustment === "increased"
@@ -2280,13 +2244,14 @@ function ExtraPurchaseLinesSection({
                                 <span className="num text-muted-foreground">
                                     采#{extra.lineNo}
                                 </span>
-                                <Badge
-                                    variant={
-                                        extra.isFee ? "neutral" : "warning"
-                                    }
-                                >
-                                    {extra.isFee ? "费用" : "未匹配"}
-                                </Badge>
+                                {extra.isFee ? (
+                                    <Badge variant="neutral">费用</Badge>
+                                ) : (
+                                    <StatusBadge
+                                        tone="warning"
+                                        label="未匹配"
+                                    />
+                                )}
                                 <span className="font-medium wrap-anywhere text-foreground">
                                     {extra.title}
                                 </span>

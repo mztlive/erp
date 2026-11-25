@@ -8,7 +8,10 @@ import {
     PanelRightOpenIcon,
 } from "lucide-react"
 
-import { BusinessStatusBadge } from "@/components/business"
+import {
+    BusinessStatusBadge,
+    WorkspaceDocumentBadge,
+} from "@/components/business"
 import { ListDataTable } from "@/components/business/list-workspace"
 import { WorkspaceSplitCardList } from "@/components/business/workspace-split-queue"
 import { Button } from "@/components/ui/button"
@@ -23,7 +26,6 @@ import { cn } from "@/lib/utils"
 import { useWorkspaceScroll } from "../hooks/use-workspace-scroll"
 import { isBlockedWorkItem } from "../lib/work-item"
 import type { WorkspaceWorkItem } from "../types"
-import { WorkspaceDocumentBadge } from "./workspace-document-badge"
 import { WorkspaceMoney } from "./workspace-money"
 import {
     workspaceTaskColumns,

@@ -14,6 +14,7 @@ import { z } from "zod"
 
 import {
     BusinessFailureState,
+    DetailFormGrid,
     DetailWorkspaceBody,
     DetailWorkspaceChrome,
     DetailWorkspaceDirtyBadge,
@@ -955,7 +956,7 @@ function RoleForm({
                                         </p>
                                     </div>
                                 ) : (
-                                    <div data-slot="detail-form-grid">
+                                    <DetailFormGrid layout="stack">
                                         <form.AppField name="name">
                                             {(field) => (
                                                 <field.TextField
@@ -969,7 +970,7 @@ function RoleForm({
                                                 />
                                             )}
                                         </form.AppField>
-                                    </div>
+                                    </DetailFormGrid>
                                 )}
                             </DetailWorkspaceSection>
 
@@ -1073,7 +1074,7 @@ function RoleForm({
                     headingId="governance-admin-role-form-basic-heading"
                     width="form"
                 >
-                    <div data-slot="detail-form-grid">
+                    <DetailFormGrid layout="stack">
                         <form.AppField name="name">
                             {(field) => (
                                 <field.TextField
@@ -1087,7 +1088,7 @@ function RoleForm({
                                 />
                             )}
                         </form.AppField>
-                    </div>
+                    </DetailFormGrid>
 
                     <fieldset
                         aria-labelledby="governance-admin-role-form-workbenches-heading"

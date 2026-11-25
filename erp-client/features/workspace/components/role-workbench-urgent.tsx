@@ -51,7 +51,7 @@ export function RoleWorkbenchUrgent({
                         >
                             需优先处理
                             {urgent.items.length > 0 ? (
-                                <span className="num rounded-full bg-destructive-soft px-1.5 text-tiny font-semibold leading-4.5 text-destructive-soft-foreground">
+                                <span className="num rounded-full bg-destructive-soft px-1.5 text-tiny font-semibold text-destructive-soft-foreground">
                                     {urgent.items.length}
                                 </span>
                             ) : null}

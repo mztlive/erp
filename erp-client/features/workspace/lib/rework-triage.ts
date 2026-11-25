@@ -1,3 +1,7 @@
+import type {
+    WorkspaceReworkCommandCardProps,
+    WorkspaceReworkTriageItem,
+} from "@/components/business"
 import type { ApprovalMaterials } from "@/features/approval-workflow/api/materials"
 import {
     inspectFinancialApprovalRisks,
@@ -25,10 +29,6 @@ import {
     evaluatePurchaseLines,
 } from "../components/workspace-purchase-comparison-model"
 import { inspectReceiptRisks } from "../components/workspace-receipt-approval"
-import type {
-    WorkspaceReworkCommandCardProps,
-    WorkspaceReworkTriageItem,
-} from "../components/workspace-rework-command-card"
 import type { WorkspaceWorkItem } from "../types"
 import {
     assessSalesApprovalRisk,

@@ -6,25 +6,24 @@ import {
     useMemo,
     useRef,
     useState,
-    type ReactNode,
     type RefObject,
 } from "react"
 import {
-    ChevronRightIcon,
-    CircleQuestionMarkIcon,
     MapPinIcon,
     MessageSquareTextIcon,
     PaperclipIcon,
-    TriangleAlertIcon,
     XIcon,
 } from "lucide-react"
 
 import {
     BusinessFailureState,
+    DecisionKpiBar,
     DetailWorkspaceSection,
     MoneyValue,
     QuantityValue,
     RateValue,
+    TaskRiskSummaryBar,
+    WorkspaceApprovalResubmissionBanner,
     WorkspaceFactItem,
     detailWorkspaceStyles,
 } from "@/components/business"
@@ -32,12 +31,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import type { ApprovalSalesSubmission } from "@/features/approval-workflow/api/materials"
 import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
 import {
@@ -64,7 +57,6 @@ import {
     type SalesApprovalMetrics,
 } from "../lib/sales-approval-model"
 import type { WorkspaceWorkItem } from "../types"
-import { WorkspaceApprovalResubmissionBanner } from "./workspace-approval-resubmission-banner"
 import {
     SalesMarginValue,
     SalesVoucherDiscountValue,
@@ -332,80 +324,36 @@ export function WorkspaceSalesApproval({
                         />
                     ) : null}
                     {riskSummary ? (
-                        <div
-                            role="alert"
-                            data-slot="sales-approval-risk-strip"
-                            title={
+                        <TaskRiskSummaryBar
+                            dataSlot="sales-approval-risk-strip"
+                            severity={risk.highRisk ? "destructive" : "warning"}
+                            tooltipTitle={
                                 risk.reasons.length
                                     ? risk.reasons.join("；")
                                     : undefined
                             }
-                            className={cn(
-                                "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border-l-2 px-3 py-1.5 text-xs",
-                                risk.highRisk
-                                    ? "border-l-destructive bg-destructive-soft/65 text-destructive-soft-foreground"
-                                    : "border-l-warning bg-warning-soft/75 text-warning-soft-foreground",
-                            )}
-                        >
-                            <div className="flex min-w-0 flex-1 items-start gap-2">
-                                <TriangleAlertIcon
-                                    aria-hidden="true"
-                                    className="mt-0.5 size-3.5 shrink-0"
-                                />
-                                <p className="num min-w-0 wrap-anywhere">
-                                    <span className="font-medium">
-                                        {risk.highRisk ? "高危复核" : "需复核"}
-                                    </span>
-                                    <span
-                                        aria-hidden="true"
-                                        className="mx-1.5 opacity-60"
-                                    >
-                                        ·
-                                    </span>
-                                    <span>{riskSummary}</span>
-                                </p>
-                            </div>
-                            <div className="flex shrink-0 flex-wrap items-center gap-1">
-                                {metrics.riskLineCount > 0 && !riskOnly ? (
-                                    <Button
-                                        id={`${prefix}-alert-filter-risk`}
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        className={cn(
-                                            "num h-control-xs shrink-0 gap-0.5 px-1.5 text-xs font-medium shadow-none",
-                                            risk.highRisk
-                                                ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                                : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
-                                        )}
-                                        onClick={() =>
-                                            tableHandle.current?.filterToRisks()
-                                        }
-                                    >
-                                        仅看风险项（{metrics.riskLineCount}）
-                                        <ChevronRightIcon aria-hidden="true" />
-                                    </Button>
-                                ) : null}
-                                {evidenceMissing && canOpenMaterials ? (
-                                    <Button
-                                        id={`${prefix}-alert-open-materials`}
-                                        type="button"
-                                        variant="ghost"
-                                        size="xs"
-                                        className={cn(
-                                            "h-control-xs shrink-0 gap-0.5 px-1.5 text-xs font-medium shadow-none",
-                                            risk.highRisk
-                                                ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                                : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
-                                        )}
-                                        onClick={openMaterialsShortcut}
-                                    >
-                                        核对凭证附件
-                                        <ChevronRightIcon aria-hidden="true" />
-                                    </Button>
-                                ) : null}
-                            </div>
-                        </div>
+                            summary={riskSummary}
+                            actions={[
+                                metrics.riskLineCount > 0 && !riskOnly
+                                    ? {
+                                          id: "filter-risk",
+                                          buttonId: `${prefix}-alert-filter-risk`,
+                                          label: "仅看风险项",
+                                          count: metrics.riskLineCount,
+                                          onClick: () =>
+                                              tableHandle.current?.filterToRisks(),
+                                      }
+                                    : null,
+                                evidenceMissing && canOpenMaterials
+                                    ? {
+                                          id: "open-materials",
+                                          buttonId: `${prefix}-alert-open-materials`,
+                                          label: "核对凭证附件",
+                                          onClick: openMaterialsShortcut,
+                                      }
+                                    : null,
+                            ]}
+                        />
                     ) : null}
                 </div>
             ) : null}
@@ -659,114 +607,109 @@ function SalesDecisionBand({
     const fulfillmentDate = isCard ? voucherExpiryDate : lastDeliveryDate
 
     return (
-        <TooltipProvider>
-            <div
-                role="region"
-                aria-label="销售审批关键决策指标"
-                className="mt-3 grid min-w-0 grid-cols-1 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/sales-lines:grid-cols-2 @[840px]/sales-lines:grid-cols-4 [&_[data-slot=money-value]]:max-w-full [&_[data-slot=money-value-number]]:wrap-anywhere [&_[data-slot=money-value-number]]:whitespace-normal"
-            >
-                <div className="min-w-0">
-                    <SalesKpiHeading
-                        label="含税总额"
-                        basis="整单成交"
-                        tooltipId={`${idPrefix}-kpi-gross-info`}
-                        tooltip={
-                            <div className="num space-y-0.5">
-                                <p>含税总额＝不含税净额＋税额</p>
-                                <p>
-                                    <MoneyValue
-                                        display="exact"
-                                        value={submission.net_amount}
-                                        inheritColor
-                                    />
-                                    {" ＋ "}
-                                    <MoneyValue
-                                        display="exact"
-                                        value={submission.tax_amount}
-                                        inheritColor
-                                    />
-                                    {" ＝ "}
-                                    <MoneyValue
-                                        display="exact"
-                                        value={submission.gross_amount}
-                                        inheritColor
-                                    />
-                                </p>
-                            </div>
-                        }
-                    />
-                    <div className="num mt-1 text-value-section font-semibold tracking-tight">
+        <DecisionKpiBar
+            columns={4}
+            ariaLabel="销售审批关键决策指标"
+            className="mt-3"
+            items={[
+                {
+                    id: "gross",
+                    label: "含税总额",
+                    basis: "整单成交",
+                    emphasis: "primary",
+                    formulaTooltipId: `${idPrefix}-kpi-gross-info`,
+                    formulaTooltipLabel: "含税总额口径说明",
+                    formulaTooltip: (
+                        <div className="num space-y-0.5">
+                            <p>含税总额＝不含税净额＋税额</p>
+                            <p>
+                                <MoneyValue
+                                    display="exact"
+                                    value={submission.net_amount}
+                                    inheritColor
+                                />
+                                {" ＋ "}
+                                <MoneyValue
+                                    display="exact"
+                                    value={submission.tax_amount}
+                                    inheritColor
+                                />
+                                {" ＝ "}
+                                <MoneyValue
+                                    display="exact"
+                                    value={submission.gross_amount}
+                                    inheritColor
+                                />
+                            </p>
+                        </div>
+                    ),
+                    value: (
                         <MoneyValue
                             display="exact"
                             value={submission.gross_amount}
-                            className="font-semibold"
+                            inheritColor
                         />
-                    </div>
-                    <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-tiny text-muted-foreground">
-                        <span>
-                            净额{" "}
-                            <MoneyValue
-                                display="exact"
-                                value={submission.net_amount}
-                                inheritColor
-                            />
-                        </span>
-                        <span>
-                            税额{" "}
-                            <MoneyValue
-                                display="exact"
-                                value={submission.tax_amount}
-                                inheritColor
-                            />
-                        </span>
-                    </p>
-                </div>
-
-                <div className="min-w-0">
-                    <SalesKpiHeading
-                        label={isCard ? "面额折率" : "预估毛利"}
-                        basis={isCard ? "成交 ÷ 面额" : "含税收入 − 供给成本"}
-                        tooltipId={`${idPrefix}-kpi-margin-info`}
-                        tooltip={
-                            isCard ? (
-                                <div className="num space-y-0.5">
-                                    <p>面额折率＝销售含税金额 ÷ 卡券总面额</p>
-                                    <p>总面额＝各行单张面额 × 张数后求和</p>
-                                    <p>整单折率需要全部商品的面额和张数。</p>
-                                    <p>溢价显示售价占面额的百分比。</p>
-                                </div>
-                            ) : (
-                                <div className="num space-y-0.5">
-                                    <p>
-                                        毛利额＝已核算销售行含税小计 −
-                                        含税供给成本
-                                    </p>
-                                    <p>成本按供给价 × 数量汇总。</p>
-                                    <p>毛利率＝毛利额 ÷ 已核算销售行含税小计</p>
-                                    {metrics.coveredRevenue != null &&
-                                    metrics.estimatedCostTotal != null ? (
-                                        <p>
-                                            <MoneyValue
-                                                display="exact"
-                                                value={metrics.coveredRevenue}
-                                                inheritColor
-                                            />
-                                            {" − "}
-                                            <MoneyValue
-                                                display="exact"
-                                                value={
-                                                    metrics.estimatedCostTotal
-                                                }
-                                                inheritColor
-                                            />
-                                        </p>
-                                    ) : null}
-                                </div>
-                            )
-                        }
-                    />
-                    <div className="num mt-1 text-value-compact font-semibold tracking-tight wrap-anywhere">
-                        {isCard && overallVoucherDiscount ? (
+                    ),
+                    footnote: (
+                        <>
+                            <span>
+                                净额{" "}
+                                <MoneyValue
+                                    display="exact"
+                                    value={submission.net_amount}
+                                    inheritColor
+                                />
+                            </span>
+                            <span>
+                                税额{" "}
+                                <MoneyValue
+                                    display="exact"
+                                    value={submission.tax_amount}
+                                    inheritColor
+                                />
+                            </span>
+                        </>
+                    ),
+                },
+                {
+                    id: "margin",
+                    label: isCard ? "面额折率" : "预估毛利",
+                    basis: isCard ? "成交 ÷ 面额" : "含税收入 − 供给成本",
+                    emphasis: "secondary",
+                    formulaTooltipId: `${idPrefix}-kpi-margin-info`,
+                    formulaTooltipLabel: `${isCard ? "面额折率" : "预估毛利"}口径说明`,
+                    formulaTooltip: isCard ? (
+                        <div className="num space-y-0.5">
+                            <p>面额折率＝销售含税金额 ÷ 卡券总面额</p>
+                            <p>总面额＝各行单张面额 × 张数后求和</p>
+                            <p>整单折率需要全部商品的面额和张数。</p>
+                            <p>溢价显示售价占面额的百分比。</p>
+                        </div>
+                    ) : (
+                        <div className="num space-y-0.5">
+                            <p>毛利额＝已核算销售行含税小计 − 含税供给成本</p>
+                            <p>成本按供给价 × 数量汇总。</p>
+                            <p>毛利率＝毛利额 ÷ 已核算销售行含税小计</p>
+                            {metrics.coveredRevenue != null &&
+                            metrics.estimatedCostTotal != null ? (
+                                <p>
+                                    <MoneyValue
+                                        display="exact"
+                                        value={metrics.coveredRevenue}
+                                        inheritColor
+                                    />
+                                    {" − "}
+                                    <MoneyValue
+                                        display="exact"
+                                        value={metrics.estimatedCostTotal}
+                                        inheritColor
+                                    />
+                                </p>
+                            ) : null}
+                        </div>
+                    ),
+                    value:
+                        isCard && overallVoucherDiscount ? (
                             <SalesVoucherDiscountValue
                                 discount={overallVoucherDiscount}
                             />
@@ -780,88 +723,90 @@ function SalesDecisionBand({
                             <span className="text-body-compact font-medium text-muted-foreground">
                                 暂无法核算
                             </span>
-                        )}
-                    </div>
-                    <p className="num mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-tiny text-muted-foreground">
-                        {isCard ? (
+                        ),
+                    footnote: isCard ? (
+                        <>
+                            {metrics.totalFaceValue != null ? (
+                                <span>
+                                    已记录面额{" "}
+                                    <MoneyValue
+                                        display="exact"
+                                        value={metrics.totalFaceValue}
+                                        inheritColor
+                                    />
+                                </span>
+                            ) : null}
+                            {metrics.totalCards != null ? (
+                                <QuantityValue
+                                    value={metrics.totalCards}
+                                    unit="张"
+                                />
+                            ) : null}
+                            <span
+                                className={cn(
+                                    metrics.voucherFaceValueCoveredCount <
+                                        metrics.lineCount &&
+                                        "text-warning-soft-foreground",
+                                )}
+                            >
+                                面额覆盖 {metrics.voucherFaceValueCoveredCount}/
+                                {metrics.lineCount} 项
+                            </span>
+                        </>
+                    ) : (
+                        <span
+                            className={cn(
+                                metrics.partialCostCoverage &&
+                                    "text-warning-soft-foreground",
+                            )}
+                        >
+                            成本覆盖 {metrics.costCoveredCount}/
+                            {metrics.costExpectedCount} 项销售明细
+                        </span>
+                    ),
+                },
+                {
+                    id: "payment",
+                    label: "回款与票税",
+                    emphasis: "terms",
+                    value: paymentTerm ?? "未记录结算条件",
+                    footnote:
+                        submission.receivable_due_date ||
+                        invoiceType ||
+                        taxPoint !== "—" ? (
                             <>
-                                {metrics.totalFaceValue != null ? (
+                                {submission.receivable_due_date ? (
                                     <span>
-                                        已记录面额{" "}
-                                        <MoneyValue
-                                            display="exact"
-                                            value={metrics.totalFaceValue}
-                                            inheritColor
-                                        />
+                                        收款到期{" "}
+                                        {submission.receivable_due_date}
                                     </span>
                                 ) : null}
-                                {metrics.totalCards != null ? (
-                                    <QuantityValue
-                                        value={metrics.totalCards}
-                                        unit="张"
-                                    />
+                                {invoiceType ? (
+                                    <span>{invoiceType}</span>
                                 ) : null}
-                                <span
-                                    className={cn(
-                                        metrics.voucherFaceValueCoveredCount <
-                                            metrics.lineCount &&
-                                            "text-warning-soft-foreground",
-                                    )}
-                                >
-                                    面额覆盖{" "}
-                                    {metrics.voucherFaceValueCoveredCount}/
-                                    {metrics.lineCount} 项
-                                </span>
+                                {taxPoint !== "—" ? (
+                                    <span>
+                                        约定税点{" "}
+                                        {decimalTaxPoint === null ? (
+                                            taxPoint
+                                        ) : (
+                                            <RateValue
+                                                value={decimalTaxPoint}
+                                                precision={2}
+                                                className="text-muted-foreground"
+                                            />
+                                        )}
+                                    </span>
+                                ) : null}
                             </>
-                        ) : (
-                            <>
-                                <span
-                                    className={cn(
-                                        metrics.partialCostCoverage &&
-                                            "text-warning-soft-foreground",
-                                    )}
-                                >
-                                    成本覆盖 {metrics.costCoveredCount}/
-                                    {metrics.costExpectedCount} 项销售明细
-                                </span>
-                            </>
-                        )}
-                    </p>
-                </div>
-
-                <div className="min-w-0">
-                    <SalesKpiHeading label="回款与票税" />
-                    <p className="mt-1 text-body-compact font-semibold wrap-anywhere">
-                        {paymentTerm ?? "未记录结算条件"}
-                    </p>
-                    <p className="num mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-tiny text-muted-foreground">
-                        {submission.receivable_due_date ? (
-                            <span>
-                                收款到期 {submission.receivable_due_date}
-                            </span>
-                        ) : null}
-                        {invoiceType ? <span>{invoiceType}</span> : null}
-                        {taxPoint !== "—" ? (
-                            <span>
-                                约定税点{" "}
-                                {decimalTaxPoint === null ? (
-                                    taxPoint
-                                ) : (
-                                    <RateValue
-                                        value={decimalTaxPoint}
-                                        precision={2}
-                                        className="text-muted-foreground"
-                                    />
-                                )}
-                            </span>
-                        ) : null}
-                    </p>
-                </div>
-
-                <div className="min-w-0">
-                    <SalesKpiHeading label="履约与配送" />
-                    <p className="num mt-1 text-body-compact font-semibold wrap-anywhere">
-                        {fulfillmentDate === "—" ? (
+                        ) : undefined,
+                },
+                {
+                    id: "fulfillment",
+                    label: "履约与配送",
+                    emphasis: "terms",
+                    value:
+                        fulfillmentDate === "—" ? (
                             isCard ? (
                                 "卡券交付"
                             ) : (
@@ -872,84 +817,41 @@ function SalesDecisionBand({
                                 {isCard ? "卡券履约期限" : "最晚交付"}{" "}
                                 {fulfillmentDate}
                             </>
-                        )}
-                    </p>
-                    {deliverySummary.uniqueAddressCount > 0 ? (
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                            <button
-                                id={`${idPrefix}-delivery-open`}
-                                type="button"
-                                aria-haspopup="dialog"
-                                className="num inline-flex cursor-pointer items-center gap-1 text-left text-xs font-medium text-primary hover:underline"
-                                onClick={(event) =>
-                                    onOpenDelivery(event.currentTarget)
-                                }
-                            >
-                                <MapPinIcon
-                                    aria-hidden="true"
-                                    className="size-3 shrink-0"
-                                />
-                                配送地址（{deliverySummary.uniqueAddressCount}{" "}
-                                处）
-                            </button>
-                            {!isCard &&
-                            deliverySummary.unassignedLineCount > 0 ? (
-                                <span className="num text-tiny text-muted-foreground">
-                                    {deliverySummary.unassignedLineCount}{" "}
-                                    项未指定地址
-                                </span>
-                            ) : null}
-                        </div>
-                    ) : !isCard ? (
-                        <p className="mt-1 text-tiny text-muted-foreground">
-                            未记录配送地址
-                        </p>
-                    ) : null}
-                </div>
-            </div>
-        </TooltipProvider>
-    )
-}
-
-function SalesKpiHeading({
-    label,
-    basis,
-    tooltipId,
-    tooltip,
-}: {
-    label: string
-    basis?: string
-    tooltipId?: string
-    tooltip?: ReactNode
-}) {
-    return (
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-            <span>{label}</span>
-            {basis ? (
-                <span className="text-tiny text-muted-foreground/80">
-                    {basis}
-                </span>
-            ) : null}
-            {tooltip && tooltipId ? (
-                <Tooltip>
-                    <TooltipTrigger
-                        render={
-                            <button
-                                id={tooltipId}
-                                type="button"
-                                aria-label={`${label}口径说明`}
-                                className="inline-flex size-4 cursor-help items-center justify-center rounded-sm text-muted-foreground/80 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
-                            />
-                        }
-                    >
-                        <CircleQuestionMarkIcon
-                            aria-hidden="true"
-                            className="size-3"
-                        />
-                    </TooltipTrigger>
-                    <TooltipContent className="block">{tooltip}</TooltipContent>
-                </Tooltip>
-            ) : null}
-        </div>
+                        ),
+                    extra:
+                        deliverySummary.uniqueAddressCount > 0 ? (
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <button
+                                    id={`${idPrefix}-delivery-open`}
+                                    type="button"
+                                    aria-haspopup="dialog"
+                                    className="num inline-flex cursor-pointer items-center gap-1 text-left text-xs font-medium text-primary hover:underline"
+                                    onClick={(event) =>
+                                        onOpenDelivery(event.currentTarget)
+                                    }
+                                >
+                                    <MapPinIcon
+                                        aria-hidden="true"
+                                        className="size-3 shrink-0"
+                                    />
+                                    配送地址（
+                                    {deliverySummary.uniqueAddressCount} 处）
+                                </button>
+                                {!isCard &&
+                                deliverySummary.unassignedLineCount > 0 ? (
+                                    <span className="num text-tiny text-muted-foreground">
+                                        {deliverySummary.unassignedLineCount}{" "}
+                                        项未指定地址
+                                    </span>
+                                ) : null}
+                            </div>
+                        ) : !isCard ? (
+                            <p className="text-tiny text-muted-foreground">
+                                未记录配送地址
+                            </p>
+                        ) : undefined,
+                },
+            ]}
+        />
     )
 }

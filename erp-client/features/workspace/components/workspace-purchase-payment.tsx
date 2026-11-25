@@ -116,10 +116,7 @@ export function WorkspacePurchasePayment({
                                 label={label}
                                 numeric
                             >
-                                <MoneyValue
-                                    value={value}
-                                    className="font-semibold"
-                                />
+                                <MoneyValue value={value} />
                             </WorkspaceFactItem>
                         ))}
                     </WorkspaceFactGrid>

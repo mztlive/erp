@@ -97,7 +97,7 @@ export function ChangeOrderPendingCard({
     return (
         <section
             aria-labelledby={`${id}-title`}
-            className="space-y-4 rounded-xl border border-warning-border bg-warning-soft/30 p-4 sm:p-5"
+            className="space-y-4 rounded-lg border border-warning-border bg-warning-soft/30 p-4 sm:p-5"
         >
             <header className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 space-y-1">

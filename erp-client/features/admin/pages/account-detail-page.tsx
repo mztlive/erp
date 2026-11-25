@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -370,7 +371,7 @@ export function AccountDetailPage({ accountId }: { accountId: string }) {
                                     <Badge variant="indigo">系统角色</Badge>
                                 ) : null}
                                 {isCurrentUser ? (
-                                    <Badge variant="info">当前登录</Badge>
+                                    <StatusBadge tone="info" label="当前登录" />
                                 ) : null}
                             </div>
                         ) : null

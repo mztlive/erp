@@ -191,7 +191,7 @@ function RemoteSearchChoice({
                 <p
                     id={`${id}-status`}
                     role="status"
-                    className="mt-1.5 text-xs leading-relaxed wrap-anywhere text-muted-foreground"
+                    className="mt-1.5 text-xs wrap-anywhere text-muted-foreground"
                 >
                     {failureText}
                 </p>

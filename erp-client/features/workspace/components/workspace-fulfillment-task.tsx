@@ -9,6 +9,7 @@ import {
     PaperDocumentViewport,
     useWorkspaceInspectorMode,
     useWorkspaceTaskPage,
+    WorkspaceProcessingPane,
 } from "@/components/business"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -40,7 +41,6 @@ import { workspaceFulfillmentDescriptor } from "../lib/workspace-fulfillment"
 import type { WorkspaceWorkItem } from "../types"
 import { WorkspaceDeliveryGate } from "./workspace-delivery-brief"
 import { fulfillmentPaymentStatus } from "./workspace-fulfillment-badges"
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { WorkspaceDocumentPaperDialog } from "./workspace-document-paper-dialog"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 

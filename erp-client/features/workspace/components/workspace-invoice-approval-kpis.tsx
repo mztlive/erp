@@ -1,15 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
-import { CircleQuestionMarkIcon } from "lucide-react"
-
-import { MoneyValue, RateValue } from "@/components/business"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
+import { DecisionKpiBar, MoneyValue, RateValue } from "@/components/business"
 import { compareDecimal } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 import type { InvoiceApprovalReview } from "../api/invoice-review"
@@ -42,18 +33,17 @@ export function InvoiceApprovalKpis({
     })()
 
     return (
-        <TooltipProvider>
-            <div
-                role="region"
-                aria-label="开票审批关键指标"
-                className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/invoice-approval:grid-cols-2 @[840px]/invoice-approval:grid-cols-3"
-            >
-                <div className="min-w-0 space-y-1">
-                    <KpiLabel
-                        label="本次申请开票金额"
-                        basis="含税"
-                        id={`${prefix}-amount-formula`}
-                    >
+        <DecisionKpiBar
+            columns={3}
+            ariaLabel="开票审批关键指标"
+            items={[
+                {
+                    id: "amount",
+                    label: "本次申请开票金额",
+                    basis: "含税",
+                    emphasis: "primary",
+                    formulaTooltipId: `${prefix}-amount-formula`,
+                    formulaTooltip: (
                         <div className="num space-y-0.5">
                             <p>
                                 申请金额为各行含税金额之和。每行按数量 ×
@@ -72,26 +62,27 @@ export function InvoiceApprovalKpis({
                                 <p>当前资料无法逐行计算合计。</p>
                             )}
                         </div>
-                    </KpiLabel>
-                    <MoneyValue
-                        value={submission.amount}
-                        display="exact"
-                        className="text-value-section font-semibold tracking-tight [&_[data-slot=money-value-number]]:whitespace-normal [&_[data-slot=money-value-number]]:wrap-anywhere"
-                    />
-                    {submission.accountLabel || submission.lines.length > 0 ? (
-                        <p className="num wrap-anywhere text-tiny text-muted-foreground">
-                            {submission.accountLabel ??
-                                `共 ${submission.lines.length} 项申请明细`}
-                        </p>
-                    ) : null}
-                </div>
-
-                <div className="min-w-0 space-y-1">
-                    <KpiLabel
-                        label="可开票额度"
-                        basis="扣除其他占用后"
-                        id={`${prefix}-quota-formula`}
-                    >
+                    ),
+                    value: (
+                        <MoneyValue
+                            value={submission.amount}
+                            display="exact"
+                            inheritColor
+                        />
+                    ),
+                    footnote:
+                        submission.accountLabel || submission.lines.length > 0
+                            ? (submission.accountLabel ??
+                              `共 ${submission.lines.length} 项申请明细`)
+                            : undefined,
+                },
+                {
+                    id: "quota",
+                    label: "可开票额度",
+                    basis: "扣除其他占用后",
+                    emphasis: "secondary",
+                    formulaTooltipId: `${prefix}-quota-formula`,
+                    formulaTooltip: (
                         <div className="num space-y-0.5">
                             <p>
                                 可开票额度 = 可开票总额 − 已开票净额 −
@@ -125,13 +116,15 @@ export function InvoiceApprovalKpis({
                                 </>
                             ) : null}
                         </div>
-                    </KpiLabel>
-                    <MoneyValue
-                        value={quota?.beforeRequest}
-                        display="exact"
-                        className="text-value-compact font-semibold tracking-tight [&_[data-slot=money-value-number]]:whitespace-normal [&_[data-slot=money-value-number]]:wrap-anywhere"
-                    />
-                    {review ? (
+                    ),
+                    value: (
+                        <MoneyValue
+                            value={quota?.beforeRequest}
+                            display="exact"
+                            inheritColor
+                        />
+                    ),
+                    extra: review ? (
                         <p
                             className={cn(
                                 "num flex flex-wrap items-baseline gap-1 text-xs font-medium",
@@ -149,15 +142,15 @@ export function InvoiceApprovalKpis({
                                 inheritColor
                             />
                         </p>
-                    ) : null}
-                </div>
-
-                <div className="min-w-0 space-y-1.5 @[480px]/invoice-approval:col-span-2 @[840px]/invoice-approval:col-span-1">
-                    <KpiLabel
-                        label="票款进度"
-                        basis="本笔应收"
-                        id={`${prefix}-progress-formula`}
-                    >
+                    ) : undefined,
+                },
+                {
+                    id: "progress",
+                    label: "票款进度",
+                    basis: "本笔应收",
+                    emphasis: "terms",
+                    formulaTooltipId: `${prefix}-progress-formula`,
+                    formulaTooltip: (
                         <div className="num space-y-0.5">
                             <p>回款进度 = 已核销回款 ÷ 本笔应收。</p>
                             <p>开票进度 = 已实际开票净额 ÷ 可开票总额。</p>
@@ -178,57 +171,24 @@ export function InvoiceApprovalKpis({
                                 </>
                             ) : null}
                         </div>
-                    </KpiLabel>
-                    <ProgressAmount
-                        label="已回款"
-                        amount={review?.settled_total}
-                        total={review?.gross_total}
-                    />
-                    <ProgressAmount
-                        label="已开票"
-                        amount={review?.invoiced_total}
-                        total={review?.invoiceable_total}
-                    />
-                </div>
-            </div>
-        </TooltipProvider>
-    )
-}
-
-function KpiLabel({
-    id,
-    label,
-    basis,
-    children,
-}: {
-    id: string
-    label: string
-    basis: string
-    children: ReactNode
-}) {
-    return (
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-            <span>{label}</span>
-            <span className="text-tiny text-muted-foreground/80">{basis}</span>
-            <Tooltip>
-                <TooltipTrigger
-                    render={
-                        <button
-                            id={id}
-                            type="button"
-                            aria-label={`${label}计算口径`}
-                            className="inline-flex size-4 shrink-0 cursor-help items-center justify-center rounded-sm text-muted-foreground/80 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
-                        />
-                    }
-                >
-                    <CircleQuestionMarkIcon
-                        aria-hidden="true"
-                        className="size-3"
-                    />
-                </TooltipTrigger>
-                <TooltipContent className="block">{children}</TooltipContent>
-            </Tooltip>
-        </div>
+                    ),
+                    value: (
+                        <div className="w-full space-y-1.5">
+                            <ProgressAmount
+                                label="已回款"
+                                amount={review?.settled_total}
+                                total={review?.gross_total}
+                            />
+                            <ProgressAmount
+                                label="已开票"
+                                amount={review?.invoiced_total}
+                                total={review?.invoiceable_total}
+                            />
+                        </div>
+                    ),
+                },
+            ]}
+        />
     )
 }
 
@@ -267,18 +227,16 @@ function ProgressAmount({
     return (
         <div className="min-w-0 space-y-1">
             <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-                <span className="text-tiny text-muted-foreground">{label}</span>
-                <span className="inline-flex max-w-full flex-wrap items-baseline justify-end gap-x-1.5">
-                    <MoneyValue
-                        value={amount}
-                        display="exact"
-                        className="text-body-compact font-semibold tracking-tight [&_[data-slot=money-value-number]]:whitespace-normal [&_[data-slot=money-value-number]]:wrap-anywhere"
-                    />
+                <span className="text-tiny font-normal text-muted-foreground">
+                    {label}
+                </span>
+                <span className="inline-flex max-w-full flex-wrap items-baseline justify-end gap-x-1.5 font-semibold tracking-tight">
+                    <MoneyValue value={amount} display="exact" inheritColor />
                     {rate != null ? (
                         <RateValue
                             value={rate}
                             precision={1}
-                            className="text-tiny text-muted-foreground"
+                            className="text-tiny font-normal text-muted-foreground"
                         />
                     ) : null}
                 </span>

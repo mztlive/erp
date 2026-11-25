@@ -18,6 +18,7 @@ import {
 import {
     DetailWorkspaceMeta,
     PaperDocumentViewport,
+    WorkspaceProcessingPane,
 } from "@/components/business"
 import { WorkspaceTaskFooter } from "@/components/business/workspace-task-pane"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -62,7 +63,6 @@ import {
 } from "./return-finance-summary"
 import { ReturnInvoiceDialog } from "./return-invoice-dialog"
 import { WorkspaceDocumentPaperDialog } from "./workspace-document-paper-dialog"
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 export function WorkspaceReturnFinance({

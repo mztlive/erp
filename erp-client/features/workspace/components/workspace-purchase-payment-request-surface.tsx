@@ -17,6 +17,11 @@ import {
     detailWorkspaceStyles,
     useWorkspaceTaskPage,
     type MaterialFileItem,
+    WorkspaceApprovalResubmissionBanner,
+    WorkspaceDocumentBadge,
+    WorkspaceProcessingPane,
+    WorkspaceCompactTaskHeader,
+    type ResubmissionFieldDiff,
 } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import { useApprovalMaterials } from "@/features/approval-workflow/hooks/use-approval-materials"
@@ -46,22 +51,13 @@ import {
     type ApprovalContextRailTab,
 } from "./workspace-approval-context-rail"
 import { WorkspaceApprovalReworkActions } from "./workspace-approval-rework"
-import {
-    WorkspaceApprovalResubmissionBanner,
-    type ResubmissionFieldDiff,
-} from "./workspace-approval-resubmission-banner"
-import { WorkspaceDocumentBadge } from "./workspace-document-badge"
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { parsePurchaseExtraSections } from "./workspace-purchase-comparison-model"
 import {
     WorkspaceRejectionNotice,
     useWorkspaceRejectionInfo,
 } from "./workspace-rejection-notice"
 import { WorkspaceTaskHeaderActions } from "./workspace-task-context"
-import {
-    WorkspaceCompactTaskHeader,
-    WorkspaceTaskIdentityHeader,
-} from "./workspace-task-identity-header"
+import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 import { WorkspaceTaskResponsibilityActions } from "./workspace-task-responsibility-actions"
 
 const approvalRailCollapsedKey = "erp.workspace.approvalRailCollapsed"

@@ -2,19 +2,20 @@
 
 import { useEffect, useImperativeHandle, useRef, useState } from "react"
 import type { RefObject } from "react"
-import {
-    ChevronRightIcon,
-    CircleQuestionMarkIcon,
-    PaperclipIcon,
-    TriangleAlertIcon,
-} from "lucide-react"
+import { ChevronRightIcon, PaperclipIcon } from "lucide-react"
 
 import {
+    APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
+    ApprovalLineFilterBar,
+    ApprovalLinePagination,
     BusinessFailureState,
+    DecisionKpiBar,
     DetailWorkspaceSection,
     MoneyValue,
     RateValue,
     SensitiveValue,
+    TaskRiskSummaryBar,
+    WorkspaceApprovalResubmissionBanner,
     WorkspaceFactGrid,
     WorkspaceFactGroup,
     WorkspaceFactItem,
@@ -33,12 +34,6 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import type { ApprovalMaterials } from "@/features/approval-workflow/api/materials"
 import { ApprovalMaterialFiles } from "@/features/approval-workflow/components/approval-material-files"
 import { displayActorName } from "@/features/approval-workflow/display"
@@ -58,12 +53,6 @@ import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { dispatchWorkspaceHotkeyAction } from "@/lib/workspace-hotkeys"
 import type { WorkspaceWorkItem } from "../types"
-import { WorkspaceApprovalResubmissionBanner } from "./workspace-approval-resubmission-banner"
-import {
-    APPROVAL_TABLE_DEFAULT_PAGE_SIZE,
-    ApprovalLineFilterBar,
-    ApprovalLinePagination,
-} from "./workspace-approval-table-controls"
 
 type ReceiptSource = ApprovalMaterials["display"]["source"]
 type ReceiptField = {
@@ -691,99 +680,67 @@ export function WorkspaceReceiptApproval({
                         />
                     ) : null}
 
-                    {risks.length > 0 ? (
-                        <div
-                            role="alert"
-                            aria-label="回款审批风险"
-                            data-slot="receipt-approval-risk-strip"
-                            className={cn(
-                                "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border-l-2 px-3 py-1.5 text-xs",
-                                severeRisk
-                                    ? "border-l-destructive bg-destructive-soft/65 text-destructive-soft-foreground"
-                                    : "border-l-warning bg-warning-soft/75 text-warning-soft-foreground",
-                            )}
-                        >
-                            <span className="inline-flex items-center gap-1.5 font-medium">
-                                <TriangleAlertIcon
-                                    aria-hidden="true"
-                                    className="size-3.5 shrink-0"
-                                />
-                                <span className="num">
-                                    发现 {risks.length} 处待核对
-                                </span>
-                            </span>
-                            <ul className="flex flex-wrap gap-x-1.5 gap-y-0.5">
-                                {risks.map((risk) => (
-                                    <li key={risk.id}>
-                                        <Button
-                                            id={`${prefix}-locate-${toAutomationIdSegment(risk.id)}`}
-                                            type="button"
-                                            variant="ghost"
-                                            size="xs"
-                                            className={cn(
-                                                "h-control-xs gap-0.5 px-1.5 text-xs font-medium shadow-none",
-                                                severeRisk
-                                                    ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                                    : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
-                                            )}
-                                            onClick={() => locateRisk(risk)}
-                                        >
-                                            <span className="num">
-                                                {risk.label}
-                                            </span>
-                                            <ChevronRightIcon aria-hidden="true" />
-                                        </Button>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    ) : null}
+                    <TaskRiskSummaryBar
+                        dataSlot="receipt-approval-risk-strip"
+                        aria-label="回款审批风险"
+                        riskCount={risks.length}
+                        severity={severeRisk ? "destructive" : "warning"}
+                        leadLabel={`发现 ${risks.length} 处待核对`}
+                        items={risks.map((risk) => ({
+                            id: risk.id,
+                            buttonId: `${prefix}-locate-${toAutomationIdSegment(risk.id)}`,
+                            label: risk.label,
+                            onClick: () => locateRisk(risk),
+                        }))}
+                    />
                 </div>
             ) : null}
 
-            <TooltipProvider>
-                <div
-                    role="region"
-                    aria-label="回款审批关键决策指标"
-                    className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/receipt-approval:grid-cols-2"
-                >
-                    <div className="min-w-0">
-                        <ReceiptKpiLabel
-                            label="本次回款金额"
-                            basis="本次登记"
-                            tooltipId={`${prefix}-receipt-amount-help`}
-                            tooltip="取本次提交登记的到账金额。审批全部通过并入账后，计入已收金额。"
-                        />
-                        <div className="num mt-1 wrap-anywhere text-value-section font-semibold tracking-tight text-foreground">
-                            {amount ? (
-                                <MoneyValue value={amount} display="exact" />
-                            ) : (
-                                <span className="text-body-compact font-medium text-muted-foreground">
-                                    未记录
-                                </span>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="min-w-0">
-                        <ReceiptKpiLabel
-                            label="待核销余额"
-                            basis="回款 − 拟核销"
-                            tooltipId={`${prefix}-allocation-balance-help`}
-                            tooltip="核销覆盖率 = 本次拟核销合计 ÷ 本次回款金额。摘要不完整时以已记录的整单金额为准。"
-                        />
-                        <div
-                            className={cn(
-                                "num mt-1 wrap-anywhere text-value-compact font-semibold tracking-tight",
-                                totals.balanceSign === 0 &&
-                                    "text-success-soft-foreground",
-                                totals.balanceSign === 1 &&
-                                    "text-warning-soft-foreground",
-                                totals.balanceSign === -1 &&
-                                    "text-destructive-soft-foreground",
-                            )}
-                        >
-                            {totals.balance !== undefined ? (
+            <DecisionKpiBar
+                columns={2}
+                ariaLabel="回款审批关键决策指标"
+                className="mt-3"
+                items={[
+                    {
+                        id: "receipt-amount",
+                        label: "本次回款金额",
+                        basis: "本次登记",
+                        emphasis: "primary",
+                        formulaTooltipId: `${prefix}-receipt-amount-help`,
+                        formulaTooltipLabel: "本次回款金额口径说明",
+                        formulaTooltip:
+                            "取本次提交登记的到账金额。审批全部通过并入账后，计入已收金额。",
+                        value: amount ? (
+                            <MoneyValue
+                                value={amount}
+                                display="exact"
+                                inheritColor
+                            />
+                        ) : (
+                            <span className="text-body-compact font-medium text-muted-foreground">
+                                未记录
+                            </span>
+                        ),
+                    },
+                    {
+                        id: "allocation-balance",
+                        label: "待核销余额",
+                        basis: "回款 − 拟核销",
+                        emphasis: "secondary",
+                        tone:
+                            totals.balanceSign === 0
+                                ? "success"
+                                : totals.balanceSign === 1
+                                  ? "warning"
+                                  : totals.balanceSign === -1
+                                    ? "destructive"
+                                    : "default",
+                        formulaTooltipId: `${prefix}-allocation-balance-help`,
+                        formulaTooltipLabel: "待核销余额口径说明",
+                        formulaTooltip:
+                            "核销覆盖率 = 本次拟核销合计 ÷ 本次回款金额。摘要不完整时以已记录的整单金额为准。",
+                        value:
+                            totals.balance !== undefined ? (
                                 <span>
                                     {totals.balanceSign === -1
                                         ? "超配 "
@@ -804,12 +761,11 @@ export function WorkspaceReceiptApproval({
                                 <span className="text-body-compact font-medium text-muted-foreground">
                                     待核对
                                 </span>
-                            )}
-                        </div>
-                        <ReceiptCoverage totals={totals} />
-                    </div>
-                </div>
-            </TooltipProvider>
+                            ),
+                        extra: <ReceiptCoverage totals={totals} />,
+                    },
+                ]}
+            />
 
             <WorkspaceFactGroup
                 title="到账与账户信息"
@@ -1143,43 +1099,6 @@ export function WorkspaceReceiptApproval({
                     )}
                 </DetailWorkspaceSection>
             ) : null}
-        </div>
-    )
-}
-
-function ReceiptKpiLabel({
-    label,
-    basis,
-    tooltipId,
-    tooltip,
-}: {
-    label: string
-    basis: string
-    tooltipId: string
-    tooltip: string
-}) {
-    return (
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-            <span>{label}</span>
-            <span className="text-tiny text-muted-foreground/80">{basis}</span>
-            <Tooltip>
-                <TooltipTrigger
-                    render={
-                        <button
-                            id={tooltipId}
-                            type="button"
-                            aria-label={`${label}口径说明`}
-                            className="inline-flex size-4 cursor-help items-center justify-center rounded-sm text-muted-foreground/80 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
-                        />
-                    }
-                >
-                    <CircleQuestionMarkIcon
-                        aria-hidden="true"
-                        className="size-3"
-                    />
-                </TooltipTrigger>
-                <TooltipContent className="block">{tooltip}</TooltipContent>
-            </Tooltip>
         </div>
     )
 }

@@ -2,8 +2,8 @@
 
 import { BusinessEmptyState, BusinessFailureState } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { resourceLabel, actionLabel } from "@/lib/permission-catalog"
 import { useEffectiveAccessQuery } from "@/features/access-audit/hooks/queries"
 import { permissionPreview } from "@/features/access-audit/lib/effective-access-preview"
@@ -225,9 +225,10 @@ function EffectiveAccessBody({ query, previewRole }: EffectiveAccessBodyProps) {
                     {denied.map((item) => (
                         <div key={item.id} className="space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
-                                <Badge variant="warning">
-                                    {item.layerLabel}
-                                </Badge>
+                                <StatusBadge
+                                    tone="warning"
+                                    label={item.layerLabel}
+                                />
                             </div>
                             <p className="text-xs text-muted-foreground">
                                 {item.message}

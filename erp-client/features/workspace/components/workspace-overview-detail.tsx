@@ -171,7 +171,7 @@ export function WorkspaceOverviewDetail({
                             ) : null}
                         </p>
                         {data?.note ? (
-                            <p className="mb-4 rounded-lg bg-muted/40 p-3 text-body-compact leading-6">
+                            <p className="mb-4 rounded-lg bg-muted/40 p-3 text-body-compact">
                                 {data.note}
                             </p>
                         ) : null}

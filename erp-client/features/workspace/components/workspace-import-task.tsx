@@ -1,8 +1,11 @@
 "use client"
 
-import { DetailWorkspaceMeta } from "@/components/business"
+import {
+    DetailWorkspaceMeta,
+    WorkspaceProcessingPane,
+} from "@/components/business"
 import { useWorkspaceInspectorMode } from "@/components/business/workspace-task-pane"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { BatchDetailView } from "@/features/import-opening/components/batch-detail-view"
 import { useImportBatchDetailQuery } from "@/features/import-opening/hooks/queries"
@@ -16,7 +19,6 @@ import { hasPermission } from "@/lib/permissions"
 
 import { stripDocumentNumberPrefix } from "../lib/stable-number"
 import type { WorkspaceWorkItem } from "../types"
-import { WorkspaceProcessingPane } from "./workspace-processing-layout"
 import { WorkspaceTaskIdentityHeader } from "./workspace-task-identity-header"
 
 const CONFIRMATION_SCOPES = new Set<ConfirmationScope>([
@@ -111,9 +113,11 @@ function WorkspaceImportTaskContent({
                         <DetailWorkspaceMeta
                             items={[
                                 scope ? (
-                                    <Badge key="scope" variant="info">
-                                        {CONFIRMATION_SCOPE_LABEL[scope]}
-                                    </Badge>
+                                    <StatusBadge
+                                        key="scope"
+                                        tone="info"
+                                        label={CONFIRMATION_SCOPE_LABEL[scope]}
+                                    />
                                 ) : null,
                                 batchNo ? (
                                     <span

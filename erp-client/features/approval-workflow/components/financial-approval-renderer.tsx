@@ -11,30 +11,24 @@ import {
 import {
     ChevronLeftIcon,
     ChevronRightIcon,
-    CircleHelpIcon,
     SearchIcon,
-    TriangleAlertIcon,
     XIcon,
 } from "lucide-react"
 
 import {
+    DecisionKpiBar,
     MoneyValue,
+    OptionCombobox,
     QuantityValue,
     RateValue,
+    TaskRiskSummaryBar,
     WorkspaceFactGrid,
     WorkspaceFactGroup,
     WorkspaceFactItem,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
     Table,
     TableBody,
@@ -44,12 +38,6 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { toAutomationIdSegment } from "@/lib/automation-id"
 import { compareDecimal, divideFixed, multiplyFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
@@ -155,7 +143,7 @@ function FinancialAmount({ value }: { value?: string | null }) {
             value={decimal}
             display="exact"
             inheritColor
-            className="font-semibold [&_[data-slot=money-value-number]]:wrap-anywhere [&_[data-slot=money-value-number]]:whitespace-normal"
+            className="[&_[data-slot=money-value-number]]:wrap-anywhere [&_[data-slot=money-value-number]]:whitespace-normal"
         />
     ) : (
         <span className="num wrap-anywhere">{value || "—"}</span>
@@ -361,34 +349,6 @@ function balancePercent(balance?: string, originalAmount?: string) {
         rightMaxScale: 0,
         outputScale: 2,
     })
-}
-
-function KpiHelp({
-    id,
-    label,
-    children,
-}: {
-    id: string
-    label: string
-    children: ReactNode
-}) {
-    return (
-        <Tooltip>
-            <TooltipTrigger
-                render={
-                    <button
-                        id={id}
-                        type="button"
-                        aria-label={label}
-                        className="inline-flex size-4 cursor-help items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-                    />
-                }
-            >
-                <CircleHelpIcon aria-hidden="true" className="size-3" />
-            </TooltipTrigger>
-            <TooltipContent>{children}</TooltipContent>
-        </Tooltip>
-    )
 }
 
 function FinancialMetaStream({
@@ -675,25 +635,13 @@ function FinancialApprovalContent({
         >
             {resubmission}
             {!hideRiskStrip && riskLabels.length > 0 ? (
-                <div
-                    data-slot="financial-approval-risk-strip"
-                    className={cn(
-                        "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border-l-2 px-3 py-1.5 text-xs",
-                        severe
-                            ? "border-l-destructive bg-destructive-soft/65 text-destructive-soft-foreground"
-                            : "border-l-warning bg-warning-soft/75 text-warning-soft-foreground",
-                    )}
-                >
-                    <div
-                        role="alert"
-                        className="flex min-w-0 flex-1 items-start gap-2"
-                    >
-                        <TriangleAlertIcon
-                            aria-hidden="true"
-                            className="mt-0.5 size-3.5 shrink-0"
-                        />
-                        <div className="min-w-0 wrap-anywhere">
-                            <p>
+                <TaskRiskSummaryBar
+                    dataSlot="financial-approval-risk-strip"
+                    severity={severe ? "destructive" : "warning"}
+                    leadLabel={null}
+                    summary={
+                        <>
+                            <span>
                                 <span className="font-semibold">
                                     {severe ? "高危复核" : "需复核"}
                                 </span>
@@ -703,138 +651,107 @@ function FinancialApprovalContent({
                                 <span className="ml-1.5">
                                     {riskLabels.join(" · ")}
                                 </span>
-                            </p>
+                            </span>
                             {impactDescriptions.map((description) => (
-                                <p key={description}>{description}</p>
+                                <span key={description} className="block">
+                                    {description}
+                                </span>
                             ))}
-                        </div>
-                    </div>
-                    <Button
-                        id={`${prefix}-locate-lines`}
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        aria-controls={linesId}
-                        className={cn(
-                            "h-control-xs shrink-0 gap-0.5 px-1.5 text-xs font-medium shadow-none",
-                            severe
-                                ? "text-destructive-soft-foreground hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                                : "text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground",
-                        )}
-                        onClick={locateLines}
-                    >
-                        {reversal ? "定位冲正明细" : "定位核销明细"}
-                        <ChevronRightIcon aria-hidden="true" />
-                    </Button>
-                </div>
+                        </>
+                    }
+                    actions={[
+                        {
+                            id: "locate-lines",
+                            buttonId: `${prefix}-locate-lines`,
+                            label: reversal ? "定位冲正明细" : "定位核销明细",
+                            onClick: locateLines,
+                        },
+                    ]}
+                />
             ) : null}
 
-            <TooltipProvider>
-                <section
-                    aria-label="财务审批决策指标"
-                    className={cn(
-                        "grid grid-cols-1 gap-x-6 gap-y-3.5 rounded-lg bg-surface-sunken px-4 py-3.5 @[480px]/financial-approval:grid-cols-2",
-                        balance && "@[840px]/financial-approval:grid-cols-3",
-                    )}
-                >
-                    <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-                            <span>{facts.amountTitle}</span>
-                            <span className="text-tiny">提交金额</span>
-                            <KpiHelp
-                                id={`${prefix}-amount-help`}
-                                label={`${facts.amountTitle}口径`}
-                            >
-                                {reversal
-                                    ? "取本次提交的冲正金额。通过后按该金额冲回原收付款并调整相关核销。"
-                                    : "取本次提交的退款金额。过账影响以本单退款依据及结算方式为准。"}
-                            </KpiHelp>
-                        </div>
-                        <div
-                            className={cn(
-                                "mt-1 text-value-section font-semibold tracking-tight",
-                                amountTone,
-                            )}
-                        >
-                            <FinancialAmount value={amount} />
-                        </div>
-                        <Badge
-                            variant={
-                                severe
-                                    ? "destructive"
-                                    : supplier
-                                      ? "info"
-                                      : "warning"
-                            }
-                            className="mt-1 text-tiny"
-                        >
-                            {amountBadge}
-                        </Badge>
-                    </div>
-
-                    <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-                            <span>{originalAmount?.label ?? "原单金额"}</span>
-                            <span className="text-tiny">原单口径</span>
-                            <KpiHelp
-                                id={`${prefix}-original-amount-help`}
-                                label="原单金额口径"
-                            >
-                                取快照所记录的原关联资金单据或往来分录金额，作为本次
-                                {reversal ? "冲正" : "退款"}核对基准。
-                            </KpiHelp>
-                        </div>
-                        <div className="mt-1 text-value-compact font-semibold">
+            <DecisionKpiBar
+                columns={balance ? 3 : 2}
+                ariaLabel="财务审批决策指标"
+                items={[
+                    {
+                        id: "amount",
+                        label: facts.amountTitle,
+                        basis: "提交金额",
+                        emphasis: "primary",
+                        formulaTooltipId: `${prefix}-amount-help`,
+                        formulaTooltipLabel: `${facts.amountTitle}口径`,
+                        formulaTooltip: reversal
+                            ? "取本次提交的冲正金额。通过后按该金额冲回原收付款并调整相关核销。"
+                            : "取本次提交的退款金额。过账影响以本单退款依据及结算方式为准。",
+                        value: (
+                            <span className={amountTone}>
+                                <FinancialAmount value={amount} />
+                            </span>
+                        ),
+                        extra: (
+                            <StatusBadge
+                                tone={
+                                    severe
+                                        ? "destructive"
+                                        : supplier
+                                          ? "info"
+                                          : "warning"
+                                }
+                                label={amountBadge}
+                                className="text-tiny"
+                            />
+                        ),
+                    },
+                    {
+                        id: "original-amount",
+                        label: originalAmount?.label ?? "原单金额",
+                        basis: "原单口径",
+                        formulaTooltipId: `${prefix}-original-amount-help`,
+                        formulaTooltipLabel: "原单金额口径",
+                        formulaTooltip: `取快照所记录的原关联资金单据或往来分录金额，作为本次${reversal ? "冲正" : "退款"}核对基准。`,
+                        value: (
                             <FinancialAmount value={originalAmount?.value} />
-                        </div>
-                        {!originalAmount ? (
-                            <p className="text-tiny text-muted-foreground">
-                                快照未记录
-                            </p>
-                        ) : null}
-                    </div>
-
-                    {balance ? (
-                        <div className="min-w-0 @[480px]/financial-approval:col-span-2 @[840px]/financial-approval:col-span-1">
-                            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-                                <span>{balance.label}</span>
-                                <span className="text-tiny">快照余额</span>
-                                <KpiHelp
-                                    id={`${prefix}-balance-help`}
-                                    label="余额占比口径"
-                                >
-                                    {ratio != null
-                                        ? "占比 = 快照所列余额 ÷ 原单金额 × 100%。"
-                                        : "取本次提交快照所列往来余额，请结合原单与核销记录复核。"}
-                                </KpiHelp>
-                            </div>
-                            <div className="mt-1 text-value-compact font-semibold">
-                                <FinancialAmount value={balance.value} />
-                            </div>
-                            {ratio != null ? (
-                                <div className="mt-1 space-y-0.5">
-                                    <div
-                                        aria-hidden="true"
-                                        className="h-1.5 overflow-hidden rounded-full bg-muted"
-                                    >
-                                        <div
-                                            className="h-full rounded-full bg-info"
-                                            style={{ width: `${ratio}%` }}
-                                        />
-                                    </div>
-                                    <p className="text-tiny text-muted-foreground">
-                                        占原单金额{" "}
-                                        <RateValue
-                                            value={ratio}
-                                            precision={2}
-                                        />
-                                    </p>
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : null}
-                </section>
-            </TooltipProvider>
+                        ),
+                        footnote: !originalAmount ? "快照未记录" : undefined,
+                    },
+                    balance
+                        ? {
+                              id: "balance",
+                              label: balance.label,
+                              basis: "快照余额",
+                              formulaTooltipId: `${prefix}-balance-help`,
+                              formulaTooltipLabel: "余额占比口径",
+                              formulaTooltip:
+                                  ratio != null
+                                      ? "占比 = 快照所列余额 ÷ 原单金额 × 100%。"
+                                      : "取本次提交快照所列往来余额，请结合原单与核销记录复核。",
+                              value: <FinancialAmount value={balance.value} />,
+                              extra:
+                                  ratio != null ? (
+                                      <div className="space-y-0.5">
+                                          <div
+                                              aria-hidden="true"
+                                              className="h-1.5 overflow-hidden rounded-full bg-muted"
+                                          >
+                                              <div
+                                                  className="h-full rounded-full bg-info"
+                                                  style={{ width: `${ratio}%` }}
+                                              />
+                                          </div>
+                                          <p className="text-tiny text-muted-foreground">
+                                              占原单金额{" "}
+                                              <RateValue
+                                                  value={ratio}
+                                                  precision={2}
+                                              />
+                                          </p>
+                                      </div>
+                                  ) : undefined,
+                          }
+                        : null,
+                ]}
+            />
 
             <FinancialMetaStream
                 supplier={supplier}
@@ -875,13 +792,14 @@ function FinancialApprovalContent({
                                 />
                                 <Input
                                     id={`${prefix}-line-search`}
+                                    size="sm"
                                     value={search}
                                     onChange={(event) =>
                                         updateSearch(event.target.value)
                                     }
                                     placeholder="搜索原单号、日期或金额"
                                     aria-label="搜索核销明细"
-                                    className="h-control-sm pr-8 pl-8 text-xs"
+                                    className="pr-8 pl-8"
                                 />
                                 {search ? (
                                     <Button
@@ -995,7 +913,7 @@ function FinancialApprovalContent({
                                     </TableCell>
                                     <TableCell
                                         data-align="end"
-                                        className="whitespace-normal"
+                                        className="font-semibold whitespace-normal"
                                     >
                                         <FinancialAmount value={amount} />
                                     </TableCell>
@@ -1026,8 +944,20 @@ function FinancialApprovalContent({
                                 <span id={`${prefix}-page-size-label`}>
                                     每页
                                 </span>
-                                <Select
+                                <OptionCombobox
+                                    id={`${prefix}-page-size`}
+                                    size="sm"
+                                    aria-label="每页显示数量"
                                     value={String(pageSize)}
+                                    allowClear={false}
+                                    className="w-24"
+                                    options={[
+                                        { value: "20", label: "20 项" },
+                                        { value: "50", label: "50 项" },
+                                    ]}
+                                    getOptionId={(value) =>
+                                        `${prefix}-page-size-${value}`
+                                    }
                                     onValueChange={(next) => {
                                         if (!next) return
                                         setPageSize(
@@ -1035,33 +965,7 @@ function FinancialApprovalContent({
                                         )
                                         setPage(1)
                                     }}
-                                >
-                                    <SelectTrigger
-                                        id={`${prefix}-page-size`}
-                                        size="sm"
-                                        aria-labelledby={`${prefix}-page-size-label`}
-                                        className="w-24"
-                                    >
-                                        <SelectValue>{pageSize} 项</SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent
-                                        align="start"
-                                        alignItemWithTrigger={false}
-                                    >
-                                        <SelectItem
-                                            id={`${prefix}-page-size-20`}
-                                            value="20"
-                                        >
-                                            20 项
-                                        </SelectItem>
-                                        <SelectItem
-                                            id={`${prefix}-page-size-50`}
-                                            value="50"
-                                        >
-                                            50 项
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
+                                />
                                 <span role="status" className="num">
                                     第 {currentPage} / {pageCount} 页 · 共{" "}
                                     {filteredRows.length} 项

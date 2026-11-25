@@ -82,7 +82,7 @@ export function IntegrationEvidencePanel({
             ) : null}
 
             {item.resolutionEvidencePolicy ? (
-                <p className="border-t border-border/60 pt-4 text-xs leading-relaxed text-muted-foreground first:border-t-0 first:pt-0">
+                <p className="border-t border-border/60 pt-4 text-xs text-muted-foreground first:border-t-0 first:pt-0">
                     完成依据：
                     {item.resolutionEvidencePolicy.requiredEvidenceKinds
                         .map((kind) => EVIDENCE_KIND_LABEL[kind])
